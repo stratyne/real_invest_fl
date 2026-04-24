@@ -1,0 +1,81 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "real_invest_fl"
+version = "0.1.0"
+description = "Florida real estate investment property discovery and scoring platform."
+requires-python = ">=3.11"
+dependencies = [
+    # Web framework
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+
+    # Database
+    "sqlalchemy[asyncio]>=2.0,<3.0",
+    "asyncpg>=0.30,<1.0",
+    "psycopg2-binary>=2.9,<3.0",
+    "alembic>=1.13,<2.0",
+    "geoalchemy2>=0.15,<1.0",
+
+    # Task queue
+    "celery>=5.4,<6.0",
+    "redis>=5.0,<6.0",
+
+    # Data handling
+    "pandas>=2.2,<3.0",
+    "pyarrow>=16.0,<20.0",
+    "openpyxl>=3.1,<4.0",
+
+    # HTTP / scraping (Zestimate + listing feeds)
+    "httpx>=0.27,<1.0",
+    "requests>=2.32,<3.0",
+    "beautifulsoup4>=4.12,<5.0",
+    "lxml>=5.2,<6.0",
+    "playwright>=1.50,<2.0",
+    "playwright-stealth>=1.0.6,<2.0",
+
+    # Retry logic
+    "tenacity>=9.0,<10.0",
+
+    # Config / validation
+    "pydantic>=2.7,<3.0",
+    "pydantic-settings>=2.3,<3.0",
+    "python-dotenv>=1.0,<2.0",
+
+    # Google integrations
+    "google-api-python-client>=2.160,<3.0",
+    "google-auth>=2.37,<3.0",
+    "google-auth-oauthlib>=1.2,<2.0",
+
+    # Email
+    "sendgrid>=6.11,<7.0",
+
+    # Utilities
+    "rich>=13.0,<14.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9.0",
+    "pytest-asyncio>=0.23,<1.0",
+    "pytest-cov>=5.0,<6.0",
+    "httpx>=0.27,<1.0",
+    "factory-boy>=3.3,<4.0",
+    "ruff>=0.4,<1.0",
+    "mypy>=1.10,<2.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

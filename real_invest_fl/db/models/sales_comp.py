@@ -1,0 +1,8 @@
+"""SalesComp model — populated from DOR Sale Data File (SDF). Schema v0.2."""
+from sqlalchemy.orm import Mapped, mapped_column
+from real_invest_fl.db.base import Base
+
+
+class SalesComp(Base):
+    __tablename__ = "sales_comps"
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

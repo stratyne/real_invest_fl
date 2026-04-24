@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: real_invest_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: penstock
+      POSTGRES_PASSWORD: penstock
+      POSTGRES_DB: real_invest_fl
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U penstock -d real_invest_fl"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: real_invest_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    container_name: real_invest_app
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./secrets:/app/secrets
+      - ./config:/app/config
+    ports:
+      - "8000:8000"
+    command: uvicorn real_invest_fl.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  worker:
+    build: .
+    container_name: real_invest_worker
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./data:/app/data
+      - ./secrets:/app/secrets
+      - ./config:/app/config
+    command: celery -A real_invest_fl.tasks.celery_app worker --loglevel=info --concurrency=4
+
+volumes:
+  postgres_data:
+  redis_data:

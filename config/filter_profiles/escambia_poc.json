@@ -1,0 +1,40 @@
+{
+  "profile_name": "Escambia POC",
+  "county_fips": "12033",
+  "description": "Proof-of-concept filter profile for Escambia County, FL",
+  "max_list_price": 225000,
+  "min_list_price": 0,
+  "target_beds": 3,
+  "target_baths": 2,
+  "min_year_built": 1950,
+  "primary_max_year_built": 1960,
+  "allowed_dor_use_codes": ["001"],
+  "allowed_construction_classes": [3],
+  "allowed_foundation_keywords": ["slab", "slab foundation", "concrete slab"],
+  "disallowed_foundation_keywords": ["crawl", "crawlspace", "basement", "pier", "raised", "stilts"],
+  "allowed_construction_keywords": ["cinder block", "concrete block", "concrete masonry", "cmu", "masonry"],
+  "disallowed_property_types": ["condo", "townhouse", "land", "mobile", "manufactured", "multi-family", "duplex"],
+  "rehab_cost_per_sqft": 22.00,
+  "min_arv_spread": 0,
+  "min_zestimate_discount_pct": 0,
+  "zestimate_staleness_days": 7,
+  "min_comp_sales_for_arv": 3,
+  "comp_radius_miles": 1.0,
+  "comp_year_built_tolerance": 15,
+  "listing_type_priority": {
+    "FSBO": 1,
+    "Foreclosure": 2,
+    "Expired": 3,
+    "MLS/Portal": 4
+  },
+  "deal_score_weights": {
+    "arv_ratio": 0.30,
+    "rehab_confidence": 0.15,
+    "seller_motivation": 0.25,
+    "dom_velocity": 0.10,
+    "construction_quality": 0.10,
+    "geographic_demand": 0.10
+  },
+  "allow_automated_outreach": false,
+  "max_outreach_attempts": 3
+}
