@@ -1,6 +1,11 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["real_invest_fl*"]
+exclude = ["tests*", "scripts*", "data*", "config*", "alembic*", "secrets*"]
 
 [project]
 name = "real_invest_fl"
