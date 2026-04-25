@@ -28,6 +28,11 @@ data/exports/
 *.sqlite
 *.db
 
+# === Docs ===
+docs/
+*.pdf
+*.xlsx
+
 # === Logs ===
 *.log
 logs/
