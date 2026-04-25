@@ -31,6 +31,7 @@ dependencies = [
     # Data handling
     "pandas>=2.2,<3.0",
     "pyarrow>=16.0,<20.0",
+    "geopandas>=1.0,<2.0",    
     "openpyxl>=3.1,<4.0",
 
     # HTTP / scraping (Zestimate + listing feeds)
