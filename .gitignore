@@ -32,6 +32,7 @@ data/exports/
 docs/
 *.pdf
 *.xlsx
+*.xls
 
 # === Logs ===
 *.log
