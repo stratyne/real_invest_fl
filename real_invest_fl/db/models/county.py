@@ -5,7 +5,7 @@ dor_county_no is the 2-digit DOR code used in the NAL file (e.g., 28).
 """
 from __future__ import annotations
 from datetime import datetime
-from sqlalchemy import String, Integer, Boolean, DateTime, UniqueConstraint, func
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from real_invest_fl.db.base import Base
 
@@ -47,8 +47,10 @@ class CountyZip(Base):
     __table_args__ = (UniqueConstraint("county_fips", "zip_code", name="uq_county_zip"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    from sqlalchemy import ForeignKey
+
     county_fips: Mapped[str] = mapped_column(
-        String(5), nullable=False
+        String(5), ForeignKey("counties.county_fips"), nullable=False
     )
     zip_code: Mapped[str] = mapped_column(String(10), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
