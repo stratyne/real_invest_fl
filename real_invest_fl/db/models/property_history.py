@@ -28,7 +28,9 @@ class PropertyValueHistory(Base):
     )
 
     property: Mapped[Property] = relationship(
-        "Property", back_populates="value_history",
-        primaryjoin="and_(PropertyValueHistory.county_fips==foreign(Property.county_fips), "
-                    "PropertyValueHistory.parcel_id==foreign(Property.parcel_id))"
+        "Property",
+        back_populates="value_history",
+        primaryjoin="and_(PropertyValueHistory.county_fips==Property.county_fips, "
+                    "PropertyValueHistory.parcel_id==Property.parcel_id)",
+        foreign_keys="[PropertyValueHistory.county_fips, PropertyValueHistory.parcel_id]",
     )

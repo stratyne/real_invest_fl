@@ -86,7 +86,9 @@ class ListingEvent(Base):
     )
 
     property: Mapped[Property] = relationship(
-        "Property", back_populates="listing_events",
-        primaryjoin="and_(ListingEvent.county_fips==foreign(Property.county_fips), "
-                    "ListingEvent.parcel_id==foreign(Property.parcel_id))"
+        "Property",
+        back_populates="listing_events",
+        primaryjoin="and_(ListingEvent.county_fips==Property.county_fips, "
+                    "ListingEvent.parcel_id==Property.parcel_id)",
+        foreign_keys="[ListingEvent.county_fips, ListingEvent.parcel_id]",
     )

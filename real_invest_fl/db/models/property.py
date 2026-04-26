@@ -215,14 +215,18 @@ class Property(Base):
     # Relationships                                                        #
     # ------------------------------------------------------------------ #
     value_history: Mapped[list[PropertyValueHistory]] = relationship(
-        "PropertyValueHistory", back_populates="property",
+        "PropertyValueHistory",
+        back_populates="property",
         cascade="all, delete-orphan",
-        primaryjoin="and_(Property.county_fips==foreign(PropertyValueHistory.county_fips), "
-                    "Property.parcel_id==foreign(PropertyValueHistory.parcel_id))"
+        primaryjoin="and_(Property.county_fips==PropertyValueHistory.county_fips, "
+                    "Property.parcel_id==PropertyValueHistory.parcel_id)",
+        foreign_keys="[PropertyValueHistory.county_fips, PropertyValueHistory.parcel_id]",
     )
     listing_events: Mapped[list[ListingEvent]] = relationship(
-        "ListingEvent", back_populates="property",
+        "ListingEvent",
+        back_populates="property",
         cascade="all, delete-orphan",
-        primaryjoin="and_(Property.county_fips==foreign(ListingEvent.county_fips), "
-                    "Property.parcel_id==foreign(ListingEvent.parcel_id))"
+        primaryjoin="and_(Property.county_fips==ListingEvent.county_fips, "
+                    "Property.parcel_id==ListingEvent.parcel_id)",
+        foreign_keys="[ListingEvent.county_fips, ListingEvent.parcel_id]",
     )
