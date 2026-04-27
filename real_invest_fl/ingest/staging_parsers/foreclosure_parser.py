@@ -1,312 +1,374 @@
 """
-real_invest_fl/ingest/staging_parsers/foreclosure_parser.py
--------------------------------------------------------------
-Parses manually created CSV files of active mortgage foreclosure
-auction listings from escambia.realforeclose.com.
+Foreclosure Staging Parser — Project Penstock
+=============================================
+Parses raw two-column key-value CSV files pasted directly from
+escambia.realforeclose.com into data/staging/foreclosure/.
 
-Input:
-    CSV files dropped into data/staging/foreclosure/
-    Source: https://escambia.realforeclose.com (manual retrieval)
-    Recommended cycle: Weekly
+File format (no header row):
+  Column A (key), Column B (value)
+  Records separated by a row where column A begins with
+  "Auction Starts" (leading whitespace/garbage chars are stripped).
+  Single-listing days may have a leading garbage character before 'Auction'.
 
-Expected CSV columns (you create this file from the portal):
-    case_number, parcel_id, property_address, city, zipcode,
-    auction_date, opening_bid, assessed_value, plaintiff_max_bid,
-    auction_status, listing_url
+Usage:
+    python scripts/run_staging_import.py --source foreclosure [--dry-run]
 
-Parcel matching:
-    Direct parcel_id lookup — no fuzzy matching required.
-    The portal displays Parcel ID explicitly on each listing card.
-
-Deduplication:
-    case_number is the unique key.
-
-Template CSV header (save as foreclosure_template.csv):
-    case_number,parcel_id,property_address,city,zipcode,auction_date,
-    opening_bid,assessed_value,plaintiff_max_bid,auction_status,listing_url
-
-ETHICAL / LEGAL NOTICE:
-    Source data is retrieved manually from the Escambia County Clerk's
-    public foreclosure auction portal. Data is public under Florida
-    Statutes Chapter 119. No automated scraping is performed.
+Ethical notice:
+    This parser reads manually saved files. No automated scraping of
+    escambia.realforeclose.com is performed (robots.txt: Disallow /).
+    Data is public record under Florida Statute § 119.07.
 """
+
 from __future__ import annotations
 
-import argparse
-import json
+import csv
 import logging
-import sys
-import time
-from datetime import date, datetime, timezone
+import re
+import unicodedata
+from datetime import date, datetime
 from pathlib import Path
+from typing import Optional
 
-import pandas as pd
 from sqlalchemy import create_engine, text
 
 ROOT = Path(__file__).resolve().parent.parent.parent.parent
-sys.path.insert(0, str(ROOT))
+STAGING_DIR = ROOT / "data" / "staging" / "foreclosure"
+COUNTY_FIPS = "12033"
+SOURCE_NAME = "escambia_realforeclose"
+SIGNAL_TIER = 1
+SIGNAL_TYPE = "foreclosure_sale"
 
-from config.settings import settings  # noqa: E402
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger("foreclosure_parser")
-
-COUNTY_FIPS   = "12033"
-STAGING_DIR   = ROOT / "data" / "staging" / "foreclosure"
-SIGNAL_TIER   = 1
-SIGNAL_TYPE   = "foreclosure_sale"
-SOURCE_NAME   = "escambia_realforeclose"
-
-# Write this template file to the foreclosure staging directory on first run
-TEMPLATE_HEADER = (
-    "case_number,parcel_id,property_address,city,zipcode,"
-    "auction_date,opening_bid,assessed_value,plaintiff_max_bid,"
-    "auction_status,listing_url\n"
-)
+log = logging.getLogger("foreclosure_parser")
 
 
-def _write_template_if_missing() -> None:
-    """Write the CSV template file if it does not already exist."""
-    template_path = STAGING_DIR / "foreclosure_template.csv"
-    if not template_path.exists():
-        template_path.write_text(TEMPLATE_HEADER)
-        logger.info("Template written to %s", template_path)
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _clean(value: str) -> str:
+    """Strip whitespace, non-printable, and non-ASCII garbage characters."""
+    value = unicodedata.normalize("NFKC", value)
+    return value.strip()
 
 
-def _get_existing_cases(engine) -> set[str]:
-    """Load all case numbers already in listing_events for this source."""
-    with engine.connect() as conn:
-        result = conn.execute(text("""
-            SELECT DISTINCT raw_listing_json->>'case_number' AS cn
-            FROM listing_events
-            WHERE source = :source
-            AND raw_listing_json->>'case_number' IS NOT NULL
-        """), {"source": SOURCE_NAME})
-        return {row.cn for row in result.fetchall() if row.cn}
+def _is_block_separator(key: str) -> bool:
+    """
+    Return True if this row marks the start of a new auction record.
+    Handles leading garbage char (e.g., '\x00Auction Starts').
+    """
+    stripped = re.sub(r"[^\w]", "", key).lower()
+    return stripped.startswith("auctionstarts")
 
 
-def _get_filter_profile_id(engine) -> int | None:
-    with engine.connect() as conn:
-        result = conn.execute(text("""
-            SELECT id FROM filter_profiles
-            WHERE county_fips = :fips AND is_active = true LIMIT 1
-        """), {"fips": COUNTY_FIPS})
-        row = result.fetchone()
-        return row.id if row else None
+def _parse_money(value: str) -> Optional[int]:
+    """Convert '$264,456.66' -> 264456 (integer dollars, truncated)."""
+    digits = re.sub(r"[^\d.]", "", value)
+    try:
+        return int(float(digits))
+    except (ValueError, TypeError):
+        return None
 
 
-def _lookup_parcel(parcel_id_raw: str, engine) -> dict | None:
-    """Direct parcel_id lookup against MQI-qualified properties."""
-    from real_invest_fl.utils.parcel_id import normalize_parcel_id
-    norm_id = normalize_parcel_id(str(parcel_id_raw).strip(), COUNTY_FIPS)
-    with engine.connect() as conn:
-        result = conn.execute(text("""
-            SELECT parcel_id, county_fips, jv, arv_estimate, tot_lvg_area,
-                   phy_addr1, phy_zipcd
-            FROM properties
-            WHERE parcel_id = :pid
-            AND county_fips = :fips
-            AND mqi_qualified = true
-        """), {"pid": norm_id, "fips": COUNTY_FIPS})
-        row = result.fetchone()
-        if row:
-            return dict(row._mapping)
-    # Also try raw (un-normalized) parcel ID — portal may use different format
-    with engine.connect() as conn:
-        result = conn.execute(text("""
-            SELECT parcel_id, county_fips, jv, arv_estimate, tot_lvg_area,
-                   phy_addr1, phy_zipcd
-            FROM properties
-            WHERE parcel_id = :pid
-            AND county_fips = :fips
-            AND mqi_qualified = true
-        """), {"pid": parcel_id_raw.strip(), "fips": COUNTY_FIPS})
-        row = result.fetchone()
-        if row:
-            return dict(row._mapping)
+def _parse_auction_dt(value: str) -> Optional[date]:
+    """Parse '05/01/2026 11:00 AM CT' -> date(2026, 5, 1)."""
+    m = re.search(r"(\d{1,2}/\d{1,2}/\d{4})", value)
+    if m:
+        try:
+            return datetime.strptime(m.group(1), "%m/%d/%Y").date()
+        except ValueError:
+            pass
     return None
 
 
-def parse_foreclosure_file(filepath: Path, engine, dry_run: bool) -> dict:
-    """Parse one foreclosure CSV file and write listing_events."""
-    logger.info("Parsing file: %s", filepath.name)
+# ---------------------------------------------------------------------------
+# Block splitting
+# ---------------------------------------------------------------------------
 
-    # Skip the template file
-    if "template" in filepath.name.lower():
-        logger.info("Skipping template file: %s", filepath.name)
-        return {"read": 0, "matched": 0, "inserted": 0,
-                "skipped_duplicate": 0, "unmatched": 0}
+def _split_into_blocks(rows: list[list[str]]) -> list[list[list[str]]]:
+    """
+    Split the full CSV row list into individual auction record blocks.
+    Each block begins at an 'Auction Starts' separator row.
+    """
+    blocks: list[list[list[str]]] = []
+    current: list[list[str]] = []
+    for row in rows:
+        if len(row) < 1:
+            continue
+        key = _clean(row[0])
+        if _is_block_separator(key):
+            if current:
+                blocks.append(current)
+            current = [row]
+        else:
+            current.append(row)
+    if current:
+        blocks.append(current)
+    return blocks
 
-    try:
-        df = pd.read_csv(filepath, dtype=str)
-    except Exception as exc:
-        logger.error("Failed to read CSV %s: %s", filepath, exc)
-        return {"error": str(exc)}
 
-    df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
+# ---------------------------------------------------------------------------
+# Record extraction
+# ---------------------------------------------------------------------------
 
-    required = {"case_number", "parcel_id"}
-    missing  = required - set(df.columns)
-    if missing:
-        logger.error("Missing required columns %s in %s", missing, filepath.name)
-        return {"error": f"missing columns: {missing}"}
+def _extract_record(block: list[list[str]]) -> Optional[dict]:
+    log.debug("  Block keys: %s", [row[0] if row else '' for row in block])
+    """
+    Parse one auction block into a dict.
+    Returns None if required fields (parcel_id, case_number) are missing.
+    """
+    kv: dict[str, str] = {}
+    address_lines: list[str] = []
 
-    existing_cases    = _get_existing_cases(engine)
-    filter_profile_id = _get_filter_profile_id(engine)
-
-    stats = {
-        "read": 0, "matched": 0, "inserted": 0,
-        "skipped_duplicate": 0, "unmatched": 0,
-    }
-
-    insert_sql = text("""
-        INSERT INTO listing_events (
-            county_fips, parcel_id, signal_tier, signal_type,
-            list_price, list_date, source, listing_url,
-            arv_estimate, arv_source, arv_spread,
-            filter_profile_id, workflow_status,
-            raw_listing_json, scraped_at, created_at, updated_at
-        ) VALUES (
-            :county_fips, :parcel_id, :signal_tier, :signal_type,
-            :list_price, :list_date, :source, :listing_url,
-            :arv_estimate, :arv_source, :arv_spread,
-            :filter_profile_id, :workflow_status,
-            :raw_listing_json, :scraped_at, NOW(), NOW()
-        )
-    """)
-
-    for _, row in df.iterrows():
-        stats["read"] += 1
-        case_number = str(row.get("case_number", "") or "").strip()
-
-        if not case_number:
+    for row in block:
+        if len(row) < 2:
+            if len(row) == 1:
+                val = _clean(row[0])
+                if val:
+                    kv["_type_marker"] = val
             continue
 
-        if case_number in existing_cases:
-            stats["skipped_duplicate"] += 1
+        key = _clean(row[0])
+        val = _clean(row[1])
+
+        if _is_block_separator(key):
+            # The value cell contains date/time, but sometimes it is
+            # in the key cell itself when the paste has only one column.
+            kv["auction_dt_raw"] = val if val else key
             continue
 
-        parcel_id_raw = str(row.get("parcel_id", "") or "").strip()
-        if not parcel_id_raw:
-            stats["unmatched"] += 1
-            continue
+        key_norm = key.lower().rstrip(":").strip().replace(" ", "_").replace("#", "num")
 
-        parcel = _lookup_parcel(parcel_id_raw, engine)
-        if parcel is None:
-            stats["unmatched"] += 1
-            logger.info(
-                "Parcel not in MQI | case=%s parcel_id=%s",
-                case_number, parcel_id_raw,
-            )
-            continue
+        if key_norm in ("case_num", "case_#", "case_number"):
+            kv["case_number"] = val
+        elif key_norm == "final_judgment_amount":
+            kv["final_judgment_raw"] = val
+        elif key_norm == "parcel_id":
+            kv["parcel_id_raw"] = val
+        elif key_norm == "assessed_value":
+            kv["assessed_value_raw"] = val
+        elif key_norm == "plaintiff_max_bid":
+            kv["plaintiff_max_bid_raw"] = val
+        elif key_norm in ("address", "property_address"):
+            address_lines.append(val)
+        elif not key and val:
+            # Continuation row — likely city/state/ZIP line of the address
+            address_lines.append(val)
+        elif key_norm == "auction_starts":
+            kv["auction_dt_raw"] = val
 
-        stats["matched"] += 1
+    kv["address_street"] = address_lines[0] if len(address_lines) > 0 else None
+    kv["address_csz"] = address_lines[1] if len(address_lines) > 1 else None
 
-        # Parse opening bid as list_price proxy
-        list_price: int | None = None
-        bid_raw = str(row.get("opening_bid", "") or "").replace("$", "").replace(",", "").strip()
-        try:
-            list_price = int(float(bid_raw)) if bid_raw else None
-        except ValueError:
-            pass
+    if not kv.get("parcel_id_raw") or not kv.get("case_number"):
+        return None
 
-        # Parse auction date
-        list_date: date | None = None
-        date_raw = str(row.get("auction_date", "") or "").strip()
-        try:
-            list_date = pd.to_datetime(date_raw).date() if date_raw else None
-        except Exception:
-            pass
-
-        arv_estimate = parcel.get("arv_estimate")
-        arv_spread: int | None = None
-        if arv_estimate and list_price and list_price > 0:
-            arv_spread = arv_estimate - list_price
-
-        raw_json = {
-            "case_number":      case_number,
-            "parcel_id_raw":    parcel_id_raw,
-            "assessed_value":   str(row.get("assessed_value", "") or "").strip(),
-            "plaintiff_max_bid": str(row.get("plaintiff_max_bid", "") or "").strip(),
-            "auction_status":   str(row.get("auction_status", "") or "").strip(),
-            "source_file":      filepath.name,
-        }
-
-        payload = {
-            "county_fips":       parcel["county_fips"],
-            "parcel_id":         parcel["parcel_id"],
-            "signal_tier":       SIGNAL_TIER,
-            "signal_type":       SIGNAL_TYPE,
-            "list_price":        list_price,
-            "list_date":         list_date,
-            "source":            SOURCE_NAME,
-            "listing_url":       str(row.get("listing_url", "") or "").strip() or None,
-            "arv_estimate":      arv_estimate,
-            "arv_source":        "JV",
-            "arv_spread":        arv_spread,
-            "filter_profile_id": filter_profile_id,
-            "workflow_status":   "NEW",
-            "raw_listing_json":  json.dumps(raw_json),
-            "scraped_at":        datetime.now(tz=timezone.utc),
-        }
-
-        if dry_run:
-            logger.info(
-                "[DRY-RUN] Would insert | case=%s parcel=%s "
-                "list_price=%s arv_spread=%s",
-                case_number, parcel["parcel_id"], list_price, arv_spread,
-            )
-            stats["inserted"] += 1
-            continue
-
-        try:
-            with engine.begin() as conn:
-                conn.execute(insert_sql, payload)
-            existing_cases.add(case_number)
-            stats["inserted"] += 1
-        except Exception as exc:
-            logger.error("Insert failed for case=%s: %s", case_number, exc)
-
-    return stats
+    return kv
 
 
-def run_foreclosure_import(dry_run: bool, specific_file: Path | None) -> None:
-    t_start = time.time()
-    engine = create_engine(settings.sync_database_url, echo=False)
-    _write_template_if_missing()
+# ---------------------------------------------------------------------------
+# DB helpers
+# ---------------------------------------------------------------------------
 
-    files = [specific_file] if specific_file else sorted(STAGING_DIR.glob("*.csv"))
-    if not files:
-        logger.info("No CSV files in %s — nothing to process.", STAGING_DIR)
-        return
-
-    logger.info("Found %d file(s) to process", len(files))
-    for filepath in files:
-        stats = parse_foreclosure_file(filepath, engine, dry_run)
-        logger.info(
-            "File complete | read=%d matched=%d inserted=%d "
-            "skipped=%d unmatched=%d | %s",
-            stats.get("read", 0), stats.get("matched", 0),
-            stats.get("inserted", 0), stats.get("skipped_duplicate", 0),
-            stats.get("unmatched", 0), filepath.name,
-        )
-
-    logger.info("Foreclosure import complete | duration=%.1fs", time.time() - t_start)
+def _get_filter_profile_id(conn) -> Optional[int]:
+    row = conn.execute(
+        text(
+            "SELECT id FROM filter_profiles "
+            "WHERE county_fips = :fips AND is_active = true LIMIT 1"
+        ),
+        {"fips": COUNTY_FIPS},
+    ).fetchone()
+    return row[0] if row else None
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Parse foreclosure CSVs into listing_events."
+def _get_existing_case_numbers(conn) -> set[str]:
+    rows = conn.execute(
+        text(
+            "SELECT mls_number FROM listing_events "
+            "WHERE source = :src AND mls_number IS NOT NULL"
+        ),
+        {"src": SOURCE_NAME},
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
+def _lookup_parcel(conn, raw_parcel_id: str) -> Optional[str]:
+    """Normalize parcel ID and verify it exists in properties."""
+    normalized = re.sub(r"[^A-Z0-9]", "", raw_parcel_id.upper())
+    row = conn.execute(
+        text(
+            "SELECT parcel_id FROM properties "
+            "WHERE parcel_id = :pid AND county_fips = :fips LIMIT 1"
+        ),
+        {"pid": normalized, "fips": COUNTY_FIPS},
+    ).fetchone()
+    return row[0] if row else None
+
+
+def _extract_zip(csz: Optional[str]) -> Optional[str]:
+    if not csz:
+        return None
+    m = re.search(r"\b(\d{5})\b", csz)
+    return m.group(1) if m else None
+
+
+# ---------------------------------------------------------------------------
+# Main runner
+# ---------------------------------------------------------------------------
+
+def run_foreclosure_import(
+    dry_run: bool = False,
+    specific_file: Optional[Path] = None,
+) -> dict:
+    """
+    Parse all .csv files in data/staging/foreclosure/ and insert
+    foreclosure auction records into listing_events.
+
+    Returns a summary dict with read/matched/inserted/skipped/unmatched counts.
+    """
+    from config.settings import settings
+    engine = create_engine(settings.sync_database_url)    
+    files = (
+        [specific_file]
+        if specific_file
+        else sorted(STAGING_DIR.glob("*.csv"))
     )
-    parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--file", type=Path, default=None)
-    args = parser.parse_args()
-    run_foreclosure_import(dry_run=args.dry_run, specific_file=args.file)
 
+    if not files:
+        log.warning("No .csv files found in %s", STAGING_DIR)
+        return {"read": 0, "matched": 0, "inserted": 0, "skipped": 0, "unmatched": 0}
 
-if __name__ == "__main__":
-    main()
+    totals = {"read": 0, "matched": 0, "inserted": 0, "skipped": 0, "unmatched": 0}
+
+    for filepath in files:
+        log.info("Processing file: %s", filepath.name)
+        with open(filepath, newline="", encoding="latin-1") as fh:
+            rows = list(csv.reader(fh))
+
+        blocks = _split_into_blocks(rows)
+        log.info("  Found %d auction blocks", len(blocks))
+
+        with engine.begin() as conn:
+            existing_cases = _get_existing_case_numbers(conn)
+            filter_profile_id = _get_filter_profile_id(conn)
+
+            for block in blocks:
+                totals["read"] += 1
+                record = _extract_record(block)
+
+                if record is None:
+                    log.debug("  Skipping unparseable block")
+                    totals["unmatched"] += 1
+                    continue
+
+                case_number = record.get("case_number", "")
+                if case_number in existing_cases:
+                    log.debug("  Duplicate case %s — skipping", case_number)
+                    totals["skipped"] += 1
+                    continue
+
+                parcel_id = _lookup_parcel(conn, record["parcel_id_raw"])
+                if parcel_id is None:
+                    log.debug(
+                        "  Case %s — parcel %s not in MQI — skipping",
+                        case_number,
+                        record["parcel_id_raw"],
+                    )
+                    totals["unmatched"] += 1
+                    continue
+
+                totals["matched"] += 1
+
+                final_judgment = _parse_money(record.get("final_judgment_raw", ""))
+                plaintiff_max_bid = _parse_money(record.get("plaintiff_max_bid_raw", ""))
+                assessed_value = _parse_money(record.get("assessed_value_raw", ""))
+                auction_date = _parse_auction_dt(record.get("auction_dt_raw", ""))
+                zip_code = _extract_zip(record.get("address_csz"))
+
+                # Use plaintiff max bid as list price if final judgment not available
+                list_price = final_judgment or plaintiff_max_bid
+
+                street = record.get("address_street") or ""
+                csz = record.get("address_csz") or ""
+                full_address = f"{street}, {csz}".strip(", ")
+
+                now = datetime.utcnow()
+
+                if dry_run:
+                    log.info(
+                        "  [DRY-RUN] Would insert | case=%s | parcel=%s | "
+                        "judgment=$%s | date=%s",
+                        case_number,
+                        parcel_id,
+                        final_judgment,
+                        auction_date,
+                    )
+                    totals["inserted"] += 1
+                    continue
+
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO listing_events (
+                            county_fips, parcel_id, listing_type, list_price,
+                            list_date, source, listing_url,
+                            mls_number,
+                            signal_tier, signal_type,
+                            workflow_status, notes,
+                            raw_listing_json, scraped_at, created_at, updated_at,
+                            filter_profile_id
+                        ) VALUES (
+                            :county_fips, :parcel_id, :listing_type, :list_price,
+                            :list_date, :source, :listing_url,
+                            :mls_number,
+                            :signal_tier, :signal_type,
+                            :workflow_status, :notes,
+                            CAST(:raw_listing_json AS jsonb), :scraped_at, :created_at, :updated_at,
+                            :filter_profile_id
+                        )
+                        """
+                    ),
+                    {
+                        "county_fips": COUNTY_FIPS,
+                        "parcel_id": parcel_id,
+                        "listing_type": "foreclosure_auction",
+                        "list_price": list_price,
+                        "list_date": auction_date,
+                        "source": SOURCE_NAME,
+                        "listing_url": "https://escambia.realforeclose.com/",
+                        "mls_number": case_number,
+                        "signal_tier": SIGNAL_TIER,
+                        "signal_type": SIGNAL_TYPE,
+                        "workflow_status": "new",
+                        "notes": (
+                            f"Final judgment: ${final_judgment or 'N/A'} | "
+                            f"Plaintiff max bid: ${plaintiff_max_bid or 'N/A'} | "
+                            f"Assessed: ${assessed_value or 'N/A'} | "
+                            f"Address: {full_address}"
+                        ),
+                        "raw_listing_json": (
+                            f'{{"case_number": "{case_number}", '
+                            f'"final_judgment": {final_judgment or "null"}, '
+                            f'"plaintiff_max_bid": {plaintiff_max_bid or "null"}, '
+                            f'"assessed_value": {assessed_value or "null"}, '
+                            f'"address": "{full_address}", '
+                            f'"zip": "{zip_code or ""}"}}'
+                        ),
+                        "scraped_at": now,
+                        "created_at": now,
+                        "updated_at": now,
+                        "filter_profile_id": filter_profile_id,
+                    },
+                )
+                existing_cases.add(case_number)
+                totals["inserted"] += 1
+
+    log.info(
+        "Foreclosure import complete | read=%d matched=%d inserted=%d "
+        "skipped=%d unmatched=%d",
+        totals["read"],
+        totals["matched"],
+        totals["inserted"],
+        totals["skipped"],
+        totals["unmatched"],
+    )
+    return totals
