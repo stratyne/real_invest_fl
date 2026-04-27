@@ -29,7 +29,9 @@ data/exports/
 *.db
 
 # === Docs ===
-docs/
+docs/*
+!/docs/
+!/docs/*.md
 *.pdf
 *.xlsx
 *.xls
