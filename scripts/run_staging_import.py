@@ -83,7 +83,7 @@ def main() -> None:
             run_tax_deed_import(dry_run=args.dry_run, specific_file=args.file)
 
         elif source == "zillow":
-            from real_invest_fl.ingest.staging_parsers.zillow_foreclosure_parser import (
+            from real_invest_fl.ingest.staging_parsers.zillow_parser import (
                 run_zillow_import,
             )
             run_zillow_import(dry_run=args.dry_run, specific_file=args.file)

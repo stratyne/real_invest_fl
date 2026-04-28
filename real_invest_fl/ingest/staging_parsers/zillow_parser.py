@@ -67,6 +67,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from config.settings import settings  # noqa: E402
+from real_invest_fl.utils.text import normalize_street_address  # noqa: E402
 
 # ── logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -74,7 +75,7 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger = logging.getLogger("zillow_foreclosure_parser")
+logger = logging.getLogger("zillow_parser")
 
 # ── constants ──────────────────────────────────────────────────────────────
 COUNTY_FIPS  = "12033"
@@ -164,27 +165,48 @@ def _is_address_line(line: str) -> bool:
 
 
 def _normalize_address(address: str) -> str:
-    """
-    Normalize address for DB matching against phy_addr1.
-    Upper-case, collapse whitespace, strip unit/apt suffix variations.
-    Does NOT strip unit numbers — phy_addr1 may include them.
-    """
-    return re.sub(r"\s+", " ", address.upper().strip())
+    """Delegate to the shared street address normalizer in utils/text.py."""
+    return normalize_street_address(address)
 
 
 def _extract_zip(address: str) -> Optional[str]:
-    """Extract 5-digit ZIP from address string."""
-    m = re.search(r"\b(\d{5})\b", address)
+    """Extract 5-digit ZIP from end of address string."""
+    m = re.search(r"\b(\d{5})\s*$", address)
     return m.group(1) if m else None
 
 
 def _extract_street(address: str) -> str:
     """
-    Extract street portion only (before first comma) for phy_addr1 matching.
-    '4831 Olive Rd #4A, Pensacola, FL 32514' -> '4831 OLIVE RD #4A'
+    Extract and normalize street portion only (before first comma)
+    for phy_addr1 matching.
+
+    Applies suffix abbreviation and directional contraction only.
+    Does NOT apply digit-letter injection or unit stripping —
+    unit designators must be preserved intact for _lookup_parcel()
+    Level 2 unit normalization to work correctly.
     """
+    import re
+    from real_invest_fl.utils.text import (
+        _SUFFIX_RE, _STREET_SUFFIX_MAP,
+        _DIRECTIONAL_MAP, _DIRECTIONAL_FULL_WORDS,
+    )
     parts = address.split(",")
-    return parts[0].strip().upper() if parts else address.upper()
+    street = parts[0].strip().upper() if parts else address.upper()
+    # Collapse whitespace
+    street = re.sub(r"\s+", " ", street.strip())
+    # Suffix abbreviation
+    street = _SUFFIX_RE.sub(lambda m: _STREET_SUFFIX_MAP[m.group(1)], street)
+    street = re.sub(r"\s+", " ", street.strip())
+    # Directional contraction
+    for full, abbr in _DIRECTIONAL_MAP.items():
+        not_another_dir = "(?!" + "|".join(
+            re.escape(d) + r"\b" for d in _DIRECTIONAL_FULL_WORDS
+        ) + ")"
+        pattern = re.compile(
+            r"^(\d+\s+)" + re.escape(full) + r"\s+" + not_another_dir
+        )
+        street = pattern.sub(r"\1" + abbr + " ", street)
+    return re.sub(r"\s+", " ", street.strip())
 
 
 # ── block splitting ────────────────────────────────────────────────────────
@@ -279,7 +301,7 @@ def _extract_record(block: list[str]) -> Optional[dict]:
         "bedrooms":     specs["bedrooms"],
         "bathrooms":    specs["bathrooms"],
         "sqft":         specs["sqft"],
-        "listing_type": LISTING_TYPE,
+        "listing_type": specs["listing_type"] or LISTING_TYPE,
         "address":      address,
         "street":       _extract_street(address),
         "zip_code":     _extract_zip(address),
@@ -655,7 +677,7 @@ def parse_zillow_file(
                 {
                     "county_fips":        parcel["county_fips"],
                     "parcel_id":          parcel["parcel_id"],
-                    "listing_type":       LISTING_TYPE,
+                    "listing_type":       record["listing_type"] or LISTING_TYPE,
                     "list_price":         record["list_price"],
                     "list_date":          today,
                     "price_per_sqft":     price_per_sqft,
@@ -663,7 +685,7 @@ def parse_zillow_file(
                     "arv_source":         "JV",
                     "source":             SOURCE_NAME,
                     "signal_tier":        SIGNAL_TIER,
-                    "signal_type":        SIGNAL_TYPE,
+                    "signal_type":        record["listing_type"] or SIGNAL_TYPE,
                     "listing_agent_name": record["brokerage"],
                     "workflow_status":    "new",
                     "filter_profile_id":  filter_profile_id,

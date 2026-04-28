@@ -116,7 +116,7 @@ _SUFFIX_RE = re.compile(
 _DIRECTIONAL_FULL_WORDS = set(_DIRECTIONAL_MAP.keys())
 
 
-def normalize_street_address(addr: str) -> str:
+def normalize_street_address(addr: str, strip_unit: bool = True) -> str:
     """
     Normalize a street address string for matching against NAL phy_addr1.
 
@@ -159,8 +159,9 @@ def normalize_street_address(addr: str) -> str:
 
     # Step 2 — strip unit designators (before digit-letter injection
     # so that 'SUITE 2A' is consumed whole, not split into '2' and 'A')
-    addr = _UNIT_RE.sub("", addr)
-    addr = re.sub(r"\s+", " ", addr.strip())
+    if strip_unit:
+        addr = _UNIT_RE.sub("", addr)
+        addr = re.sub(r"\s+", " ", addr.strip())
 
     # Step 3 — inject space between digit and letter, excluding ordinals
     addr = _DIGIT_LETTER_RE.sub(r"\1 \2", addr)

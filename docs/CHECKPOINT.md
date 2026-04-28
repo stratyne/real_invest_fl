@@ -25,8 +25,13 @@ I will gladly share it with you. Do you understand the seriousness of the situat
 
 Penstock began as a single SOW requesting a daily automated bot to find,
 filter, rank, and schedule appointments for high-potential investment
-properties in Pensacola/Escambia County FL. Core criteria from that SOW
-that remain active:
+properties in Pensacola/Escambia County FL.
+
+The SOW criteria represent the first concrete user story and proof-of-concept 
+filter profile. They will be satisfied as a natural outcome of building the 
+platform. The Strategic Vision — not the SOW — defines the product.
+
+Core criteria from that SOW that remain active:
 
 - **Location:** Pensacola, Escambia County FL only (ZIPs 32501-32514, 32526, 32534, etc.)
 - **Max list price:** $225,000
@@ -78,9 +83,9 @@ scraping task than discovery-first scraping of commercial listing sites.
 NAL ingest, CAMA enrichment, GIS ingest, ARV calculation, SDF comps, seed data.
 
 **Phase 2 — Scraping and Daily Matching** ← ACTIVE
-Modular scraper framework, address normalization, fuzzy parcel matching,
-listing_events population, staging file-drop parsers, daily scheduler,
-output channels (Google Sheets, email, Telegram).
+Core scraping framework, address normalization, parcel matching, and staging
+parsers complete. Remaining: daily scheduler, output channels.
+Transitioning to Phase 4 UI in parallel.
 
 **Phase 3 — Subscription Sources and CAMA Refresh**
 Landvoice, REDX, PropStream modules. Annual NAL/CAMA refresh pipeline.
@@ -140,6 +145,7 @@ d4e5f6a7b8c9 v0.11 add bed_bath_source VARCHAR(50) to properties
 | Tax deed events | 5,730 records | 2019-01-07 – 2026-12-02; 4,394 redeemed; 1 null price (malformed source row); historical backfill complete |
 | Zillow foreclosures | 13 records | 2026-04-28 initial load |
 | Auction.com listings  | 11 records | 2026-04-28 initial load |
+| Zillow listings | 218 records | 13 foreclosures (2026-04-28 initial load) + 205 for-sale (2026-04-28) |
 
 ---
 
@@ -148,81 +154,109 @@ d4e5f6a7b8c9 v0.11 add bed_bath_source VARCHAR(50) to properties
 Full run (70k+ parcels) hit timeout errors. Limited to ~100 parcels per manual
 batch. `raw_cama_json` contains only `zoning` key — no sales history. Full
 enrichment deferred; not required for POC. Bedrooms and bathrooms are NOT
-available from the ECPA CAMA detail page — source TBD. This is a hard blocker
-for the 3bd/2ba filter criterion from the SOW.
+available from the ECPA CAMA detail page — source TBD. Beds/baths are being 
+populated opportunistically from listing sources. Full CAMA enrichment deferred — 
+not required for POC.
 
 ---
 
-## Key Design Decisions (Locked)
+## Key Design Decisions (Locked — Never Override)
 
+### Data Architecture
 - ARV proxy = `jv` (Just Value from NAL) until multi-year SDF comps available
 - Signal model is primary; traditional listing model is a parallel track
+- `listing_events` is the unified output table for all signal and listing sources
+- SDF deferred; NAV deferred until deal-scoring is approved deliverable
+
+### Database / ORM
+- Session pattern: async (`settings.database_url`) for ORM;
+  sync (`settings.sync_database_url`) for batch scripts
+- All SQL in batch scripts uses `text()` — never raw string SQL
+- `CAST(:raw_listing_json AS jsonb)` — never `::jsonb` in `text()` statements
+- DBeaver selected as permanent DB GUI
+
+### Parcel ID Normalization
+- Parcel ID normalization: strip non-alphanumeric, uppercase, NO zero-padding.
+  `properties.parcel_id` is stored as 16 chars. `normalize_parcel_id()` in
+  `parcel_id.py` zero-pads to 18 — do NOT call it in scrapers; it will break
+  the join. Use raw strip+uppercase only.
+
+### Street Address Normalization
+- `normalize_street_address()` in `real_invest_fl/utils/text.py` is the
+  single shared street normalizer for all scrapers and listing_matcher.
+  Transformations (in order): upper-case, unit strip, digit-letter
+  injection (ordinals excluded), suffix abbreviation, directional contraction.
+  50 tests passing as of 2026-04-28.
+- Digit-letter injection uses `(\d)(?!(?:ST|ND|RD|TH)\b)([A-Z])` to
+  exclude ordinal suffixes (74TH, 48TH) from splitting.
+- Unit stripping runs BEFORE digit-letter injection so that compound
+  unit values like SUITE 2A are consumed whole before 2A is split.
+- `#` unit designator has no leading `\b` anchor — `#` is not a word
+  character and `\b` before it never fires.
+- `listing_matcher._normalize_address()` is a thin delegation wrapper
+  to `normalize_street_address()`. Call sites are unchanged.
+- Address matching uses a three-level fallback: exact match, unit suffix
+  normalization (#4A → 4A), street prefix with MULTI-UNIT review flag.
+- Address normalization library: rapidfuzz v3.14.5
+
+### Scraping / Robots
 - Tier 1 government sources (RealForeclose, RealTaxDeed, LandmarkWeb) are
   file-drop parsers — robots.txt blocks live scraping on all three
 - `public.escambiaclerk.com` (generic crawlers permitted) is scrapeable
   by application code; ClaudeBot specifically is disallowed by name
 - `public.escambiaclerk.com` is behind Cloudflare — requests is blocked
   regardless of User-Agent; Playwright is required
-- `listing_events` is the unified output table for all signal and listing sources
 - Scraper auto-discovery via `real_invest_fl/scrapers/` package imports
-- Address normalization: `real_invest_fl/utils/text.py` + rapidfuzz (v3.14.5)
-- Parcel ID normalization: strip non-alphanumeric, uppercase, NO zero-padding.
-  `properties.parcel_id` is stored as 16 chars. `normalize_parcel_id()` in
-  `parcel_id.py` zero-pads to 18 — do NOT call it in scrapers; it will break
-  the join. Use raw strip+uppercase only.
-- Session pattern: async (`settings.database_url`) for ORM;
-  sync (`settings.sync_database_url`) for batch scripts
-- All SQL in batch scripts uses `text()` — never raw string SQL
-- `CAST(:raw_listing_json AS jsonb)` — never `::jsonb` in `text()` statements
-- SDF deferred; NAV deferred until deal-scoring is approved deliverable
-- DBeaver selected as permanent DB GUI
-- Long-running processes in dedicated PowerShell windows are approved pattern
-- Machine runs 24/7
-- Windows / Python 3.13 strptime: use `%b` (abbreviated month name: Jan, Feb,
-  Nov, Dec) not `%B` (full month name). The escambia clerk pages deliver
-  abbreviated month names. `%B` fails silently on Windows Python 3.13.
+
+### Per-Scraper Implementation Notes
+- `_normalize_street()` in `auction_com.py` is intentionally minimal — only
+  digit-letter space injection and upper/collapse. Do not expand it further.
+  The 3 remaining Auction.com unmatched addresses (2983 NORTH HIGHWAY 95 A,
+  110 FRISCO ROAD, 5931 MULDOON ROAD) will resolve when listing_matcher.py's
+  full matching pipeline is wired to Auction.com.
+- Auction.com GraphQL API: POST https://graph.auction.com/graphql. No
+  authentication required. x-cid header must be a fresh UUID per request.
+  $hasAuthenticatedUser variable must be removed from both the operation
+  signature and variables — server rejects unused variables.
+  Query captured 2026-04-28.
+- Auction.com returns 50-mile radius results (~73 records). Filter to
+  country_primary_subdivision=FL AND country_secondary_subdivision=ESCAMBIA
+  (case-insensitive). Only 14-17 records survive the filter.
+- `total_bedrooms=0` and `total_bathrooms=0` in Auction.com data are
+  missing-data sentinels, not real values. Treat as None.
 - Data table on `taxsaleMobile.asp` is nested inside an outer wrapper table.
   Select it with `soup.find("table", attrs={"bgcolor": "#0054A6"})` —
   never `soup.find("table")` which returns the wrong table.
-- Signal tier reflects the delivery source, not the underlying event type. 
-  A foreclosure on Zillow is Tier 3; the same event from the Escambia Clerk is Tier 1.
-- Beds/baths populated opportunistically on parcel match from any listing source. 
-  bed_bath_source tracks provenance. Never overwrite an existing value with a 
+- zillow_parser.py accepts mixed listing types (foreclosure, house for sale, FSBO,
+  auction, active). listing_type and signal_type are derived from the specs line
+  suffix, not hardcoded. Falls back to 'foreclosure' constant if unparseable.
+- normalize_street_address() accepts strip_unit=False to preserve unit designators
+  for _lookup_parcel() Level 2 unit normalization. _extract_street() in
+  zillow_parser.py uses strip_unit=False. _normalize_address() uses default
+  strip_unit=True (dedup key only, not passed to DB lookup).
+- _extract_zip() anchors to end of address string (\b(\d{5})\s*$) to avoid
+  matching 5-digit house numbers like 11150 before the ZIP.  
+
+### Beds / Baths
+- Beds/baths populated opportunistically on parcel match from any listing source.
+  `bed_bath_source` tracks provenance. Never overwrite an existing value with a
   lower-confidence source — that logic lives in the parser layer.
-- Zillow workflow: --dry-run first to surface [REVIEW] items, then live run. 
+
+### Signal Tiers
+- Signal tier reflects the delivery source, not the underlying event type.
+  A foreclosure on Zillow is Tier 3; the same event from the Escambia Clerk
+  is Tier 1.
+
+### Workflow Patterns
+- Zillow workflow: --dry-run first to surface [REVIEW] items, then live run.
   This is the standard workflow for all attended file-drop parsers.
-- Address matching uses a three-level fallback: exact match, unit suffix normalization 
-  (#4A → 4A), street prefix with MULTI-UNIT review flag.
-- _normalize_street() in auction_com.py is intentionally minimal — only digit-letter 
-  space injection and upper/collapse. Full street normalization (suffix map, directional 
-  stripping) is deferred to real_invest_fl/utils/text.py and listing_matcher.py. 
-  Do not expand the per-scraper normalizer further.
-- Auction.com GraphQL API: POST https://graph.auction.com/graphql. No authentication required. 
-  x-cid header must be a fresh UUID per request. $hasAuthenticatedUser variable must be 
-  removed from both the operation signature and variables — server rejects unused variables. 
-  Query captured 2026-04-28.
-- Auction.com returns 50-mile radius results (~73 records). Filter to country_primary_subdivision=FL 
-  AND country_secondary_subdivision=ESCAMBIA (case-insensitive). Only 14-17 records survive the filter.
-- total_bedrooms=0 and total_bathrooms=0 in Auction.com data are missing-data sentinels, not real values. Treat as None.
-- normalize_street_address() in real_invest_fl/utils/text.py is the
-  single shared street normalizer for all scrapers and listing_matcher.
-  Transformations (in order): upper-case, unit strip, digit-letter
-  injection (ordinals excluded), suffix abbreviation, directional
-  contraction. 50 tests passing as of 2026-04-28.
-- Digit-letter injection uses (\d)(?!(?:ST|ND|RD|TH)\b)([A-Z]) to
-  exclude ordinal suffixes (74TH, 48TH) from splitting.
-- Unit stripping runs BEFORE digit-letter injection so that compound
-  unit values like SUITE 2A are consumed whole before 2A is split.
-- # unit designator has no leading \b anchor — # is not a word character
-  and \b before it never fires.
-- listing_matcher._normalize_address() is a thin delegation wrapper
-  to normalize_street_address(). Call sites are unchanged.
-- auction_com._normalize_street() remains intentionally minimal
-  (digit-letter injection + upper/collapse only). It is NOT replaced
-  by normalize_street_address(). The 3 remaining Auction.com unmatched
-  addresses (2983 NORTH HIGHWAY 95 A, 110 FRISCO ROAD, 5931 MULDOON
-  ROAD) will resolve when listing_matcher.py's full matching pipeline
-  is wired to Auction.com.
+- Long-running processes in dedicated PowerShell windows are approved pattern
+- Machine runs 24/7
+
+### Windows / Python Platform Notes
+- Windows / Python 3.13 strptime: use `%b` (abbreviated month name) not `%B`
+  (full month name). The Escambia Clerk pages deliver abbreviated month names.
+  `%B` fails silently on Windows Python 3.13.
 
 ---
 
@@ -259,6 +293,7 @@ engine = create_engine(settings.sync_database_url)```
 | LandmarkWeb lis pendens | data/staging/lis_pendens/ | .xlsx | Weekly (export last 10 days) |
 | RealForeclose foreclosures | data/staging/foreclosure/ | .csv (raw paste, 2-col key-value) | Weekly |
 | Zillow foreclosures | data/staging/zillow/ | .csv (manual copy/paste, one value per line) | Weekly |
+| Zillow listings | data/staging/zillow/ | .csv (manual copy/paste, one value per line) | Weekly |
 
 Run after each drop:
 python scripts/run_staging_import.py --source lis_pendens
@@ -296,7 +331,7 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 | Tier | Sources | Approach | Status |
 |---|---|---|---|
 | 1 — Government direct | Escambia Clerk tax deed, lis pendens (LandmarkWeb), foreclosures (RealForeclose), RealTaxDeed | Live scrape or file-drop | Tax deed complete; others file-drop |
-| 2 — Public aggregators | HUD Home Store, Auction.com, Foreclosure.com | Playwright + rate limiting | Pending |
+| 2 — Public aggregators | HUD Home Store, Foreclosure.com | Playwright + rate limiting | Auction.com COMPLETE; others pending |
 | 3 — Free listing sources | Craigslist FSBO | requests + BS4 | Pending |
 | 4 — Commercial platforms | Zillow, Redfin, Realtor.com, Homes.com | Paid API or vendor proxy | Deferred |
 
@@ -321,58 +356,68 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 
 ## Pending Actions (priority order)
 
-1. **[PARTIALLY RESOLVED]** beds/baths now populated opportunistically from listing sources 
-	via bed_bath_source. Bulk sourcing from FL DOR NAL or ECPA still pending 
-	but no longer a hard blocker for matched listings.
+1. **[PARTIALLY RESOLVED]** beds/baths now populated opportunistically from
+   listing sources via bed_bath_source. Bulk sourcing from FL DOR NAL or
+   ECPA still pending but not a blocker.
 
-2. **[COMPLETE]** Address normalization and fuzzy parcel matching layer —
-   real_invest_fl/utils/text.py normalize_street_address() built and
-   fully tested (50/50). listing_matcher.py _normalize_address() now
-   delegates to the shared normalizer. Craigslist scraper is unblocked.
-   
-3. **[PENDING]** Craigslist Pensacola FSBO scraper (Tier 3) —
-   `pensacola.craigslist.org/search/rea`, requests + BS4, no bot detection.
-   `real_invest_fl/scrapers/craigslist_fsbo.py` +
-   `real_invest_fl/ingest/run_craigslist.py`
+2. **[COMPLETE]** Address normalization layer —
+   normalize_street_address() built and fully tested (50/50).
+   strip_unit=False parameter added 2026-04-28. listing_matcher.py and
+   zillow_parser.py both delegate to shared normalizer.
+   Note: strip_unit=False path not yet covered by tests — add before
+   next text.py change.
 
-4. **[PENDING]** Property filter enforcement — apply filter_profile criteria
-   against properties table to produce the active MQI subset.
+3. **[NEXT]** data_source_status table — tracks last ingest timestamp
+   per source for UI status display. Small migration, unblocks UI work.
 
-5. **[PENDING]** Deal scoring engine — weighted score on ARV spread, discount
-   to list, signal tier, days on market. Columns exist; logic not written.
+4. **[NEXT]** User/tenant model — required before Phase 4 UI work begins.
 
-6. **[PENDING]** Output pipeline — Google Sheets export with required SOW
-   columns, updated on each run.
+5. **[NEXT]** Phase 4 UI — FastAPI + React (Vite) + MapLibre GL JS.
+   Filter profile management, ranked property list, map view, outreach
+   template generation, one-click email send with Calendly/Google Calendar
+   link, full outreach log. This is the product.
 
-7. **[PENDING]** Email template generation — outreach email per qualifying
-   property, logged. No auto-send required for POC.
+6. **[PENDING]** Deal scoring engine — weighted score on ARV spread,
+   discount to list, signal tier, days on market. Feeds the ranked
+   list in the UI. Columns exist; logic not written.
 
-8. **[PENDING]** Daily scheduler — Windows Task Scheduler entry pointing at
-   master runner script.
+7. **[PENDING]** Daily scheduler — Windows Task Scheduler entry pointing
+   at master runner script.
 
-9. **[PENDING]** Zestimate integration — RapidAPI Zillow wrapper, hitting
-   only matched MQI properties, rate-limited. POC-acceptable approach.
+8. **[PENDING]** Zestimate integration — RapidAPI Zillow wrapper, hitting
+   only matched MQI properties, rate-limited. Enriches UI display.
 
-10. **[PENDING]** HUD Home Store scraper (Tier 2) — hudhomestore.gov.
+9. **[PENDING]** Output pipeline — Google Sheets export. Secondary to UI
+   but satisfies SOW daily output requirement.
 
-11. **[PENDING]** File Florida DOR multi-year SDF request —
+10. **[PENDING]** Email/outreach pipeline — auto-generated outreach email
+    per qualifying property, logged. Satisfies SOW outreach requirement.
+
+11. **[PENDING]** HUD Home Store scraper (Tier 2) — hudhomestore.gov.
+    Monitor until listings appear.
+
+12. **[PENDING]** File Florida DOR multi-year SDF request —
     PTOTechnology@floridarevenue.com, Escambia County (No. 27),
     assessment years 2019-2024, CSV format.
 
-12. **[PENDING]** Await Ch. 119 response from Escambia County Clerk re:
+13. **[PENDING]** Await Ch. 119 response from Escambia County Clerk re:
     recurring foreclosure/tax deed export.
 
-13. **[PENDING]** `data_source_status` table — tracks last ingest timestamp
-    per source for UI status display. Add before UI work begins.
+14. **[PENDING]** Annual NAL/CAMA refresh pipeline — Phase 3.
 
-14. **[PENDING]** User/tenant model — required before Phase 4 UI work begins.
+15. **[PENDING]** Subscription sources — Landvoice, REDX, PropStream
+    modules. Phase 3.
 
-15. **[DEFERRED]** Full CAMA enrichment (70k parcels — timeout issue,
+16. **[DEFERRED]** Craigslist FSBO scraper — effort/reward too high.
+    Street addresses not available in structured data. Deferred
+    indefinitely.
+
+17. **[DEFERRED]** Full CAMA enrichment (70k parcels — timeout issue,
     not POC-critical).
 
-16. **[DEFERRED]** NAV data ingest.
+18. **[DEFERRED]** NAV data ingest.
 
-17. **[DEFERRED]** SDF comp engine.
+19. **[DEFERRED]** SDF comp engine.
 
 ---
 
@@ -418,7 +463,7 @@ real_invest_fl/                         <- project root
 │   │       ├── foreclosure_parser.py
 │   │       ├── lis_pendens_parser.py
 │   │       ├── tax_deed_parser.py
-│   │       └── zillow_foreclosure_parser.py  <- COMPLETE
+│   │       └── zillow_parser.py              <- COMPLETE (renamed from zillow_foreclosure_parser.py)
 │   ├── scrapers/
 │   │   ├── __init__.py
 │   │   ├── auction_com.py          ← COMPLETE
