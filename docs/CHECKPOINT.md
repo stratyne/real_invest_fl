@@ -139,6 +139,7 @@ d4e5f6a7b8c9 v0.11 add bed_bath_source VARCHAR(50) to properties
 | Foreclosure events | 7 records | May 2026 manual pull |
 | Tax deed events | 5,730 records | 2019-01-07 – 2026-12-02; 4,394 redeemed; 1 null price (malformed source row); historical backfill complete |
 | Zillow foreclosures | 13 records | 2026-04-28 initial load |
+| Auction.com listings  | 11 records | 2026-04-28 initial load |
 
 ---
 
@@ -192,6 +193,17 @@ for the 3bd/2ba filter criterion from the SOW.
   This is the standard workflow for all attended file-drop parsers.
 - Address matching uses a three-level fallback: exact match, unit suffix normalization 
   (#4A → 4A), street prefix with MULTI-UNIT review flag.
+- _normalize_street() in auction_com.py is intentionally minimal — only digit-letter 
+  space injection and upper/collapse. Full street normalization (suffix map, directional 
+  stripping) is deferred to real_invest_fl/utils/text.py and listing_matcher.py. 
+  Do not expand the per-scraper normalizer further.
+- Auction.com GraphQL API: POST https://graph.auction.com/graphql. No authentication required. 
+  x-cid header must be a fresh UUID per request. $hasAuthenticatedUser variable must be 
+  removed from both the operation signature and variables — server rejects unused variables. 
+  Query captured 2026-04-28.
+- Auction.com returns 50-mile radius results (~73 records). Filter to country_primary_subdivision=FL 
+  AND country_secondary_subdivision=ESCAMBIA (case-insensitive). Only 14-17 records survive the filter.
+- total_bedrooms=0 and total_bathrooms=0 in Auction.com data are missing-data sentinels, not real values. Treat as None.
 
 ---
 
@@ -280,7 +292,7 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 - Tier 2 — Government Auction / Bulk Public Data Source Investigation Results (Manual, 2026-04-28)
 	1. Escambia County Surplus Property Auctions https://myescambia.com/our-services/property-sales/surplus-property-auction Valid source. Zero active listings at time of investigation. Low volume expected by nature. Monitor periodically — no scraper warranted until listings appear. Flag for future check-back.
 	2. HUD Home Store — Escambia County https://www.hudhomestore.gov/searchresult?citystate=FL Valid source. Zero active listings for Escambia County at time of investigation. Monitor periodically. No scraper warranted until listings appear.
-	3. Auction.com — Escambia County https://www.auction.com/residential/fl/escambia-county Valid source. 17 active listings at time of investigation (was 16 at initial checkpoint entry). Public search results visible without login. This is the next scrape investigation target. Need to determine: what property detail fields are available without an account, whether bot detection / JS rendering is required, and whether a structured scraper is feasible.
+	3. Auction.com — COMPLETE - Escambia County https://www.auction.com/residential/fl/escambia-county Valid source. 17 active listings at time of investigation (was 16 at initial checkpoint entry). Public search results visible without login. This is the next scrape investigation target. Need to determine: what property detail fields are available without an account, whether bot detection / JS rendering is required, and whether a structured scraper is feasible.
 - Tier 3 — Commercial Listing Platforms / FSBO Source Investigation Results (Manual, 2026-04-28)
 	1. Craigslist Pensacola Housing https://pensacola.craigslist.org/search/rea Valid source. Active listings present. Scraping is feasible technically (no login, public, requests + BS4 viable) but data will be messy — address visibility varies by poster, field structure is inconsistent across listings. Scraper is buildable but requires significant normalization work. Still in pending queue as originally planned.
 	2. Zillow — Escambia County Foreclosures https://www.zillow.com/escambia-county-fl/foreclosures/ Valid source. 13 active listings at time of investigation. Fields visible without login: price, beds, baths, sqft, address, listing type (Foreclosure), agent/brokerage, days on market (some listings). Data quality is good — structured and consistent. Zillow anti-scraping posture is the primary obstacle (heavy JS, bot detection, API terms). Scraping approach TBD — RapidAPI Zillow wrapper is the approved POC approach per checkpoint. Deferred to Tier 4 commercial platform track.
@@ -294,15 +306,17 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 	via bed_bath_source. Bulk sourcing from FL DOR NAL or ECPA still pending 
 	but no longer a hard blocker for matched listings.
 
-2. **[NEXT]** Craigslist Pensacola FSBO scraper (Tier 3) —
+2. **[NEXT]** Address normalization and fuzzy parcel matching layer —
+   `real_invest_fl/utils/text.py` + rapidfuzz. Linchpin for listing
+   confirmation matching. Required before any commercial listing source
+   can populate listing_events reliably. Now actively blocking shared normalization. 
+   Build before Craigslist scraper. utils/text.py street normalizer must include suffix map 
+   (ROAD→RD, etc.) and directional handling with proper test coverage before being used in any scraper.
+   
+3. **[PENDING]** Craigslist Pensacola FSBO scraper (Tier 3) —
    `pensacola.craigslist.org/search/rea`, requests + BS4, no bot detection.
    `real_invest_fl/scrapers/craigslist_fsbo.py` +
    `real_invest_fl/ingest/run_craigslist.py`
-
-3. **[PENDING]** Address normalization and fuzzy parcel matching layer —
-   `real_invest_fl/utils/text.py` + rapidfuzz. Linchpin for listing
-   confirmation matching. Required before any commercial listing source
-   can populate listing_events reliably.
 
 4. **[PENDING]** Property filter enforcement — apply filter_profile criteria
    against properties table to produce the active MQI subset.
@@ -350,7 +364,7 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 real_invest_fl/                         <- project root
 ├── alembic/versions/                   <- all migration files
 ├── data/
-│   ├── raw/                            <- NAL CSV, SDF CSV, GIS zips, LandmarkWeb xlsx
+│   ├── raw/                            <- NAL CSV, SDF CSV, GIS zips
 │   └── staging/
 │       ├── lis_pendens/
 │       ├── foreclosure/
@@ -378,6 +392,7 @@ real_invest_fl/                         <- project root
 │   │   ├── nal_loader.py
 │   │   ├── nal_mapper.py
 │   │   ├── rejected_parcels.py
+│   │   ├── run_auction_com.py        ← COMPLETE
 │   │   ├── run_context.py
 │   │   ├── run_taxdeed.py              <- COMPLETE
 │   │   ├── sdf_loader.py
@@ -389,6 +404,7 @@ real_invest_fl/                         <- project root
 │   │       └── zillow_foreclosure_parser.py  <- COMPLETE
 │   ├── scrapers/
 │   │   ├── __init__.py
+│   │   ├── auction_com.py          ← COMPLETE
 │   │   ├── base_scraper.py
 │   │   ├── escambia_foreclosure.py     <- robots-blocked, retained for future
 │   │   └── escambia_taxdeed_clerk.py   <- COMPLETE
@@ -398,6 +414,8 @@ real_invest_fl/                         <- project root
 │       └── text.py
 └── scripts/
     ├── cold_start.py
+	├── probe_auction_com.py                    ← investigation only
+	├── probe_auction_com_request.py            ← investigation only
     ├── run_arv.py
     ├── run_staging_import.py
     └── seeds/
