@@ -162,6 +162,7 @@ class Property(Base):
     roof_type:          Mapped[str | None] = mapped_column(String(100))
     bedrooms:           Mapped[int | None] = mapped_column(Integer)
     bathrooms:          Mapped[float | None] = mapped_column(Numeric(4, 1))
+    bed_bath_source:    Mapped[str | None] = mapped_column(String(50))
     cama_quality_code:  Mapped[str | None] = mapped_column(String(10))
     cama_condition_code: Mapped[str | None] = mapped_column(String(10))
     cama_enriched_at:   Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

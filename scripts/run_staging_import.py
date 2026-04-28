@@ -3,16 +3,19 @@ scripts/run_staging_import.py
 ------------------------------
 Entry point for all staging file-drop parsers.
 
-Runs all three parsers in sequence, or a specific one via --source flag.
+Runs all parsers in sequence, or a specific one via --source flag.
 
 Usage:
     python scripts/run_staging_import.py                    # all sources
     python scripts/run_staging_import.py --source lis_pendens
     python scripts/run_staging_import.py --source foreclosure
     python scripts/run_staging_import.py --source tax_deed
+    python scripts/run_staging_import.py --source zillow
     python scripts/run_staging_import.py --dry-run
     python scripts/run_staging_import.py --source lis_pendens --dry-run
+    python scripts/run_staging_import.py --source zillow --dry-run
     python scripts/run_staging_import.py --source lis_pendens --file path/to/file.xlsx
+    python scripts/run_staging_import.py --source zillow --file path/to/file.csv
 """
 import argparse
 import sys
@@ -27,13 +30,14 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
 )
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run staging file-drop parsers for government data sources."
     )
     parser.add_argument(
         "--source",
-        choices=["lis_pendens", "foreclosure", "tax_deed", "all"],
+        choices=["lis_pendens", "foreclosure", "tax_deed", "zillow", "all"],
         default="all",
         help="Which parser to run (default: all).",
     )
@@ -52,7 +56,7 @@ def main() -> None:
 
     sources = (
         [args.source] if args.source != "all"
-        else ["lis_pendens", "foreclosure", "tax_deed"]
+        else ["lis_pendens", "foreclosure", "tax_deed", "zillow"]
     )
 
     for source in sources:
@@ -77,6 +81,12 @@ def main() -> None:
                 run_tax_deed_import,
             )
             run_tax_deed_import(dry_run=args.dry_run, specific_file=args.file)
+
+        elif source == "zillow":
+            from real_invest_fl.ingest.staging_parsers.zillow_foreclosure_parser import (
+                run_zillow_import,
+            )
+            run_zillow_import(dry_run=args.dry_run, specific_file=args.file)
 
 
 if __name__ == "__main__":
