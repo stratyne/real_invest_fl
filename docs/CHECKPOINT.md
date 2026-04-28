@@ -1,13 +1,12 @@
 # Project Penstock — CHECKPOINT.md
 
-> **OPENING PROMPT FOR EVERY NEW CHAT SESSION:**
-> "Due to chat length and token cost, I am starting a fresh chat to help continue
-> the following project. This is a real-world assignment. This is NOT an exercise.
-> There are real world repercussions for failure or wasted effort. DO NOT assume
-> in order to appease me or make the process go faster. If you don't know a file
-> path, ASK. If you don't know the code in a file that you need to revise or edit,
-> I will gladly share it with you. Do you understand the seriousness of the
-> situation?"
+**OPENING PROMPT FOR EVERY NEW CHAT SESSION:**
+"Due to chat length and token cost, I am starting a fresh chat to help continue
+the following project. This is a real-world assignment. This is NOT an exercise.
+There are real world repercussions for failure or wasted effort. DO NOT assume
+in order to appease me or make the process go faster. If you don't know a file
+path, ASK. If you don't know the code in a file that you need to revise or edit,
+I will gladly share it with you. Do you understand the seriousness of the situation?"
 
 ---
 
@@ -114,7 +113,7 @@ with Calendly/Google Calendar link, full outreach log.
 
 ---
 
-## Migration Chain (complete, HEAD = c3d4e5f6a7b8)
+## Migration Chain (complete, HEAD = d4e5f6a7b8c9)
 
 54c4159dbf59 v0.2 initial schema — 14 tables
 4ca6031e21c4 v0.3 NAL rename
@@ -125,6 +124,7 @@ f422169456bd v0.4 replace scalar with JSON filter
 a1b2c3d4e5f6 v0.8 widen own_state VARCHAR(2) → VARCHAR(25)
 b2c3d4e5f6a7 v0.9 add jv_per_sqft, arv_estimate, arv_spread, list_price to properties
 c3d4e5f6a7b8 v0.10 add signal_tier (INT), signal_type (VARCHAR 50) to listing_events
+d4e5f6a7b8c9 v0.11 add bed_bath_source VARCHAR(50) to properties
 
 ---
 
@@ -138,6 +138,7 @@ c3d4e5f6a7b8 v0.10 add signal_tier (INT), signal_type (VARCHAR 50) to listing_ev
 | Lis pendens | 101 records | 90-day backfill Jan 27 – Apr 23 2026 |
 | Foreclosure events | 7 records | May 2026 manual pull |
 | Tax deed events | 5,730 records | 2019-01-07 – 2026-12-02; 4,394 redeemed; 1 null price (malformed source row); historical backfill complete |
+| Zillow foreclosures | 13 records | 2026-04-28 initial load |
 
 ---
 
@@ -182,6 +183,15 @@ for the 3bd/2ba filter criterion from the SOW.
 - Data table on `taxsaleMobile.asp` is nested inside an outer wrapper table.
   Select it with `soup.find("table", attrs={"bgcolor": "#0054A6"})` —
   never `soup.find("table")` which returns the wrong table.
+- Signal tier reflects the delivery source, not the underlying event type. 
+  A foreclosure on Zillow is Tier 3; the same event from the Escambia Clerk is Tier 1.
+- Beds/baths populated opportunistically on parcel match from any listing source. 
+  bed_bath_source tracks provenance. Never overwrite an existing value with a 
+  lower-confidence source — that logic lives in the parser layer.
+- Zillow workflow: --dry-run first to surface [REVIEW] items, then live run. 
+  This is the standard workflow for all attended file-drop parsers.
+- Address matching uses a three-level fallback: exact match, unit suffix normalization 
+  (#4A → 4A), street prefix with MULTI-UNIT review flag.
 
 ---
 
@@ -217,10 +227,12 @@ engine = create_engine(settings.sync_database_url)```
 |---|---|---|---|
 | LandmarkWeb lis pendens | data/staging/lis_pendens/ | .xlsx | Weekly (export last 10 days) |
 | RealForeclose foreclosures | data/staging/foreclosure/ | .csv (raw paste, 2-col key-value) | Weekly |
+| Zillow foreclosures | data/staging/zillow/ | .csv (manual copy/paste, one value per line) | Weekly |
 
 Run after each drop:
 python scripts/run_staging_import.py --source lis_pendens
 python scripts/run_staging_import.py --source foreclosure
+python scripts/run_staging_import.py --source zillow
 
 Note: Tax deed data is sourced directly via the Escambia Clerk scraper
 (`real_invest_fl/ingest/run_taxdeed.py`), not via file-drop. The
@@ -257,13 +269,30 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 | 3 — Free listing sources | Craigslist FSBO | requests + BS4 | Pending |
 | 4 — Commercial platforms | Zillow, Redfin, Realtor.com, Homes.com | Paid API or vendor proxy | Deferred |
 
+## Manual Source Investigation Results
+
+- Tier 1 — Government Distress Records — already documented in checkpoint (tax deed scraper complete, lis pendens and foreclosure file-drop parsers in place)
+- Tier 1 — Tax Delinquency Source Investigation Results (Manual, 2026-04-28)
+	1. Escambia County Tax Collector — Delinquent Taxes https://escambiataxcollector.com/property-tax/delinquent/ The delinquent taxes page describes the process and links out to LienHub for tax deed applications and LienExpress for county-held certificate purchases. No bulk delinquent list is published directly on this page. The page itself is not a data source — it is a navigation hub.
+	2. Escambia County Tax Certificate Search https://escambia.county-taxes.com/public General landing page only. No bulk delinquent list available for download. Dead end for programmatic or bulk data access.
+	3. LienHub — Tax Deed Applications / Advertised List https://lienhub.com/county/escambia/portfolio/ Path: escambia.lienexpress.net → select county → Tax Lien Auction → spawns link to advertised list. The advertised list URL is: https://lienhub.com/county/escambia/certsale/main?unique_id=41C54840429511F1A2F69948A6B8334F&use_this=print_advertised_list The list is not yet published as of investigation date. Site message: "The Escambia County Tax Certificate Sale will be available May 5, 2026." This is the statutory May advertisement list — it will contain all delinquent parcels advertised per Florida Statute § 197.413. Check back after May 5, 2026 — this is a high-value bulk list.
+	4. LienExpress — County-Held Certificates https://escambia.lienexpress.net/ This is the landing/redirect page that routes to LienHub for county-held certificate purchases. Not a standalone data source — functions as the entry point to LienHub.
+- Tier 2 — Government Auction / Bulk Public Data Source Investigation Results (Manual, 2026-04-28)
+	1. Escambia County Surplus Property Auctions https://myescambia.com/our-services/property-sales/surplus-property-auction Valid source. Zero active listings at time of investigation. Low volume expected by nature. Monitor periodically — no scraper warranted until listings appear. Flag for future check-back.
+	2. HUD Home Store — Escambia County https://www.hudhomestore.gov/searchresult?citystate=FL Valid source. Zero active listings for Escambia County at time of investigation. Monitor periodically. No scraper warranted until listings appear.
+	3. Auction.com — Escambia County https://www.auction.com/residential/fl/escambia-county Valid source. 17 active listings at time of investigation (was 16 at initial checkpoint entry). Public search results visible without login. This is the next scrape investigation target. Need to determine: what property detail fields are available without an account, whether bot detection / JS rendering is required, and whether a structured scraper is feasible.
+- Tier 3 — Commercial Listing Platforms / FSBO Source Investigation Results (Manual, 2026-04-28)
+	1. Craigslist Pensacola Housing https://pensacola.craigslist.org/search/rea Valid source. Active listings present. Scraping is feasible technically (no login, public, requests + BS4 viable) but data will be messy — address visibility varies by poster, field structure is inconsistent across listings. Scraper is buildable but requires significant normalization work. Still in pending queue as originally planned.
+	2. Zillow — Escambia County Foreclosures https://www.zillow.com/escambia-county-fl/foreclosures/ Valid source. 13 active listings at time of investigation. Fields visible without login: price, beds, baths, sqft, address, listing type (Foreclosure), agent/brokerage, days on market (some listings). Data quality is good — structured and consistent. Zillow anti-scraping posture is the primary obstacle (heavy JS, bot detection, API terms). Scraping approach TBD — RapidAPI Zillow wrapper is the approved POC approach per checkpoint. Deferred to Tier 4 commercial platform track.
+	3. Facebook Marketplace — Pensacola Real Estate https://www.facebook.com/marketplace/pensacola/propertyforsale Valid source with active listings. Login required to view full listing detail. Not feasible for automated scraping — Playwright + authenticated session would be required, which introduces account risk and TOS violations. Designated manual-only source. No scraper to be built. No public RSS or feed alternative identified. Individual listing URLs contain tracking parameters but are publicly accessible when shared directly (confirmed by sample URL provided). Flag as monitor-only.
+
 ---
 
 ## Pending Actions (priority order)
 
-1. **[NEXT]** Resolve bedrooms/bathrooms data gap — required for 3bd/2ba
-   SOW filter. Investigate FL DOR NAL supplemental fields and Escambia County
-   Property Appraiser public search as candidate sources.
+1. **[PARTIALLY RESOLVED]** beds/baths now populated opportunistically from listing sources 
+	via bed_bath_source. Bulk sourcing from FL DOR NAL or ECPA still pending 
+	but no longer a hard blocker for matched listings.
 
 2. **[NEXT]** Craigslist Pensacola FSBO scraper (Tier 3) —
    `pensacola.craigslist.org/search/rea`, requests + BS4, no bot detection.
@@ -325,7 +354,8 @@ real_invest_fl/                         <- project root
 │   └── staging/
 │       ├── lis_pendens/
 │       ├── foreclosure/
-│       └── tax_deed/
+│       ├── tax_deed/
+│       └── zillow/                     <- active
 ├── real_invest_fl/
 │   ├── api/
 │   │   ├── main.py
@@ -355,7 +385,8 @@ real_invest_fl/                         <- project root
 │   │       ├── __init__.py
 │   │       ├── foreclosure_parser.py
 │   │       ├── lis_pendens_parser.py
-│   │       └── tax_deed_parser.py
+│   │       ├── tax_deed_parser.py
+│   │       └── zillow_foreclosure_parser.py  <- COMPLETE
 │   ├── scrapers/
 │   │   ├── __init__.py
 │   │   ├── base_scraper.py
@@ -414,6 +445,19 @@ signal_tier              INTEGER
 signal_type              VARCHAR(50)
 Indexes: listing_events_pkey, ix_le_county_parcel, ix_le_deal_score,
          ix_le_listing_type, ix_le_status
+		 
+## properties CAMA Schema (confirmed 2026-04-28)
+
+foundation_type      VARCHAR(100)  nullable
+exterior_wall        VARCHAR(100)  nullable
+roof_type            VARCHAR(100)  nullable
+bedrooms             INTEGER       nullable
+bathrooms            NUMERIC(4,1)  nullable
+bed_bath_source      VARCHAR(50)   nullable — provenance of bedrooms/bathrooms when populated from listing source e.g. 'zillow_foreclosure', 'craigslist',
+                                             'manual'. Never overwrite existing value with lower-confidence source.
+cama_quality_code    VARCHAR(10)   nullable
+cama_condition_code  VARCHAR(10)   nullable
+cama_enriched_at     TIMESTAMPTZ   nullable
 
 ## PM Rules (Locked — Never Override)
 
