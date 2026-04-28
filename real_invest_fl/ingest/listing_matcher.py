@@ -56,7 +56,7 @@ from real_invest_fl.db.session import AsyncSessionLocal       # noqa: E402
 from real_invest_fl.db.models.listing_event import ListingEvent  # noqa: E402
 from real_invest_fl.scrapers.base_scraper import BaseScraper, ScrapedListing  # noqa: E402
 from real_invest_fl.utils.parcel_id import normalize_parcel_id   # noqa: E402
-from real_invest_fl.utils.text import clean_text                 # noqa: E402
+from real_invest_fl.utils.text import clean_text, normalize_street_address  # noqa: E402
 
 if TYPE_CHECKING:
     pass
@@ -111,21 +111,8 @@ def _discover_scrapers() -> list[type[BaseScraper]]:
 # ── address normalization ─────────────────────────────────────────────────────
 
 def _normalize_address(addr: str) -> str:
-    """
-    Normalize a raw scraped address for comparison against phy_addr1.
-    Strips unit numbers, collapses whitespace, upper-cases.
-    This is a best-effort normalization — the fuzzy matcher handles
-    residual differences.
-    """
-    import re
-    addr = clean_text(addr).upper()
-    # Strip common unit designators
-    addr = re.sub(
-        r"\b(APT|UNIT|STE|SUITE|#)\s*[\w-]+\b", "", addr
-    ).strip()
-    # Collapse internal whitespace again after stripping
-    addr = re.sub(r"\s+", " ", addr).strip()
-    return addr
+    """Delegate to the shared street address normalizer in utils/text.py."""
+    return normalize_street_address(addr)
 
 
 # ── parcel lookup ─────────────────────────────────────────────────────────────

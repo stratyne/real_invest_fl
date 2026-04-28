@@ -204,6 +204,25 @@ for the 3bd/2ba filter criterion from the SOW.
 - Auction.com returns 50-mile radius results (~73 records). Filter to country_primary_subdivision=FL 
   AND country_secondary_subdivision=ESCAMBIA (case-insensitive). Only 14-17 records survive the filter.
 - total_bedrooms=0 and total_bathrooms=0 in Auction.com data are missing-data sentinels, not real values. Treat as None.
+- normalize_street_address() in real_invest_fl/utils/text.py is the
+  single shared street normalizer for all scrapers and listing_matcher.
+  Transformations (in order): upper-case, unit strip, digit-letter
+  injection (ordinals excluded), suffix abbreviation, directional
+  contraction. 50 tests passing as of 2026-04-28.
+- Digit-letter injection uses (\d)(?!(?:ST|ND|RD|TH)\b)([A-Z]) to
+  exclude ordinal suffixes (74TH, 48TH) from splitting.
+- Unit stripping runs BEFORE digit-letter injection so that compound
+  unit values like SUITE 2A are consumed whole before 2A is split.
+- # unit designator has no leading \b anchor — # is not a word character
+  and \b before it never fires.
+- listing_matcher._normalize_address() is a thin delegation wrapper
+  to normalize_street_address(). Call sites are unchanged.
+- auction_com._normalize_street() remains intentionally minimal
+  (digit-letter injection + upper/collapse only). It is NOT replaced
+  by normalize_street_address(). The 3 remaining Auction.com unmatched
+  addresses (2983 NORTH HIGHWAY 95 A, 110 FRISCO ROAD, 5931 MULDOON
+  ROAD) will resolve when listing_matcher.py's full matching pipeline
+  is wired to Auction.com.
 
 ---
 
@@ -306,12 +325,10 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 	via bed_bath_source. Bulk sourcing from FL DOR NAL or ECPA still pending 
 	but no longer a hard blocker for matched listings.
 
-2. **[NEXT]** Address normalization and fuzzy parcel matching layer —
-   `real_invest_fl/utils/text.py` + rapidfuzz. Linchpin for listing
-   confirmation matching. Required before any commercial listing source
-   can populate listing_events reliably. Now actively blocking shared normalization. 
-   Build before Craigslist scraper. utils/text.py street normalizer must include suffix map 
-   (ROAD→RD, etc.) and directional handling with proper test coverage before being used in any scraper.
+2. **[COMPLETE]** Address normalization and fuzzy parcel matching layer —
+   real_invest_fl/utils/text.py normalize_street_address() built and
+   fully tested (50/50). listing_matcher.py _normalize_address() now
+   delegates to the shared normalizer. Craigslist scraper is unblocked.
    
 3. **[PENDING]** Craigslist Pensacola FSBO scraper (Tier 3) —
    `pensacola.craigslist.org/search/rea`, requests + BS4, no bot detection.
@@ -386,7 +403,7 @@ real_invest_fl/                         <- project root
 │   │   ├── cama_ingest.py
 │   │   ├── enricher.py                 <- stub
 │   │   ├── gis_ingest.py
-│   │   ├── listing_matcher.py
+│   │   ├── listing_matcher.py  		← _normalize_address() now delegates
 │   │   ├── nal_filter.py
 │   │   ├── nal_ingest.py
 │   │   ├── nal_loader.py
@@ -411,7 +428,7 @@ real_invest_fl/                         <- project root
 │   └── utils/
 │       ├── parcel_id.py
 │       ├── robots.py
-│       └── text.py
+│       └── text.py          ← normalize_street_address() added
 └── scripts/
     ├── cold_start.py
 	├── probe_auction_com.py                    ← investigation only
