@@ -25,6 +25,9 @@ import os
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, ROOT)
 
+from dotenv import load_dotenv
+load_dotenv(os.path.join(ROOT, ".env"))
+
 from sqlalchemy import create_engine, text
 from config.settings import settings
 from real_invest_fl.auth.passwords import hash_password

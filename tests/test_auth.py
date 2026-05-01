@@ -2,9 +2,7 @@
 Unit tests for auth utilities — passwords.py and tokens.py.
 No database required. All tests are pure function calls.
 """
-import time
 from datetime import timedelta
-from unittest.mock import patch
 
 import pytest
 
