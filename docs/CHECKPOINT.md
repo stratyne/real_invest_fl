@@ -416,21 +416,34 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
    - `auction_com.py` still not wired through `BaseScraper` discovery (out of scope here)
    - Parser-layer bed/bath confidence hierarchy still deferred
 
-4. **[COMPLETE — Phase A]** data_source_status table — schema, ORM model,
-   model registration, and shared source_status upsert helper completed.
-   Migration `e5f6a7b8c9d0` verified clean on upgrade/downgrade/re-upgrade.
-   SUCCESS/FAILED semantics verified:
-   - SUCCESS inserts/updates row correctly
-   - FAILED preserves `last_success_at`
-   - SUCCESS after FAILED clears `last_error_message` and advances `last_success_at`
-   - invalid status raises `ValueError` before DB write
+4. **[COMPLETE]** data_source_status table — live source-status board for UI
+   status display. Schema, ORM model, model registration, shared status
+   upsert helper, and runner integration are complete.
 
-   **Phase B pending:** runner integration remains open for:
+   Migration:
+   - `e5f6a7b8c9d0` v0.12 add data_source_status table
+
+   Verified behavior:
+   - composite key `(source, county_fips)`
+   - `last_success_at` updates only on SUCCESS
+   - `last_run_at` reflects most recent completion / status update timestamp
+   - FAILED preserves prior `last_success_at`
+   - SUCCESS after FAILED clears `last_error_message`
+   - invalid status raises `ValueError` before DB write
+   - dry-run paths do not write status rows
+
+   Integrated runners / dispatchers:
    - `real_invest_fl/ingest/run_taxdeed.py`
    - `real_invest_fl/ingest/run_auction_com.py`
    - `scripts/run_staging_import.py`
 
-   Phase B remains blocked pending file inspection / runner contract verification.
+   Current source rows supported:
+   - `escambia_clerk_taxsale`
+   - `auction_com`
+   - `zillow_foreclosure`
+   - `escambia_landmarkweb`
+   - `escambia_realforeclose`
+   - `escambia_realtaxdeed`
 
 5. **[NEXT]** User/tenant model — users table, user_county_access join table,
    subscription_bundles table with county constituents. Multi-user from day one.

@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT))
 from sqlalchemy import create_engine                                  # noqa: E402
 from config.settings import settings                                  # noqa: E402
 from real_invest_fl.scrapers.escambia_taxdeed_clerk import run        # noqa: E402
+from real_invest_fl.ingest.source_status import update_source_status  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -43,6 +44,13 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 logger = logging.getLogger("run_taxdeed_scraper")
+
+# ---------------------------------------------------------------------------
+# Source identity — matches listing_events.source exactly
+# ---------------------------------------------------------------------------
+_SOURCE       = "escambia_clerk_taxsale"
+_DISPLAY_NAME = "Escambia Clerk \u2013 Tax Deed"
+_COUNTY_FIPS  = "12033"
 
 
 def _parse_date_arg(value: str):
@@ -98,15 +106,46 @@ def main() -> int:
     args = parse_args()
     engine = create_engine(settings.sync_database_url)
 
-    if args.historical:
-        run(mode="historical", engine=engine)
-    elif args.upcoming:
-        run(mode="upcoming", engine=engine)
-    else:
-        # args.date is already a validated date object from _parse_date_arg
-        run(mode="single", single_date=args.date, engine=engine)
+    # ------------------------------------------------------------------ #
+    # Step 1 — ingest execution                                           #
+    # Outcome captured independently before any status-table write.       #
+    # ------------------------------------------------------------------ #
+    ingest_ok = True
+    ingest_exc: Exception | None = None
 
-    return 0
+    try:
+        if args.historical:
+            run(mode="historical", engine=engine)
+        elif args.upcoming:
+            run(mode="upcoming", engine=engine)
+        else:
+            run(mode="single", single_date=args.date, engine=engine)
+    except Exception as exc:  # noqa: BLE001
+        ingest_ok = False
+        ingest_exc = exc
+        logger.error("Tax deed scraper failed: %s", exc, exc_info=True)
+
+    # ------------------------------------------------------------------ #
+    # Step 2 — status-table write (decoupled from ingest outcome)         #
+    # Failure here is logged as a status update failure only.             #
+    # run() does not return a record count — record_count left as None.   #
+    # ------------------------------------------------------------------ #
+    try:
+        update_source_status(
+            engine,
+            source=_SOURCE,
+            display_name=_DISPLAY_NAME,
+            county_fips=_COUNTY_FIPS,
+            status="SUCCESS" if ingest_ok else "FAILED",
+            error_message=None if ingest_ok else str(ingest_exc)[:500],
+        )
+    except Exception as status_exc:  # noqa: BLE001
+        logger.warning(
+            "Status table write failed (ingest outcome unaffected): %s",
+            status_exc,
+        )
+
+    return 0 if ingest_ok else 1
 
 
 if __name__ == "__main__":

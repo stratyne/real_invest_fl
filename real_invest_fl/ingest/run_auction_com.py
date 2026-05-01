@@ -26,9 +26,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from sqlalchemy import create_engine          # noqa: E402
-from config.settings import settings          # noqa: E402
-from real_invest_fl.scrapers.auction_com import run  # noqa: E402
+from sqlalchemy import create_engine                                      # noqa: E402
+from config.settings import settings                                      # noqa: E402
+from real_invest_fl.scrapers.auction_com import run, SOURCE_NAME         # noqa: E402
+from real_invest_fl.ingest.source_status import update_source_status     # noqa: E402
 
 # ── logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -41,6 +42,12 @@ logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 logger = logging.getLogger("run_auction_com")
+
+# ---------------------------------------------------------------------------
+# Source identity — source key pulled from scraper's own constant
+# ---------------------------------------------------------------------------
+_DISPLAY_NAME = "Auction.com"
+_COUNTY_FIPS  = "12033"
 
 
 def parse_args() -> argparse.Namespace:
@@ -146,10 +153,40 @@ def main() -> int:
         )
         return 0
 
-    # Live run
+    # ------------------------------------------------------------------ #
+    # Live run                                                             #
+    # ------------------------------------------------------------------ #
     engine = create_engine(settings.sync_database_url, echo=False)
-    run(engine=engine)
-    return 0
+
+    # Step 1 — ingest execution
+    ingest_ok = True
+    ingest_exc: Exception | None = None
+
+    try:
+        run(engine=engine)
+    except Exception as exc:  # noqa: BLE001
+        ingest_ok = False
+        ingest_exc = exc
+        logger.error("Auction.com scraper failed: %s", exc, exc_info=True)
+
+    # Step 2 — status-table write (decoupled from ingest outcome)
+    # run() does not return a record count — record_count left as None.
+    try:
+        update_source_status(
+            engine,
+            source=SOURCE_NAME,
+            display_name=_DISPLAY_NAME,
+            county_fips=_COUNTY_FIPS,
+            status="SUCCESS" if ingest_ok else "FAILED",
+            error_message=None if ingest_ok else str(ingest_exc)[:500],
+        )
+    except Exception as status_exc:  # noqa: BLE001
+        logger.warning(
+            "Status table write failed (ingest outcome unaffected): %s",
+            status_exc,
+        )
+
+    return 0 if ingest_ok else 1
 
 
 if __name__ == "__main__":
