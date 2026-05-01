@@ -11,4 +11,5 @@ from .permit_record import PermitRecord  # noqa: F401
 from .email_template import EmailTemplate  # noqa: F401
 from .outreach_log import OutreachLog  # noqa: F401
 from .ingest_run import IngestRun  # noqa: F401
+from .data_source_status import DataSourceStatus  # noqa: F401
 from .ui_session import UISession  # noqa: F401

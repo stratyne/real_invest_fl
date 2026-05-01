@@ -16,8 +16,8 @@ I will gladly share it with you. Do you understand the seriousness of the situat
 **Repo:** stratyne/real_invest_fl (private)
 **Local path:** D:\Chris\Documents\Stratyne\real_invest_fl
 **Python:** 3.13.5 | **Venv:** .venv | **Editor:** VSCodium 1.112.01907
-**DB GUI:** DBeaver Community (localhost:5432, user penstock, db real_invest_fl)
 **DB container:** Docker — `real_invest_db`
+**DB verification:** Docker `psql` against `real_invest_db` (localhost:5432, user penstock, db real_invest_fl)
 
 ---
 
@@ -118,7 +118,7 @@ with Calendly/Google Calendar link, full outreach log.
 
 ---
 
-## Migration Chain (complete, HEAD = d4e5f6a7b8c9)
+## Migration Chain (complete, HEAD = e5f6a7b8c9d0)
 
 54c4159dbf59 v0.2 initial schema — 14 tables
 4ca6031e21c4 v0.3 NAL rename
@@ -130,6 +130,7 @@ a1b2c3d4e5f6 v0.8 widen own_state VARCHAR(2) → VARCHAR(25)
 b2c3d4e5f6a7 v0.9 add jv_per_sqft, arv_estimate, arv_spread, list_price to properties
 c3d4e5f6a7b8 v0.10 add signal_tier (INT), signal_type (VARCHAR 50) to listing_events
 d4e5f6a7b8c9 v0.11 add bed_bath_source VARCHAR(50) to properties
+e5f6a7b8c9d0 v0.12 add data_source_status table
 
 ---
 
@@ -172,7 +173,6 @@ not required for POC.
   sync (`settings.sync_database_url`) for batch scripts
 - All SQL in batch scripts uses `text()` — never raw string SQL
 - `CAST(:raw_listing_json AS jsonb)` — never `::jsonb` in `text()` statements
-- DBeaver selected as permanent DB GUI
 
 ### Parcel ID Normalization
 - Parcel ID normalization: strip non-alphanumeric, uppercase, NO zero-padding.
@@ -210,9 +210,10 @@ not required for POC.
 ### Per-Scraper Implementation Notes
 - `_normalize_street()` in `auction_com.py` is intentionally minimal — only
   digit-letter space injection and upper/collapse. Do not expand it further.
-  The 3 remaining Auction.com unmatched addresses (2983 NORTH HIGHWAY 95 A,
-  110 FRISCO ROAD, 5931 MULDOON ROAD) will resolve when listing_matcher.py's
-  full matching pipeline is wired to Auction.com.
+  Auction_com.py and zillow_parser.py are now wired through lookup_parcel_by_address() 
+  in listing_matcher.py. 110 FRISCO ROAD, 5931 MULDOON ROAD, and 3640 WELLINGTON ROAD 
+  resolved after centralization. 2983 NORTH HIGHWAY 95 A remains unmatched — normalizes 
+  to 2983 N HWY 95 A; suspected NAL storage format mismatch, not a normalization pipeline defect.
 - Auction.com GraphQL API: POST https://graph.auction.com/graphql. No
   authentication required. x-cid header must be a fresh UUID per request.
   $hasAuthenticatedUser variable must be removed from both the operation
@@ -399,8 +400,10 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
    normalize_street_address() built and fully tested (50/50).
    strip_unit=False parameter added 2026-04-28. listing_matcher.py and
    zillow_parser.py both delegate to shared normalizer.
-   Note: strip_unit=False path not yet covered by tests — add before
-   next text.py change.
+   strip_unit=False path bug fixed in text.py (2026-05-01): digit-letter 
+   injection now confined to pre-unit portion when strip_unit=False, preventing 
+   corruption of alphanumeric unit values (e.g. #4A). Two tests covering this path 
+   added to tests/test_listing_matcher_lookup.py.
 
 3. **[COMPLETE]** `listing_matcher.py` architectural resolution — `auction_com.py`
    and `zillow_parser.py` now route through `listing_matcher.py` centralized
@@ -413,8 +416,21 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
    - `auction_com.py` still not wired through `BaseScraper` discovery (out of scope here)
    - Parser-layer bed/bath confidence hierarchy still deferred
 
-4. **[NEXT]** data_source_status table — tracks last ingest timestamp per source
-   for UI status display. Small migration, unblocks UI work.
+4. **[COMPLETE — Phase A]** data_source_status table — schema, ORM model,
+   model registration, and shared source_status upsert helper completed.
+   Migration `e5f6a7b8c9d0` verified clean on upgrade/downgrade/re-upgrade.
+   SUCCESS/FAILED semantics verified:
+   - SUCCESS inserts/updates row correctly
+   - FAILED preserves `last_success_at`
+   - SUCCESS after FAILED clears `last_error_message` and advances `last_success_at`
+   - invalid status raises `ValueError` before DB write
+
+   **Phase B pending:** runner integration remains open for:
+   - `real_invest_fl/ingest/run_taxdeed.py`
+   - `real_invest_fl/ingest/run_auction_com.py`
+   - `scripts/run_staging_import.py`
+
+   Phase B remains blocked pending file inspection / runner contract verification.
 
 5. **[NEXT]** User/tenant model — users table, user_county_access join table,
    subscription_bundles table with county constituents. Multi-user from day one.
@@ -429,6 +445,8 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
    generation, one-click email send with Calendly/Google Calendar link,
    full outreach log. Multi-user, multi-county, subscription-gated.
    This is the product.
+   Note: `data_source_status` is the live UI status board (one row per `(source, county_fips)`),
+   separate from `ingest_runs`, which remains the append-only historical audit log.
 
 7. **[PENDING]** Deal scoring engine — weighted score on ARV spread,
    discount to list, signal tier, days on market. Feeds the ranked
@@ -493,6 +511,7 @@ real_invest_fl/                         <- project root
 │   │                                      ingest, listings, outreach, properties
 │   ├── db/
 │   │   ├── models/
+│   │   │   ├── data_source_status.py	<- ORM model for live per-source UI ingest status
 │   │   │   ├── listing_event.py        <- includes signal_tier, signal_type
 │   │   │   └── property.py
 │   │   └── session.py
@@ -501,16 +520,17 @@ real_invest_fl/                         <- project root
 │   │   ├── cama_ingest.py
 │   │   ├── enricher.py                 <- stub
 │   │   ├── gis_ingest.py
-│   │   ├── listing_matcher.py  		← _normalize_address() now delegates
+│   │   ├── listing_matcher.py  		<- _normalize_address() now delegates
 │   │   ├── nal_filter.py
 │   │   ├── nal_ingest.py
 │   │   ├── nal_loader.py
 │   │   ├── nal_mapper.py
 │   │   ├── rejected_parcels.py
-│   │   ├── run_auction_com.py        ← COMPLETE
+│   │   ├── run_auction_com.py        <- COMPLETE
 │   │   ├── run_context.py
 │   │   ├── run_taxdeed.py              <- COMPLETE
 │   │   ├── sdf_loader.py
+│   │   ├── source_status.py 			<- shared upsert helper for data_source_status
 │   │   └── staging_parsers/
 │   │       ├── __init__.py
 │   │       ├── foreclosure_parser.py
