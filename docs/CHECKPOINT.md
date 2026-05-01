@@ -143,7 +143,6 @@ d4e5f6a7b8c9 v0.11 add bed_bath_source VARCHAR(50) to properties
 | Lis pendens | 101 records | 90-day backfill Jan 27 – Apr 23 2026 |
 | Foreclosure events | 7 records | May 2026 manual pull |
 | Tax deed events | 5,730 records | 2019-01-07 – 2026-12-02; 4,394 redeemed; 1 null price (malformed source row); historical backfill complete |
-| Zillow foreclosures | 13 records | 2026-04-28 initial load |
 | Auction.com listings  | 11 records | 2026-04-28 initial load |
 | Zillow listings | 218 records | 13 foreclosures (2026-04-28 initial load) + 205 for-sale (2026-04-28) |
 
@@ -258,6 +257,43 @@ not required for POC.
   (full month name). The Escambia Clerk pages deliver abbreviated month names.
   `%B` fails silently on Windows Python 3.13.
 
+### Subscription and Access Model (Locked)
+- County is the fundamental unit of access control and monetization.
+- Subscription tiers: single county, regional bundle, statewide, custom
+  multi-county (enterprise).
+- Regional bundles are predefined multi-county groupings reflecting real
+  investment markets. First bundle: Pensacola Metro = Escambia (12033) +
+  Santa Rosa (12113). Future: Miami Metro, Tampa Metro, Orlando Metro, etc.
+- First expansion county: Santa Rosa (FIPS 12113).
+- User-county authorization is a join table (user_county_access).
+  Middleware enforces county access on every API request via a single
+  reusable FastAPI dependency — not enforced at the application layer.
+- Multi-user from day one. Full auth infrastructure required in Phase 4.
+  No single-admin stub acceptable.
+
+### Filter Profile Model (Locked)
+- Filter profiles are scoped to county_fips.
+- System catalog profiles: user_id = NULL, visible to all users authorized
+  for that county, not editable or deletable by users.
+- System profiles serve as baseline seeds. Users clone a system profile to
+  create a private editable copy — "Save as my profile" is a first-class
+  UI action.
+- User-created profiles: user_id = owner, private, fully editable.
+- Cross-county filter profiles deferred to Phase 3+. POC uses single-county
+  profiles only.
+
+### Scoring and Filter Enforcement Model (Locked)
+- passed_filters, filter_rejection_reasons, and deal_score are computed
+  at insert/update time in the ingest pipeline — not at query time.
+- deal_score computed on insert/update. deal_score_version tracks the
+  scoring algorithm version for auditability.
+- When a user saves or modifies a filter profile, existing listing_events
+  records for that county_fips must be re-evaluated. A background recompute
+  job is required — this is a Phase 4 dependency that must be designed
+  before the filter profile save/clone UI is built.
+- API routes sort and filter on pre-computed columns only — no on-the-fly
+  scoring at query time.
+
 ---
 
 ## ROOT Path Bootstrap Rules
@@ -292,7 +328,6 @@ engine = create_engine(settings.sync_database_url)```
 |---|---|---|---|
 | LandmarkWeb lis pendens | data/staging/lis_pendens/ | .xlsx | Weekly (export last 10 days) |
 | RealForeclose foreclosures | data/staging/foreclosure/ | .csv (raw paste, 2-col key-value) | Weekly |
-| Zillow foreclosures | data/staging/zillow/ | .csv (manual copy/paste, one value per line) | Weekly |
 | Zillow listings | data/staging/zillow/ | .csv (manual copy/paste, one value per line) | Weekly |
 
 Run after each drop:
@@ -332,7 +367,7 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 |---|---|---|---|
 | 1 — Government direct | Escambia Clerk tax deed, lis pendens (LandmarkWeb), foreclosures (RealForeclose), RealTaxDeed | Live scrape or file-drop | Tax deed complete; others file-drop |
 | 2 — Public aggregators | HUD Home Store, Foreclosure.com | Playwright + rate limiting | Auction.com COMPLETE; others pending |
-| 3 — Free listing sources | Craigslist FSBO | requests + BS4 | Pending |
+| 3 — Free listing sources | Craigslist FSBO | requests + BS4 | Deferred indefinitely |
 | 4 — Commercial platforms | Zillow, Redfin, Realtor.com, Homes.com | Paid API or vendor proxy | Deferred |
 
 ## Manual Source Investigation Results
@@ -367,57 +402,75 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
    Note: strip_unit=False path not yet covered by tests — add before
    next text.py change.
 
-3. **[NEXT]** data_source_status table — tracks last ingest timestamp
-   per source for UI status display. Small migration, unblocks UI work.
+3. **[COMPLETE]** `listing_matcher.py` architectural resolution — `auction_com.py`
+   and `zillow_parser.py` now route through `listing_matcher.py` centralized
+   matching pipeline. Per-scraper `_lookup_parcel()` and bed/bath enrichment
+   duplicates retired. Deterministic tests and live parity checks passed.
+   Item 5 unblocked.
 
-4. **[NEXT]** User/tenant model — required before Phase 4 UI work begins.
+   Follow-ups:
+   - Investigate unresolved Auction.com unmatched address: `2983 North Highway 95 A`
+   - `auction_com.py` still not wired through `BaseScraper` discovery (out of scope here)
+   - Parser-layer bed/bath confidence hierarchy still deferred
 
-5. **[NEXT]** Phase 4 UI — FastAPI + React (Vite) + MapLibre GL JS.
-   Filter profile management, ranked property list, map view, outreach
-   template generation, one-click email send with Calendly/Google Calendar
-   link, full outreach log. This is the product.
+4. **[NEXT]** data_source_status table — tracks last ingest timestamp per source
+   for UI status display. Small migration, unblocks UI work.
 
-6. **[PENDING]** Deal scoring engine — weighted score on ARV spread,
+5. **[NEXT]** User/tenant model — users table, user_county_access join table,
+   subscription_bundles table with county constituents. Multi-user from day one.
+   Full auth infrastructure required — no single-admin stub.
+   Santa Rosa County (FIPS 12113) is the first expansion county.
+   Pensacola Metro bundle (Escambia + Santa Rosa) is the first bundle.
+   Required before Phase 4 UI work begins.
+
+6. **[NEXT]** Phase 4 UI — FastAPI + React (Vite) + MapLibre GL JS.
+   Filter profile management (system catalog + user clone + custom),
+   ranked property list (pre-computed scores), map view, outreach template
+   generation, one-click email send with Calendly/Google Calendar link,
+   full outreach log. Multi-user, multi-county, subscription-gated.
+   This is the product.
+
+7. **[PENDING]** Deal scoring engine — weighted score on ARV spread,
    discount to list, signal tier, days on market. Feeds the ranked
    list in the UI. Columns exist; logic not written.
 
-7. **[PENDING]** Daily scheduler — Windows Task Scheduler entry pointing
+8. **[PENDING]** Daily scheduler — Windows Task Scheduler entry pointing
    at master runner script.
 
-8. **[PENDING]** Zestimate integration — RapidAPI Zillow wrapper, hitting
+9. **[PENDING]** Zestimate integration — RapidAPI Zillow wrapper, hitting
    only matched MQI properties, rate-limited. Enriches UI display.
 
-9. **[PENDING]** Output pipeline — Google Sheets export. Secondary to UI
+10. **[PENDING]** Output pipeline — Google Sheets export. Secondary to UI
    but satisfies SOW daily output requirement.
 
-10. **[PENDING]** Email/outreach pipeline — auto-generated outreach email
+11. **[PENDING]** Email/outreach pipeline — auto-generated outreach email
     per qualifying property, logged. Satisfies SOW outreach requirement.
 
-11. **[PENDING]** HUD Home Store scraper (Tier 2) — hudhomestore.gov.
+12. **[PENDING]** HUD Home Store scraper (Tier 2) — hudhomestore.gov.
     Monitor until listings appear.
 
-12. **[PENDING]** File Florida DOR multi-year SDF request —
+13. **[PENDING]** File Florida DOR multi-year SDF request —
     PTOTechnology@floridarevenue.com, Escambia County (No. 27),
     assessment years 2019-2024, CSV format.
 
-13. **[PENDING]** Await Ch. 119 response from Escambia County Clerk re:
+14. **[PENDING]** Await Ch. 119 response from Escambia County Clerk re:
     recurring foreclosure/tax deed export.
 
-14. **[PENDING]** Annual NAL/CAMA refresh pipeline — Phase 3.
+15. **[PENDING]** Annual NAL/CAMA refresh pipeline — Phase 3.
 
-15. **[PENDING]** Subscription sources — Landvoice, REDX, PropStream
+16. **[PENDING]** Subscription sources — Landvoice, REDX, PropStream
     modules. Phase 3.
 
-16. **[DEFERRED]** Craigslist FSBO scraper — effort/reward too high.
+17. **[DEFERRED]** Craigslist FSBO scraper — effort/reward too high.
     Street addresses not available in structured data. Deferred
     indefinitely.
 
-17. **[DEFERRED]** Full CAMA enrichment (70k parcels — timeout issue,
+18. **[DEFERRED]** Full CAMA enrichment (70k parcels — timeout issue,
     not POC-critical).
 
-18. **[DEFERRED]** NAV data ingest.
+19. **[DEFERRED]** NAV data ingest.
 
-19. **[DEFERRED]** SDF comp engine.
+20. **[DEFERRED]** SDF comp engine.
 
 ---
 

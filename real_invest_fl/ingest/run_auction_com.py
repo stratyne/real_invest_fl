@@ -77,12 +77,12 @@ def main() -> int:
             _safe_float,
             _parse_auction_date,
             _listing_url,
-            _lookup_parcel,
             _get_filter_profile_id,
             _get_existing_listing_ids,
             COUNTY_FIPS,
             SOURCE_NAME,
         )
+        from real_invest_fl.ingest.listing_matcher import lookup_parcel_by_address
 
         engine = create_engine(settings.sync_database_url, echo=False)
         all_listings = _fetch_listings()
@@ -111,7 +111,7 @@ def main() -> int:
                     unmatched += 1
                     continue
 
-                parcel = _lookup_parcel(conn, street_norm, zip_code)
+                parcel = lookup_parcel_by_address(conn, street_norm, zip_code)
 
                 if parcel is None:
                     print(

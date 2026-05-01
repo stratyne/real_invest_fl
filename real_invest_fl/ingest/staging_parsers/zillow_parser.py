@@ -1,5 +1,5 @@
 """
-real_invest_fl/ingest/staging_parsers/zillow_foreclosure_parser.py
+real_invest_fl/ingest/staging_parsers/zillow_parser.py
 -------------------------------------------------------------------
 Parses manually copied Zillow foreclosure listing data and writes
 matching records to listing_events.
@@ -39,9 +39,9 @@ Bed/bath enrichment:
 
 Usage:
     python scripts/run_staging_import.py --source zillow [--dry-run]
-    python -m real_invest_fl.ingest.staging_parsers.zillow_foreclosure_parser
-    python -m real_invest_fl.ingest.staging_parsers.zillow_foreclosure_parser --dry-run
-    python -m real_invest_fl.ingest.staging_parsers.zillow_foreclosure_parser --file path/to/file.csv
+    python -m real_invest_fl.ingest.staging_parsers.zillow_parser
+    python -m real_invest_fl.ingest.staging_parsers.zillow_parser --dry-run
+    python -m real_invest_fl.ingest.staging_parsers.zillow_parser --file path/to/file.csv
 
 ETHICAL / LEGAL NOTICE:
     Source data is copied manually from Zillow's public search results.
@@ -68,6 +68,10 @@ sys.path.insert(0, str(ROOT))
 
 from config.settings import settings  # noqa: E402
 from real_invest_fl.utils.text import normalize_street_address  # noqa: E402
+from real_invest_fl.ingest.listing_matcher import (  # noqa: E402
+    lookup_parcel_by_address,
+    enrich_bed_bath,
+)
 
 # ── logging ────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -177,13 +181,19 @@ def _extract_zip(address: str) -> Optional[str]:
 
 def _extract_street(address: str) -> str:
     """
-    Extract and normalize street portion only (before first comma)
-    for phy_addr1 matching.
+    Extract the street portion only (before first comma) for parcel matching.
 
-    Applies suffix abbreviation and directional contraction only.
-    Does NOT apply digit-letter injection or unit stripping —
-    unit designators must be preserved intact for _lookup_parcel()
-    Level 2 unit normalization to work correctly.
+    Output is passed to lookup_parcel_by_address() in listing_matcher.py,
+    which owns canonical normalization (suffix abbreviation, directional
+    contraction, digit-letter injection, unit stripping) and the full
+    three-level address fallback.
+
+    Unit designators are preserved in the output so that
+    lookup_parcel_by_address() can perform Level 2 unit normalization
+    on the strip_unit=False form internally.
+
+    Does NOT strip units or apply digit-letter injection here —
+    those steps are delegated to lookup_parcel_by_address().
     """
     import re
     from real_invest_fl.utils.text import (
@@ -340,181 +350,6 @@ def _get_existing_keys(conn) -> set[tuple[str, int]]:
     return {(r[0], r[1]) for r in rows if r[0] and r[1] is not None}
 
 
-def _lookup_parcel(conn, street: str, zip_code: Optional[str]) -> Optional[dict]:
-    """
-    Match normalized street address against phy_addr1 in properties.
-
-    Three-level fallback strategy:
-        Level 1 — Exact match on normalized street + ZIP (or street only)
-        Level 2 — Unit suffix normalization (#4A -> 4A, APT 4A -> 4A, etc.)
-        Level 3 — Street number + name only, no unit:
-                   single result -> use it
-                   multiple results -> [REVIEW] MULTI-UNIT, return None
-
-    Returns parcel dict or None.
-    """
-    select_cols = (
-        "parcel_id, county_fips, jv, arv_estimate, "
-        "tot_lvg_area, bedrooms, bathrooms"
-    )
-
-    def _fetch_one(where_clause: str, params: dict) -> Optional[object]:
-        """Execute a single-row SELECT and return the row or None."""
-        return conn.execute(
-            text(
-                f"SELECT {select_cols} FROM properties "
-                f"WHERE county_fips = :fips AND {where_clause} LIMIT 1"
-            ),
-            {"fips": COUNTY_FIPS, **params},
-        ).fetchone()
-
-    def _fetch_all(where_clause: str, params: dict) -> list:
-        """Execute a multi-row SELECT and return all rows."""
-        return conn.execute(
-            text(
-                f"SELECT {select_cols} FROM properties "
-                f"WHERE county_fips = :fips AND {where_clause}"
-            ),
-            {"fips": COUNTY_FIPS, **params},
-        ).fetchall()
-
-    def _row_to_dict(row) -> dict:
-        return {
-            "parcel_id":    row.parcel_id,
-            "county_fips":  row.county_fips,
-            "jv":           row.jv,
-            "arv_estimate": row.arv_estimate,
-            "tot_lvg_area": row.tot_lvg_area,
-            "bedrooms":     row.bedrooms,
-            "bathrooms":    row.bathrooms,
-        }
-
-    # ── Level 1 — Exact match ──────────────────────────────────────── #
-    if zip_code:
-        row = _fetch_one(
-            "UPPER(TRIM(phy_addr1)) = :street AND phy_zipcd = :zip",
-            {"street": street, "zip": zip_code},
-        )
-        if row:
-            return _row_to_dict(row)
-
-    row = _fetch_one(
-        "UPPER(TRIM(phy_addr1)) = :street",
-        {"street": street},
-    )
-    if row:
-        return _row_to_dict(row)
-
-    # ── Level 2 — Unit suffix normalization ───────────────────────── #
-    # Normalize: '#4A' -> '4A', 'APT 4A' -> '4A', 'UNIT 4A' -> '4A'
-    # Then rebuild street as 'NUMBER STREETNAME UNITNORM'
-    unit_match = re.search(
-        r"^(.*?)\s*(?:#|APT\.?\s*|UNIT\s+)([A-Z0-9]+)\s*$",
-        street,
-        re.IGNORECASE,
-    )
-    if unit_match:
-        base = unit_match.group(1).strip()
-        unit = unit_match.group(2).strip()
-        normalized_with_unit = f"{base} {unit}"
-
-        if zip_code:
-            row = _fetch_one(
-                "UPPER(TRIM(phy_addr1)) = :street AND phy_zipcd = :zip",
-                {"street": normalized_with_unit, "zip": zip_code},
-            )
-            if row:
-                return _row_to_dict(row)
-
-        row = _fetch_one(
-            "UPPER(TRIM(phy_addr1)) = :street",
-            {"street": normalized_with_unit},
-        )
-        if row:
-            return _row_to_dict(row)
-
-        # Also try base address without unit entirely for Level 2
-        base_street = base
-    else:
-        base_street = street
-
-    # ── Level 3 — Street number + name, no unit ───────────────────── #
-    # Strip everything after the last word of the street type
-    # Match on street number + name prefix using ILIKE
-    # Extract street number and first two words for a conservative match
-    street_prefix_match = re.match(r"^(\d+\s+\S+(?:\s+\S+)?)", base_street)
-    if street_prefix_match:
-        prefix = street_prefix_match.group(1).strip()
-
-        if zip_code:
-            rows = _fetch_all(
-                "UPPER(TRIM(phy_addr1)) LIKE :prefix AND phy_zipcd = :zip",
-                {"prefix": f"{prefix}%", "zip": zip_code},
-            )
-        else:
-            rows = _fetch_all(
-                "UPPER(TRIM(phy_addr1)) LIKE :prefix",
-                {"prefix": f"{prefix}%"},
-            )
-
-        if len(rows) == 1:
-            return _row_to_dict(rows[0])
-
-        if len(rows) > 1:
-            parcel_ids = ", ".join(r.parcel_id for r in rows)
-            print(
-                f"[REVIEW] MULTI-UNIT — {len(rows)} parcels match "
-                f"'{prefix}%' ZIP={zip_code} — "
-                f"parcels: {parcel_ids} — manual selection required"
-            )
-            return None
-
-    return None
-
-
-def _enrich_parcel_bed_bath(
-    conn,
-    parcel_id: str,
-    county_fips: str,
-    bedrooms: Optional[int],
-    bathrooms: Optional[float],
-    dry_run: bool,
-) -> bool:
-    """
-    Update properties.bedrooms/bathrooms/bed_bath_source if currently NULL.
-    Returns True if update was performed.
-    """
-    if bedrooms is None and bathrooms is None:
-        return False
-
-    if dry_run:
-        logger.info(
-            "[DRY-RUN] Would enrich parcel %s with beds=%s baths=%s",
-            parcel_id, bedrooms, bathrooms,
-        )
-        return True
-
-    result = conn.execute(
-        text(
-            "UPDATE properties "
-            "SET bedrooms = COALESCE(bedrooms, :beds), "
-            "    bathrooms = COALESCE(bathrooms, :baths), "
-            "    bed_bath_source = COALESCE(bed_bath_source, :src) "
-            "WHERE parcel_id = :pid "
-            "AND county_fips = :fips "
-            "AND (bedrooms IS NULL OR bathrooms IS NULL)"
-        ),
-        {
-            "beds":  bedrooms,
-            "baths": bathrooms,
-            "src":   SOURCE_NAME,
-            "pid":   parcel_id,
-            "fips":  county_fips,
-        },
-    )
-    return result.rowcount > 0
-
-
 # ── file parser ────────────────────────────────────────────────────────────
 
 def parse_zillow_file(
@@ -587,7 +422,13 @@ def parse_zillow_file(
                 continue
 
             # ── Parcel match ──────────────────────────────────────── #
-            parcel = _lookup_parcel(conn, record["street"], record["zip_code"])
+            # street_for_match: strip trailing whitespace defensively.
+            # _extract_street() output is accepted by lookup_parcel_by_address()
+            # which owns canonical normalization. _extract_street() is unchanged.
+            street_for_match = record["street"].strip()
+            parcel = lookup_parcel_by_address(
+                conn, street_for_match, record["zip_code"]
+            )
 
             if parcel is None:
                 print(
@@ -602,12 +443,13 @@ def parse_zillow_file(
 
             # ── Bed/bath enrichment ───────────────────────────────── #
             if parcel["bedrooms"] is None or parcel["bathrooms"] is None:
-                enriched = _enrich_parcel_bed_bath(
+                enriched = enrich_bed_bath(
                     conn,
                     parcel["parcel_id"],
                     parcel["county_fips"],
                     record["bedrooms"],
                     record["bathrooms"],
+                    SOURCE_NAME,
                     dry_run,
                 )
                 if enriched:

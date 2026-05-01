@@ -21,7 +21,7 @@ Filtering:
     (case-insensitive) == 'escambia'.
 
 Parcel matching:
-    Three-level address fallback identical to zillow_foreclosure_parser.py:
+    Three-level address fallback identical to zillow_parser.py:
         Level 1 — Exact normalized street + ZIP
         Level 2 — Unit suffix normalization (#4A -> 4A, APT -> bare unit)
         Level 3 — Street prefix LIKE match, single result or REVIEW flag
@@ -74,6 +74,10 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
 from config.settings import settings  # noqa: E402
+from real_invest_fl.ingest.listing_matcher import (  # noqa: E402
+    lookup_parcel_by_address,
+    enrich_bed_bath,
+)
 
 # ── logging ────────────────────────────────────────────────────────────────
 logger = logging.getLogger("auction_com_scraper")
@@ -424,123 +428,6 @@ def _listing_url(listing: dict) -> Optional[str]:
     return f"https://www.auction.com{path}" if path else None
 
 
-# ── parcel lookup (mirrors zillow_foreclosure_parser._lookup_parcel) ───────
-
-def _lookup_parcel(conn, street: str, zip_code: Optional[str]) -> Optional[dict]:
-    """
-    Three-level address fallback against properties table.
-    Identical logic to zillow_foreclosure_parser._lookup_parcel.
-    """
-    select_cols = (
-        "parcel_id, county_fips, jv, arv_estimate, "
-        "tot_lvg_area, bedrooms, bathrooms"
-    )
-
-    def _fetch_one(where_clause: str, params: dict) -> Optional[object]:
-        return conn.execute(
-            text(
-                f"SELECT {select_cols} FROM properties "
-                f"WHERE county_fips = :fips AND {where_clause} LIMIT 1"
-            ),
-            {"fips": COUNTY_FIPS, **params},
-        ).fetchone()
-
-    def _fetch_all(where_clause: str, params: dict) -> list:
-        return conn.execute(
-            text(
-                f"SELECT {select_cols} FROM properties "
-                f"WHERE county_fips = :fips AND {where_clause}"
-            ),
-            {"fips": COUNTY_FIPS, **params},
-        ).fetchall()
-
-    def _row_to_dict(row) -> dict:
-        return {
-            "parcel_id":    row.parcel_id,
-            "county_fips":  row.county_fips,
-            "jv":           row.jv,
-            "arv_estimate": row.arv_estimate,
-            "tot_lvg_area": row.tot_lvg_area,
-            "bedrooms":     row.bedrooms,
-            "bathrooms":    row.bathrooms,
-        }
-
-    # Level 1 — exact match
-    if zip_code:
-        row = _fetch_one(
-            "UPPER(TRIM(phy_addr1)) = :street AND phy_zipcd = :zip",
-            {"street": street, "zip": zip_code},
-        )
-        if row:
-            return _row_to_dict(row)
-
-    row = _fetch_one(
-        "UPPER(TRIM(phy_addr1)) = :street",
-        {"street": street},
-    )
-    if row:
-        return _row_to_dict(row)
-
-    # Level 2 — unit suffix normalization (#4A -> 4A, APT -> bare unit)
-    unit_match = re.search(
-        r"^(.*?)\s*(?:#|APT\.?\s*|UNIT\s+)([A-Z0-9]+)\s*$",
-        street,
-        re.IGNORECASE,
-    )
-    if unit_match:
-        base = unit_match.group(1).strip()
-        unit = unit_match.group(2).strip()
-        normalized_with_unit = f"{base} {unit}"
-
-        if zip_code:
-            row = _fetch_one(
-                "UPPER(TRIM(phy_addr1)) = :street AND phy_zipcd = :zip",
-                {"street": normalized_with_unit, "zip": zip_code},
-            )
-            if row:
-                return _row_to_dict(row)
-
-        row = _fetch_one(
-            "UPPER(TRIM(phy_addr1)) = :street",
-            {"street": normalized_with_unit},
-        )
-        if row:
-            return _row_to_dict(row)
-
-        base_street = base
-    else:
-        base_street = street
-
-    # Level 3 — street prefix LIKE, single result or REVIEW flag
-    prefix_match = re.match(r"^(\d+\s+\S+(?:\s+\S+)?)", base_street)
-    if prefix_match:
-        prefix = prefix_match.group(1).strip()
-
-        if zip_code:
-            rows = _fetch_all(
-                "UPPER(TRIM(phy_addr1)) LIKE :prefix AND phy_zipcd = :zip",
-                {"prefix": f"{prefix}%", "zip": zip_code},
-            )
-        else:
-            rows = _fetch_all(
-                "UPPER(TRIM(phy_addr1)) LIKE :prefix",
-                {"prefix": f"{prefix}%"},
-            )
-
-        if len(rows) == 1:
-            return _row_to_dict(rows[0])
-
-        if len(rows) > 1:
-            parcel_ids = ", ".join(r.parcel_id for r in rows)
-            print(
-                f"[REVIEW] MULTI-UNIT — {len(rows)} parcels match "
-                f"'{prefix}%' ZIP={zip_code} — "
-                f"parcels: {parcel_ids} — manual selection required"
-            )
-
-    return None
-
-
 # ── DB helpers ─────────────────────────────────────────────────────────────
 
 def _get_filter_profile_id(conn) -> Optional[int]:
@@ -564,37 +451,6 @@ def _get_existing_listing_ids(conn) -> set[str]:
         {"src": SOURCE_NAME},
     ).fetchall()
     return {r[0] for r in rows}
-
-
-def _enrich_parcel_bed_bath(
-    conn,
-    parcel_id: str,
-    county_fips: str,
-    bedrooms: Optional[int],
-    bathrooms: Optional[float],
-) -> bool:
-    """Update properties bed/bath if currently NULL. Returns True if updated."""
-    if bedrooms is None and bathrooms is None:
-        return False
-    result = conn.execute(
-        text(
-            "UPDATE properties "
-            "SET bedrooms = COALESCE(bedrooms, :beds), "
-            "    bathrooms = COALESCE(bathrooms, :baths), "
-            "    bed_bath_source = COALESCE(bed_bath_source, :src) "
-            "WHERE parcel_id = :pid "
-            "AND county_fips = :fips "
-            "AND (bedrooms IS NULL OR bathrooms IS NULL)"
-        ),
-        {
-            "beds":  bedrooms,
-            "baths": bathrooms,
-            "src":   SOURCE_NAME,
-            "pid":   parcel_id,
-            "fips":  county_fips,
-        },
-    )
-    return result.rowcount > 0
 
 
 # ── main run function ──────────────────────────────────────────────────────
@@ -666,7 +522,12 @@ def run(engine=None) -> dict:
                 continue
 
             # ── Parcel match ──────────────────────────────────────── #
-            parcel = _lookup_parcel(conn, street_norm, zip_code)
+            # street_norm is the output of _normalize_street() — partially
+            # normalized (uppercased, digit-letter injected, whitespace
+            # collapsed). lookup_parcel_by_address() accepts raw or partially
+            # normalized input and applies canonical normalization internally.
+            # _build_address() and _normalize_street() are unchanged.
+            parcel = lookup_parcel_by_address(conn, street_norm, zip_code)
 
             if parcel is None:
                 print(
@@ -714,12 +575,13 @@ def run(engine=None) -> dict:
 
             # ── Bed/bath enrichment ───────────────────────────────── #
             if parcel["bedrooms"] is None or parcel["bathrooms"] is None:
-                enriched = _enrich_parcel_bed_bath(
+                enriched = enrich_bed_bath(
                     conn,
                     parcel["parcel_id"],
                     parcel["county_fips"],
                     bedrooms,
                     bathrooms,
+                    SOURCE_NAME,
                 )
                 if enriched:
                     stats["enriched"] += 1

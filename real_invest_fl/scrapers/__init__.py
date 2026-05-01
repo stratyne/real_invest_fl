@@ -20,6 +20,8 @@ Tier 2 — Government auction / bulk public data:
 
 Tier 3 — Commercial listing platforms / FSBO:
     craigslist_fsbo.py        — Craigslist Pensacola housing (deferred)
-    auction_com.py            — Auction.com Escambia County (deferred)
+    auction_com.py            — Auction.com Escambia County (complete,
+                                standalone runner via run_auction_com.py —
+                                not yet wired through BaseScraper)
     zillow.py                 — Zillow via paid API intermediary (deferred)
 """

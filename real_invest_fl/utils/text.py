@@ -125,6 +125,8 @@ def normalize_street_address(addr: str, strip_unit: bool = True) -> str:
         2. Strip unit designators                     (APT 4, UNIT B, #12, SUITE 2A)
         3. Inject space between digit run and letter  (2301W -> 2301 W)
            — ordinal suffixes (74TH, 48TH) are excluded from injection
+           — when strip_unit=False, injection is applied only to the
+             pre-unit portion to avoid corrupting alphanumeric unit values
         4. Collapse whitespace again after injection
         5. Expand street suffix to NAL abbreviation   (ROAD -> RD)
         6. Contract full directional word to abbrev   (NORTH -> N)
@@ -136,6 +138,9 @@ def normalize_street_address(addr: str, strip_unit: bool = True) -> str:
 
     Args:
         addr: Raw address string from any scraping source.
+        strip_unit: If True (default), strip unit designators before
+            digit-letter injection. If False, preserve unit designators
+            and confine digit-letter injection to the pre-unit portion.
 
     Returns:
         Normalized uppercase address string suitable for comparison
@@ -150,6 +155,8 @@ def normalize_street_address(addr: str, strip_unit: bool = True) -> str:
         '905 N 74TH AVE'
         >>> normalize_street_address("2301 W Michigan Ave 51")
         '2301 W MICHIGAN AVE 51'
+        >>> normalize_street_address("4831 Olive Rd #4A", strip_unit=False)
+        '4831 OLIVE RD #4A'
     """
     if not addr:
         return ""
@@ -163,8 +170,25 @@ def normalize_street_address(addr: str, strip_unit: bool = True) -> str:
         addr = _UNIT_RE.sub("", addr)
         addr = re.sub(r"\s+", " ", addr.strip())
 
-    # Step 3 — inject space between digit and letter, excluding ordinals
-    addr = _DIGIT_LETTER_RE.sub(r"\1 \2", addr)
+    # Step 3 — inject space between digit and letter, excluding ordinals.
+    # When strip_unit=False the unit designator is still present.
+    # Confine injection to the pre-unit portion only so that alphanumeric
+    # unit values like '#4A' or 'APT 2B' are not corrupted.
+    if strip_unit:
+        # Default path — no unit present, safe to inject across full string
+        addr = _DIGIT_LETTER_RE.sub(r"\1 \2", addr)
+    else:
+        # Preserve path — find the unit designator boundary and inject
+        # only on the portion before it.
+        unit_boundary = _UNIT_RE.search(addr)
+        if unit_boundary:
+            pre_unit = addr[:unit_boundary.start()]
+            unit_part = addr[unit_boundary.start():]
+            pre_unit = _DIGIT_LETTER_RE.sub(r"\1 \2", pre_unit)
+            addr = pre_unit + unit_part
+        else:
+            # No unit designator found — safe to inject across full string
+            addr = _DIGIT_LETTER_RE.sub(r"\1 \2", addr)
 
     # Step 4 — collapse whitespace again after injection
     addr = re.sub(r"\s+", " ", addr.strip())
