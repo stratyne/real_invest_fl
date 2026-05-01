@@ -2,7 +2,7 @@
 User — platform account. Authenticated via JWT (OAuth2 password flow).
 
 is_superuser bypasses all county access checks in the dependency layer.
-Passwords are stored as bcrypt hashes via passlib — never plaintext.
+Passwords are stored as bcrypt hashes — never plaintext.
 """
 from __future__ import annotations
 from datetime import datetime
@@ -15,7 +15,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

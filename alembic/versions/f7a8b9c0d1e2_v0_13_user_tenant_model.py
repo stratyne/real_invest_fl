@@ -38,7 +38,6 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="pk_users"),
         sa.UniqueConstraint("email", name="uq_users_email"),
     )
-    op.create_index("ix_users_email", "users", ["email"], unique=True)
 
     # ------------------------------------------------------------------ #
     # 2. subscription_bundles                                              #
@@ -193,5 +192,4 @@ def downgrade() -> None:
     op.drop_table("subscription_bundles")
 
     # users
-    op.drop_index("ix_users_email", table_name="users")
     op.drop_table("users")

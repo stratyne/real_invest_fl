@@ -47,7 +47,7 @@ dependencies = [
 
     # Auth
     "PyJWT[crypto]>=2.8,<3.0",
-    "passlib[bcrypt]>=1.7,<2.0",
+    "bcrypt>=4.0,<6.0",
     "python-multipart>=0.0.9,<1.0",
 
     # Config / validation

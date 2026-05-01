@@ -15,7 +15,8 @@ Uniqueness model:
 """
 from __future__ import annotations
 from datetime import datetime
-from sqlalchemy import String, Integer, Float, Boolean, DateTime, Text, Index, func
+from sqlalchemy import String, Integer, Float, Boolean, DateTime, Text, Index, ForeignKey, func
+from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from real_invest_fl.db.base import Base
@@ -24,22 +25,20 @@ from real_invest_fl.db.base import Base
 class FilterProfile(Base):
     __tablename__ = "filter_profiles"
     __table_args__ = (
-        # System profiles: unique name per county within the system catalog.
         Index(
             "uq_fp_system_county_name",
             "county_fips",
             "profile_name",
             unique=True,
-            postgresql_where="user_id IS NULL",
+            postgresql_where=sa_text("user_id IS NULL"),
         ),
-        # User profiles: unique name per user per county.
         Index(
             "uq_fp_user_county_name",
             "user_id",
             "county_fips",
             "profile_name",
             unique=True,
-            postgresql_where="user_id IS NOT NULL",
+            postgresql_where=sa_text("user_id IS NOT NULL"),
         ),
     )
 
@@ -57,9 +56,10 @@ class FilterProfile(Base):
     # ------------------------------------------------------------------ #
     # Ownership — NULL = system catalog profile                            #
     # ------------------------------------------------------------------ #
+
     user_id: Mapped[int | None] = mapped_column(
         Integer,
-        # ForeignKey imported inline to avoid circular import at module level
+        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
 
