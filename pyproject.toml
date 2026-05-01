@@ -45,6 +45,11 @@ dependencies = [
     # Retry logic
     "tenacity>=9.0,<10.0",
 
+    # Auth
+    "PyJWT[crypto]>=2.8,<3.0",
+    "passlib[bcrypt]>=1.7,<2.0",
+    "python-multipart>=0.0.9,<1.0",
+
     # Config / validation
     "pydantic>=2.7,<3.0",
     "pydantic-settings>=2.3,<3.0",

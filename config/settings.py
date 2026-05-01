@@ -55,5 +55,10 @@ class Settings(BaseSettings):
     use_proxies: bool = False
     proxies_file: str = "./config/proxies.txt"
 
+    # Auth
+    jwt_secret_key: str = Field(..., description="HS256 signing secret — required, no default")
+    jwt_algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60
+
 
 settings = Settings()
