@@ -2,19 +2,23 @@
 """
 NAL ingest pipeline — Stage 1.
 
-Reads the NAL CSV file in chunks, evaluates each parcel against
-the active filter profile, and upserts qualifying and non-qualifying
-parcels into the properties table.
+Reads the NAL CSV file for a given county, maps every parcel, and
+upserts the entire county inventory into the properties table.
 
-All parcels in the NAL are written to properties regardless of
-whether they pass the filter. Passing parcels get mqi_qualified=True.
-Rejected parcels get mqi_qualified=False with rejection reasons logged.
-This ensures the MQI is a complete county inventory, not just
-the passing subset.
+No filter profile is consulted at ingest time. Every parcel from
+every county NAL is written as-is. Filtering is exclusively a
+query-time operation (Phase 4). mqi_qualified is set to False and
+mqi_rejection_reasons is set to NULL on every upserted row — these
+are neutral placeholder values, not filter decisions.
+
+File paths are resolved programmatically from the canonical folder
+structure:
+    data/raw/counties/{fips}_{snake_name}/nal/NAL*.csv
 
 Usage:
-    python -m real_invest_fl.ingest.nal_ingest
-    python -m real_invest_fl.ingest.nal_ingest --dry-run
+    python -m real_invest_fl.ingest.nal_ingest --county-fips 12033
+    python -m real_invest_fl.ingest.nal_ingest --county-fips 12113
+    python -m real_invest_fl.ingest.nal_ingest --county-fips 12033 --dry-run
 """
 from __future__ import annotations
 
@@ -25,15 +29,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.settings import settings
-from real_invest_fl.db.models.filter_profile import FilterProfile
 from real_invest_fl.db.models.property import Property
 from real_invest_fl.db.session import AsyncSessionLocal, engine
-from real_invest_fl.ingest.nal_filter import evaluate_nal, _is_absentee
 from real_invest_fl.ingest.nal_mapper import map_nal_row
 from real_invest_fl.ingest.run_context import IngestRunContext
 from real_invest_fl.utils.logging_setup import configure_logging
@@ -43,67 +44,113 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------ #
 # Constants                                                            #
 # ------------------------------------------------------------------ #
-NAL_FILE = Path(
-    r"D:\Chris\Documents\Stratyne\real_invest_fl\data\raw\NAL27F202502VAB.csv"
-)
-COUNTY_FIPS = "12033"
-FILTER_PROFILE_ID = 1
 CHUNK_SIZE = 400
-
 NAL_DTYPES = str
+
+# Root of the repo — two levels above this file
+# real_invest_fl/ingest/nal_ingest.py  →  ../../  →  repo root
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_COUNTIES_DIR = _REPO_ROOT / "data" / "raw" / "counties"
+
+# Florida bounding box for centroid sanity checks (used in GIS ingest,
+# referenced here only as documentation of the shared convention).
+FL_LAT_MIN, FL_LAT_MAX = 24.4, 31.1
+FL_LON_MIN, FL_LON_MAX = -87.6, -80.0
+
+
+# ------------------------------------------------------------------ #
+# County registry                                                      #
+# ------------------------------------------------------------------ #
+# Maps FIPS → county name exactly as it appears in the folder name
+# snake_name formula: name.lower().replace('-','_').replace(' ','_')
+# Add counties here as their NAL files are staged for ingest.
+COUNTY_REGISTRY: dict[str, str] = {
+    "12033": "Escambia",
+    "12113": "Santa Rosa",
+}
+
+
+def _snake_name(county_name: str) -> str:
+    """Return the canonical snake_name for a county display name."""
+    return county_name.lower().replace("-", "_").replace(" ", "_")
+
+
+def _resolve_nal_path(county_fips: str) -> Path:
+    """
+    Resolve the NAL CSV path for *county_fips* using the canonical
+    folder structure.
+
+    Raises:
+        KeyError: FIPS code is not in COUNTY_REGISTRY.
+        FileNotFoundError: No NAL*.csv file found in the expected directory.
+    """
+    if county_fips not in COUNTY_REGISTRY:
+        raise KeyError(
+            f"County FIPS '{county_fips}' is not registered in COUNTY_REGISTRY. "
+            "Add it before running ingest."
+        )
+
+    name = COUNTY_REGISTRY[county_fips]
+    folder_name = f"{county_fips}_{_snake_name(name)}"
+    nal_dir = _COUNTIES_DIR / folder_name / "nal"
+
+    try:
+        nal_file = next(nal_dir.glob("NAL*.csv"))
+    except StopIteration:
+        raise FileNotFoundError(
+            f"No NAL*.csv file found in {nal_dir}. "
+            "Confirm the file has been staged before running ingest."
+        )
+
+    return nal_file
 
 
 # ------------------------------------------------------------------ #
 # Main pipeline                                                        #
 # ------------------------------------------------------------------ #
 
-async def run_nal_ingest(dry_run: bool = False) -> None:
+async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
     """
-    Execute NAL Stage 1 ingest.
+    Execute NAL Stage 1 ingest for *county_fips*.
+
+    Every parcel in the NAL is written to properties regardless of
+    use code, assessed value, or any other criterion. No filter profile
+    is consulted. mqi_qualified is set to False and
+    mqi_rejection_reasons is set to NULL on every row — neutral
+    placeholder values pending the query-time filter implementation
+    in Phase 4.
 
     Args:
-        dry_run: If True, process all records and log counts but
-                 do not write anything to the database.
+        county_fips: Five-digit FIPS string, e.g. "12033".
+        dry_run: If True, process all records and log counts but do
+                 not write anything to the database.
     """
     configure_logging(settings.log_level)
 
     if dry_run:
         logger.info("DRY RUN mode — no database writes will occur")
 
+    nal_file = _resolve_nal_path(county_fips)
+    logger.info(
+        "NAL ingest starting | county_fips=%s file=%s",
+        county_fips,
+        nal_file,
+    )
+
     async with AsyncSessionLocal() as session:
 
-        # ---------------------------------------------------------- #
-        # Load filter profile                                          #
-        # ---------------------------------------------------------- #
-        profile = await _load_filter_profile(session, FILTER_PROFILE_ID)
-        if profile is None:
-            raise RuntimeError(
-                f"Filter profile id={FILTER_PROFILE_ID} not found in database."
-            )
-
-        criteria = profile.filter_criteria
-        logger.info(
-            "Loaded filter profile | id=%d name=%s county_fips=%s",
-            profile.id,
-            profile.profile_name,
-            profile.county_fips,
-        )
-
-        # ---------------------------------------------------------- #
-        # Open ingest run record                                       #
-        # ---------------------------------------------------------- #
         async with IngestRunContext(
             session=session,
             run_type="NAL",
-            county_fips=COUNTY_FIPS,
-            source_file=NAL_FILE.name,
-            filter_profile_id=FILTER_PROFILE_ID,
+            county_fips=county_fips,
+            source_file=nal_file.name,
+            filter_profile_id=None,
         ) as run:
 
             chunk_num = 0
 
             for chunk in pd.read_csv(
-                NAL_FILE,
+                nal_file,
                 dtype=NAL_DTYPES,
                 chunksize=CHUNK_SIZE,
                 low_memory=False,
@@ -116,27 +163,24 @@ async def run_nal_ingest(dry_run: bool = False) -> None:
                 upsert_batch: list[dict] = []
 
                 for row in rows:
-                    absentee = _is_absentee(row)
-                    passed, rejections = evaluate_nal(row, criteria)
-
                     mapped = map_nal_row(
                         row=row,
-                        county_fips=COUNTY_FIPS,
-                        absentee_owner=absentee,
+                        county_fips=county_fips,
+                        absentee_owner=None,  # absentee flag deferred to Phase 4
                     )
 
                     if not mapped.get("parcel_id"):
                         run.increment("skipped")
                         continue
 
-                    mapped["mqi_qualified"] = passed
+                    # Neutral MQI values — not a filter decision.
+                    # These columns will be removed in a future migration once
+                    # the query-time filter (Phase 4) is live.
+                    mapped["mqi_qualified"] = False
                     mapped["mqi_stage"] = "NAL"
-                    mapped["mqi_rejection_reasons"] = (
-                        rejections if rejections else None
-                    )
-                    mapped["mqi_qualified_at"] = (
-                        datetime.now(tz=timezone.utc) if passed else None
-                    )
+                    mapped["mqi_rejection_reasons"] = None
+                    mapped["mqi_qualified_at"] = None
+
                     mapped["nal_ingested_at"] = datetime.now(tz=timezone.utc)
 
                     mapped["raw_nal_json"] = {
@@ -144,34 +188,26 @@ async def run_nal_ingest(dry_run: bool = False) -> None:
                     }
 
                     upsert_batch.append(mapped)
-
-                    if passed:
-                        run.increment("inserted")
-                    else:
-                        run.increment(
-                            "rejected",
-                            rejection_reason=rejections[0] if rejections else None,
-                        )
+                    run.increment("inserted")
 
                 if upsert_batch and not dry_run:
                     await _upsert_batch(session, upsert_batch)
 
                 logger.info(
                     "Chunk %d processed | "
-                    "read=%d inserted=%d rejected=%d skipped=%d",
+                    "read=%d inserted=%d skipped=%d",
                     chunk_num,
                     run.records_read,
                     run.records_inserted,
-                    run.records_rejected,
                     run.records_skipped,
                 )
 
             logger.info(
-                "NAL ingest complete | "
-                "total_read=%d qualified=%d rejected=%d skipped=%d",
+                "NAL ingest complete | county_fips=%s "
+                "total_read=%d inserted=%d skipped=%d",
+                county_fips,
                 run.records_read,
                 run.records_inserted,
-                run.records_rejected,
                 run.records_skipped,
             )
 
@@ -181,16 +217,6 @@ async def run_nal_ingest(dry_run: bool = False) -> None:
 # ------------------------------------------------------------------ #
 # Database helpers                                                     #
 # ------------------------------------------------------------------ #
-
-async def _load_filter_profile(
-    session: AsyncSession,
-    profile_id: int,
-) -> FilterProfile | None:
-    result = await session.execute(
-        select(FilterProfile).where(FilterProfile.id == profile_id)
-    )
-    return result.scalar_one_or_none()
-
 
 async def _upsert_batch(
     session: AsyncSession,
@@ -207,12 +233,11 @@ async def _upsert_batch(
 
     # Calculate safe batch size based on actual column count
     num_cols = len(batch[0])
-    max_rows = 32767 // num_cols  # floor division — stay under limit
+    max_rows = 32767 // num_cols   # floor division — stay under limit
     safe_size = min(max_rows - 10, len(batch))  # 10-row safety margin
 
-    # Split into safe sub-batches if needed
     sub_batches = [
-        batch[i:i + safe_size]
+        batch[i : i + safe_size]
         for i in range(0, len(batch), safe_size)
     ]
 
@@ -243,12 +268,19 @@ def main() -> None:
         description="Penstock NAL Stage 1 ingest pipeline"
     )
     parser.add_argument(
+        "--county-fips",
+        required=True,
+        metavar="FIPS",
+        help="Five-digit county FIPS code (e.g. 12033 for Escambia, "
+             "12113 for Santa Rosa).",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Process records and log counts without writing to the database",
+        help="Process records and log counts without writing to the database.",
     )
     args = parser.parse_args()
-    asyncio.run(run_nal_ingest(dry_run=args.dry_run))
+    asyncio.run(run_nal_ingest(county_fips=args.county_fips, dry_run=args.dry_run))
 
 
 if __name__ == "__main__":
