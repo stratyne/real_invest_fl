@@ -337,39 +337,37 @@ async def fetch_qualified_parcel_ids(
     force: bool,
 ) -> list[str]:
     """
-    Return parcel_id values for all MQI-qualified properties.
+    Return parcel_id values for all single-family residential parcels
+    (DOR_UC = '1') in Escambia County.
+
     If force=False, skip parcels that already have cama_enriched_at set.
+    DOR UC '1' = Single Family — the only use code with a building to
+    scrape. Vacant, agricultural, and other non-improved parcels are
+    excluded.
     """
     if force:
-        sql = text("""
-            SELECT parcel_id
-            FROM properties
-            WHERE mqi_qualified = true
-            ORDER BY parcel_id
-            LIMIT :lim
-        """) if limit else text("""
-            SELECT parcel_id
-            FROM properties
-            WHERE mqi_qualified = true
-            ORDER BY parcel_id
-        """)
+        base_where = "WHERE county_fips = '12033' AND dor_uc = '1'"
     else:
-        sql = text("""
+        base_where = "WHERE county_fips = '12033' AND dor_uc = '1' AND cama_enriched_at IS NULL"
+
+    if limit:
+        sql = text(f"""
             SELECT parcel_id
             FROM properties
-            WHERE mqi_qualified = true
-              AND cama_enriched_at IS NULL
+            {base_where}
             ORDER BY parcel_id
             LIMIT :lim
-        """) if limit else text("""
+        """)
+        params = {"lim": limit}
+    else:
+        sql = text(f"""
             SELECT parcel_id
             FROM properties
-            WHERE mqi_qualified = true
-              AND cama_enriched_at IS NULL
+            {base_where}
             ORDER BY parcel_id
         """)
+        params = {}
 
-    params = {"lim": limit} if limit else {}
     result = await session.execute(sql, params)
     rows = result.fetchall()
     return [r[0] for r in rows]
@@ -525,7 +523,7 @@ async def run(
         else:
             parcel_ids = await fetch_qualified_parcel_ids(session, limit, force)
             logger.info(
-                "Found %d MQI-qualified parcels to enrich%s",
+                "Found %d DOR UC '1' parcels to enrich%s",
                 len(parcel_ids),
                 " (force mode — including already enriched)" if force else "",
             )
