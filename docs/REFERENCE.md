@@ -44,6 +44,28 @@ open — use CHECKPOINT.md for that.
 - Library: rapidfuzz v3.14.5
 - 50 tests passing as of 2026-04-28.
 
+### Ingest Pipeline
+- Filters are query-time only. The ingest pipeline never applies filter
+  criteria to determine what gets written to the database. Every parcel
+  from every county NAL goes into properties regardless of use code, size,
+  value, or any other criterion.
+- All ingest scripts resolve file paths programmatically from the county
+  registry using the canonical folder pattern:
+    data/raw/counties/{fips}_{snake_name}/{type}/
+  where snake_name = county_name.lower().replace('-','_').replace(' ','_')
+  File discovery uses globs, never hardcoded filenames:
+    NAL: next(nal_dir.glob("NAL*.csv"))
+    GIS: next(gis_dir.glob("*.shp"))
+- CRS detection is per-county at runtime via gdf.crs. COUNTY_REGISTRY
+  stores the confirmed CRS per county for documentation and warning
+  suppression only. gdf.crs.to_epsg() is authoritative — not the raw
+  .prj text. Santa Rosa confirmed EPSG:2883 (not EPSG:2881 as the raw
+  .prj text suggested).
+- Florida statewide bounding box for centroid sanity checks:
+  FL_LAT_MIN/MAX = 24.4/31.1, FL_LON_MIN/MAX = -87.65/-80.0.
+  Western boundary is -87.65, not -87.6 — confirmed against 18 valid
+  Escambia parcels along the Perdido River.
+
 ### Scraping / Robots
 - Tier 1 government sources (RealForeclose, RealTaxDeed, LandmarkWeb):
   file-drop parsers — robots.txt blocks live scraping on all three.
@@ -94,12 +116,20 @@ open — use CHECKPOINT.md for that.
 - Cross-county profiles deferred to Phase 3+.
 
 ### Scoring and Filter Enforcement Model (Locked)
-- passed_filters, filter_rejection_reasons, deal_score computed at
-  insert/update time in the ingest pipeline — not at query time.
+- Filters are query-time only. The ingest pipeline never applies filter
+  criteria to determine what gets written to the database. Every parcel
+  from every county NAL is written as-is regardless of use code, size,
+  value, or any other criterion.
+- passed_filters, filter_rejection_reasons, deal_score are computed at
+  query time against the standing inventory — not at ingest time.
 - deal_score_version tracks algorithm version for auditability.
 - Filter profile save/modify triggers background recompute of
   listing_events for that county_fips — Phase 4 dependency.
 - API routes sort and filter on pre-computed columns only.
+- mqi_qualified, mqi_rejection_reasons, mqi_qualified_at are POC
+  artifacts. All rows carry mqi_qualified = false as a neutral
+  placeholder. These columns will be removed in a future migration
+  once the query-time filter (Phase 4) is live.
 
 ### Auth Model (Locked — Item 5)
 - JWT HS256 via PyJWT. sub = users.id as string. email included as
@@ -205,18 +235,14 @@ real_invest_fl/                          <- project root
 │   ├── ingest/
 │   │   ├── arv_calculator.py
 │   │   ├── cama_ingest.py
-│   │   ├── enricher.py                  <- stub
 │   │   ├── gis_ingest.py
 │   │   ├── listing_matcher.py           <- centralized parcel lookup
 │   │   ├── nal_filter.py
 │   │   ├── nal_ingest.py
-│   │   ├── nal_loader.py
 │   │   ├── nal_mapper.py
-│   │   ├── rejected_parcels.py
 │   │   ├── run_auction_com.py           <- COMPLETE
 │   │   ├── run_context.py
 │   │   ├── run_taxdeed.py               <- COMPLETE
-│   │   ├── sdf_loader.py
 │   │   ├── source_status.py             <- data_source_status upsert helper
 │   │   └── staging_parsers/
 │   │       ├── __init__.py
@@ -251,6 +277,122 @@ real_invest_fl/                          <- project root
 ---
 
 ## Schema Reference
+
+          Column           |           Type           | Collation | Nullable | Default
+---------------------------+--------------------------+-----------+----------+---------
+ county_fips               | character varying(5)     |           | not null |
+ parcel_id                 | character varying(30)    |           | not null |
+ state_par_id              | character varying(30)    |           | not null |
+ co_no                     | integer                  |           |          |
+ asmnt_yr                  | integer                  |           |          |
+ dor_uc                    | character varying(10)    |           |          |
+ pa_uc                     | character varying(10)    |           |          |
+ jv                        | integer                  |           |          |
+ av_nsd                    | integer                  |           |          |
+ tv_nsd                    | integer                  |           |          |
+ const_class               | integer                  |           |          |
+ eff_yr_blt                | integer                  |           |          |
+ act_yr_blt                | integer                  |           |          |
+ tot_lvg_area              | integer                  |           |          |
+ lnd_sqfoot                | integer                  |           |          |
+ no_buldng                 | integer                  |           |          |
+ no_res_unts               | integer                  |           |          |
+ own_name                  | character varying(200)   |           |          |
+ own_addr1                 | character varying(200)   |           |          |
+ own_addr2                 | character varying(200)   |           |          |
+ own_city                  | character varying(100)   |           |          |
+ own_state                 | character varying(25)    |           |          |
+ own_zipcd                 | character varying(10)    |           |          |
+ phy_addr1                 | character varying(300)   |           |          |
+ phy_city                  | character varying(100)   |           |          |
+ phy_zipcd                 | character varying(10)    |           |          |
+ absentee_owner            | boolean                  |           |          |
+ foundation_type           | character varying(100)   |           |          |
+ exterior_wall             | character varying(100)   |           |          |
+ roof_type                 | character varying(100)   |           |          |
+ bedrooms                  | integer                  |           |          |
+ bathrooms                 | numeric(4,1)             |           |          |
+ cama_quality_code         | character varying(10)    |           |          |
+ cama_condition_code       | character varying(10)    |           |          |
+ cama_enriched_at          | timestamp with time zone |           |          |
+ geom                      | geometry(Point,4326)     |           |          |
+ latitude                  | numeric(10,7)            |           |          |
+ longitude                 | numeric(10,7)            |           |          |
+ mqi_qualified             | boolean                  |           | not null |
+ mqi_qualified_at          | timestamp with time zone |           |          |
+ mqi_rejection_reasons     | jsonb                    |           |          |
+ mqi_stage                 | character varying(10)    |           |          |
+ seller_probability_score  | numeric(5,4)             |           |          |
+ seller_score_updated_at   | timestamp with time zone |           |          |
+ permit_count              | integer                  |           |          |
+ estimated_rehab_per_sqft  | numeric(6,2)             |           |          |
+ raw_nal_json              | jsonb                    |           |          |
+ raw_cama_json             | jsonb                    |           |          |
+ nal_ingested_at           | timestamp with time zone |           |          |
+ created_at                | timestamp with time zone |           | not null | now()
+ updated_at                | timestamp with time zone |           | not null | now()
+ imp_qual                  | integer                  |           |          |
+ spec_feat_val             | integer                  |           |          |
+ av_sd                     | integer                  |           |          |
+ tv_sd                     | integer                  |           |          |
+ jv_hmstd                  | integer                  |           |          |
+ lnd_val                   | integer                  |           |          |
+ exmpt_01                  | integer                  |           |          |
+ multi_par_sal1            | character varying(1)     |           |          |
+ qual_cd1                  | character varying(2)     |           |          |
+ vi_cd1                    | character varying(1)     |           |          |
+ sale_prc1                 | integer                  |           |          |
+ sale_yr1                  | integer                  |           |          |
+ sale_mo1                  | integer                  |           |          |
+ sal_chng_cd1              | character varying(1)     |           |          |
+ multi_par_sal2            | character varying(1)     |           |          |
+ qual_cd2                  | character varying(2)     |           |          |
+ vi_cd2                    | character varying(1)     |           |          |
+ sale_prc2                 | integer                  |           |          |
+ sale_yr2                  | integer                  |           |          |
+ sale_mo2                  | integer                  |           |          |
+ sal_chng_cd2              | character varying(1)     |           |          |
+ own_state_dom             | character varying(2)     |           |          |
+ distr_cd                  | integer                  |           |          |
+ distr_yr                  | integer                  |           |          |
+ nconst_val                | integer                  |           |          |
+ del_val                   | integer                  |           |          |
+ par_splt                  | character varying(5)     |           |          |
+ spass_cd                  | character varying(1)     |           |          |
+ mkt_ar                    | character varying(3)     |           |          |
+ nbrhd_cd                  | character varying(10)    |           |          |
+ census_bk                 | character varying(16)    |           |          |
+ twn                       | character varying(3)     |           |          |
+ rng                       | character varying(3)     |           |          |
+ sec                       | character varying(3)     |           |          |
+ dt_last_inspt             | character varying(4)     |           |          |
+ alt_key                   | character varying(26)    |           |          |
+ s_legal                   | character varying(30)    |           |          |
+ improvement_to_land_ratio | numeric(8,4)             |           |          |
+ soh_compression_ratio     | numeric(6,4)             |           |          |
+ years_since_last_sale     | integer                  |           |          |
+ zoning                    | character varying(20)    |           |          |
+ nav_total_assessment      | numeric(12,2)            |           |          |
+ jv_per_sqft               | numeric                  |           |          |
+ arv_estimate              | integer                  |           |          |
+ arv_spread                | integer                  |           |          |
+ list_price                | integer                  |           |          |
+ bed_bath_source           | character varying(50)    |           |          |
+Indexes:
+    "uq_county_parcel" PRIMARY KEY, btree (county_fips, parcel_id)
+    "idx_properties_geom" gist (geom)
+    "ix_properties_act_yr_blt" btree (act_yr_blt)
+    "ix_properties_alt_key" btree (alt_key)
+    "ix_properties_census_bk" btree (census_bk)
+    "ix_properties_const_class" btree (const_class)
+    "ix_properties_county_fips" btree (county_fips)
+    "ix_properties_dor_uc" btree (dor_uc)
+    "ix_properties_jv" btree (jv)
+    "ix_properties_mkt_ar" btree (mkt_ar)
+    "ix_properties_mqi_qualified" btree (mqi_qualified)
+    "ix_properties_phy_zipcd" btree (phy_zipcd)
+    "ix_properties_sale_yr1" btree (sale_yr1)
+    "ix_properties_state_par_id" btree (state_par_id)
 
 ### listing_events (confirmed 2026-04-27)
 
