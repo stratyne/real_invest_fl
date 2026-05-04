@@ -32,6 +32,8 @@ data/exports/
 docs/*
 !/docs/
 !/docs/*.md
+!/docs/context/
+!/docs/context/*.md
 *.pdf
 *.xlsx
 *.xls
