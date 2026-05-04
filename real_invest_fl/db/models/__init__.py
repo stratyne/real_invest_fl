@@ -7,6 +7,7 @@ from .filter_profile import FilterProfile                      # noqa: F401
 from .property import Property                                 # noqa: F401
 from .property_history import PropertyValueHistory             # noqa: F401
 from .listing_event import ListingEvent                        # noqa: F401
+from .listing_score import ListingScore                        # noqa: F401
 from .zestimate_cache import ZestimateCache                    # noqa: F401
 from .sales_comp import SalesComp                              # noqa: F401
 from .public_record import PublicRecordSignal                  # noqa: F401

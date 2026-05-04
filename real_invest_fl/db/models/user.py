@@ -41,3 +41,10 @@ class User(Base):
         back_populates="owner",
         foreign_keys="[FilterProfile.user_id]",
     )
+
+    listing_scores: Mapped[list[ListingScore]] = relationship(
+        "ListingScore",
+        back_populates="user",
+        foreign_keys="[ListingScore.user_id]",
+        cascade="all, delete-orphan",
+    )

@@ -27,7 +27,7 @@ no shared scraper possible).
 development proceeds in parallel. Seed scripts (items 11–12) must clear first.
 
 ## Migration Chain
-HEAD = h9i0j1k2l3m4 (v0.15)
+HEAD = i0j1k2l3m4n5 (v0.16)
 
 | Rev | Version | Description |
 |---|---|---|
@@ -42,12 +42,10 @@ HEAD = h9i0j1k2l3m4 (v0.15)
 | c3d4e5f6a7b8 | v0.10 | add signal_tier, signal_type to listing_events |
 | d4e5f6a7b8c9 | v0.11 | add bed_bath_source to properties |
 | e5f6a7b8c9d0 | v0.12 | add data_source_status table |
-| f7a8b9c0d1e2 | v0.13 | user/tenant model — users, user_county_access, |
-| | | subscription_bundles, bundle_counties, |
-| | | filter_profiles.user_id, outreach_log.user_id, |
-| | | drop ui_sessions |
+| f7a8b9c0d1e2 | v0.13 | user/tenant model — users, user_county_access, subscription_bundles, bundle_counties, filter_profiles.user_id, outreach_log.user_id, drop ui_sessions |
 | g8h9i0j1k2l3 | v0.14 | add parcel_sale_history table |
 | h9i0j1k2l3m4 | v0.15 | parcel_sale_history grantor/grantee NOT NULL DEFAULT '' |
+| i0j1k2l3m4n5 | v0.16 | listing_scores table; strip scoring columns from listing_events |
 
 **Note:** Ingest refactor (2026-05-02) produced NO migration — code only.
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
@@ -94,15 +92,14 @@ Retained as reference for backfill completeness verification.
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running; Escambia blocked |
-| 17 | PENDING | arv_calculator.py refactor | mqi_qualified drift; needs refactor before use |
+| 17 | PENDING | arv_calculator.py refactor | Refactor into comp-based ARV engine using parcel_sale_history + NAL qual codes. mqi_qualified drift fix included. Santa Rosa: 4,884 qualified sales available. |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py |
-| 19 | PENDING | Deal scoring engine | Weighted score: ARV spread, discount, tier, DOM |
+| 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job. |
 | 20 | PENDING | Daily scheduler | Windows Task Scheduler → master runner script |
 | 21 | PENDING | Zestimate integration | RapidAPI wrapper, rate-limited |
 | 22 | PENDING | Output pipeline — Google Sheets export | — |
 | 23 | PENDING | Email/outreach pipeline | Auto-generated outreach, logged |
 | 24 | PENDING | HUD Home Store scraper | Monitor until listings appear |
-| 25 | PENDING | File FL DOR multi-year SDF request | PTOTechnology@floridarevenue.com |
 | 26 | PENDING | Await Ch. 119 response — Escambia Clerk | — |
 | 27 | PENDING | LienHub advertised list | Check 2026-05-05 — see URL in scrapers.md |
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
@@ -111,6 +108,7 @@ Retained as reference for backfill completeness verification.
 ## Deferred Items
 | # | Description | Reason |
 |---|---|---|
+| 25 | FL DOR multi-year SDF request | Downgraded — parcel_sale_history + NAL qual codes sufficient for ARV engine. SDF improves comp pool but is not required. PTOTechnology@floridarevenue.com when prioritized. |
 | 30 | Craigslist FSBO scraper | Effort/reward too low |
 | 31 | Full CAMA enrichment statewide | Phase 3 — each county needs own scraper |
 | 32 | NAV data ingest | Deferred |

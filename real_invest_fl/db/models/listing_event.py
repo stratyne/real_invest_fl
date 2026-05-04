@@ -1,7 +1,10 @@
 """
-ListingEvent — append-only record each time a qualified MQI property
-appears in a listing feed. deal_score and deal_score_version are the
-output of the multi-signal scoring engine (Phase 1 partial, Phase 2 full).
+ListingEvent — append-only record of each scrape event. Immutable
+facts about what was scraped, from what source, and when.
+
+Scoring output (deal_score, passed_filters, filter_rejection_reasons)
+lives in listing_scores — one row per (event, filter_profile).
+See listing_score.py.
 
 signal_tier and signal_type support the Phase 2 hybrid signal-aggregator
 + traditional listing model.
@@ -35,7 +38,6 @@ class ListingEvent(Base):
         Index("ix_le_county_parcel",  "county_fips", "parcel_id"),
         Index("ix_le_status",         "workflow_status"),
         Index("ix_le_listing_type",   "listing_type"),
-        Index("ix_le_deal_score",     "deal_score"),
         Index("ix_le_signal_tier",    "signal_tier"),
         Index("ix_le_signal_type",    "signal_type"),
     )
@@ -91,21 +93,6 @@ class ListingEvent(Base):
     zestimate_fetched_at:   Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # ------------------------------------------------------------------ #
-    # Multi-signal deal score                                              #
-    # ------------------------------------------------------------------ #
-    deal_score:           Mapped[float | None]   = mapped_column(Numeric(5, 4))
-    deal_score_version:   Mapped[str | None]     = mapped_column(String(20))
-    deal_score_components: Mapped[dict | None]   = mapped_column(JSONB)
-    # Stores individual component scores for UI drill-down
-
-    # ------------------------------------------------------------------ #
-    # Filter evaluation result                                             #
-    # ------------------------------------------------------------------ #
-    filter_profile_id:        Mapped[int | None]  = mapped_column(Integer)
-    passed_filters:           Mapped[bool | None] = mapped_column(Boolean)
-    filter_rejection_reasons: Mapped[list | None] = mapped_column(JSONB)
-
-    # ------------------------------------------------------------------ #
     # Workflow status                                                      #
     # ------------------------------------------------------------------ #
     workflow_status: Mapped[str] = mapped_column(
@@ -137,4 +124,10 @@ class ListingEvent(Base):
         primaryjoin="and_(ListingEvent.county_fips==Property.county_fips, "
                     "ListingEvent.parcel_id==Property.parcel_id)",
         foreign_keys="[ListingEvent.county_fips, ListingEvent.parcel_id]",
+    )
+
+    scores: Mapped[list[ListingScore]] = relationship(
+        "ListingScore",
+        back_populates="listing_event",
+        cascade="all, delete-orphan"
     )

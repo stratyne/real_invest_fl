@@ -40,7 +40,15 @@ real_invest_fl/utils/
 | 1 — Government direct | Escambia Clerk tax deed, lis pendens, foreclosures | Live scrape or file-drop | Tax deed complete; others file-drop |
 | 2 — Public aggregators | Auction.com, HUD Home Store | Playwright + rate limiting | Auction.com COMPLETE |
 | 3 — Free listing sources | Craigslist FSBO | requests + BS4 | DEFERRED indefinitely |
-| 4 — Commercial platforms | Zillow, Redfin, Realtor.com | Paid API / vendor proxy | DEFERRED |
+| 4 — Commercial platforms | Zillow (RapidAPI live), Redfin, Realtor.com | Paid API / vendor proxy | DEFERRED |
+
+**Zillow note:** Two distinct integrations exist and must not be confused:
+- Zillow file-drop staging parser (`zillow_parser.py`) — COMPLETE. Accepts
+  manually exported Zillow CSVs dropped into `data/staging/zillow/`. In
+  production use. This is NOT a live scraper.
+- Zillow RapidAPI live integration — DEFERRED. Tier 4. Approved POC approach
+  when live integration is prioritized. Requires paid RapidAPI wrapper,
+  rate-limited. Not yet started.
 
 ## Address Normalization
 

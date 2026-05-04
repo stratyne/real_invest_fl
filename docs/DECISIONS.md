@@ -25,10 +25,22 @@ produces. It is not the architecture. It is a test case.
 
 ## Data Architecture
 
-- ARV proxy = `jv` (Just Value from NAL) until multi-year SDF comps available.
+- ARV calculation uses comp-based model: qualified sales from
+  `parcel_sale_history` filtered by Florida DOR qual_cd1 = '01' (arm's-length)
+  and selectively '02', '03'. Filtered by proximity (comp_radius_miles),
+  year built tolerance, and dor_uc. Price per sqft applied to subject parcel
+  tot_lvg_area to produce market-based ARV.
+- `jv` (Just Value from NAL) is retained as fallback ARV proxy when
+  insufficient comps exist for a parcel.
+- Multi-year SDF comps are a future enhancement to the comp pool, not a
+  dependency. parcel_sale_history + NAL qual codes are sufficient.
+- Santa Rosa verified: 35,340 sale records, 4,884 qualified '01' sales
+  (2024-2025), 7,305 distinct parcels. Comp pool is viable.
 - Signal model is primary; traditional listing model is a parallel track.
 - `listing_events` is the unified output table for all signal and listing sources.
-- SDF deferred. NAV deferred until deal-scoring is approved deliverable.
+- SDF deferred — parcel_sale_history + NAL qual codes provide sufficient
+  comp pool. SDF is a future enhancement to comp pool depth, not a dependency.
+  NAV deferred until deal-scoring is approved deliverable.
 - The platform serves infinite users with infinite use cases.
 
 ---
@@ -158,6 +170,28 @@ produces. It is not the architecture. It is a test case.
 
 ---
 
+## ARV Comp Engine
+
+- Primary source: `parcel_sale_history` joined to `properties`
+- Qualification filter: Florida DOR qual codes
+  - '01' — Qualified arm's-length sale — primary comp pool
+  - '02' — Qualified, multiple parcels — usable with caution
+  - '03' — Qualified, foreclosure — usable as distressed comp signal
+  - All other codes excluded from ARV comps
+- Proximity filter: comp_radius_miles from filter_profile
+- Year built filter: comp_year_built_tolerance from filter_profile
+- Use code filter: dor_uc must match subject parcel
+- Minimum comps threshold: min_comp_sales_for_arv from filter_profile
+- Calculation: median price per sqft of qualifying comps ×
+  subject parcel tot_lvg_area
+- Fallback: jv when comp count < min_comp_sales_for_arv
+- arv_source values: 'COMP' | 'JV_FALLBACK' | 'ZESTIMATE' | 'MANUAL'
+- Multi-year SDF: future enhancement to comp pool, not a dependency
+- arv_calculator.py: pending refactor (item 17) to implement this model.
+  Do not use current version — mqi_qualified drift present.
+
+---
+
 ## Signal Tiers
 
 - Signal tier reflects delivery source, not underlying event type.
@@ -202,12 +236,25 @@ WHERE conrelid = 'filter_profiles'::regclass AND contype = 'u';
 
 ## Scoring and Filter Enforcement Model
 
-- passed_filters, filter_rejection_reasons, deal_score computed at query time
-  against standing inventory — NOT at ingest time.
+- Search/filter execution is query-time only. When a user executes a search,
+  FastAPI builds a SQL query against `properties` and `listing_events` using
+  the filter profile criteria as WHERE clauses and deal score weights as ORDER BY.
+  No pre-computation. No background recompute job. This is the standard screener
+  pattern — identical to ChartMill, Yelp, and every other multi-parameter search UI.
+- passed_filters, filter_rejection_reasons, and deal_score are NOT stored on
+  `listing_events`. They are computed at query time and returned in the response.
+- `listing_scores` captures scoring output only when a user acts on a result
+  (selects a property and initiates outreach). It is an audit record of the score
+  at the moment of user action — not a search cache and not a pre-computed index.
 - deal_score_version tracks algorithm version for auditability.
-- Filter profile save/modify triggers background recompute of listing_events
-  for that county_fips — Phase 4 dependency.
-- API routes sort and filter on pre-computed columns only.
+- Filter profile save and filter profile execute are two distinct operations:
+  - Save: writes filter_criteria to filter_profiles. No query, no scoring.
+  - Execute/Search: runs the live query against inventory. Results are not persisted
+    unless the user acts on them.
+- API routes sort and filter on query-time computed values only.
+- mqi_qualified, mqi_rejection_reasons, mqi_qualified_at are POC artifacts.
+  All rows carry mqi_qualified = false as neutral placeholder. These columns
+  will be removed in a future migration once Phase 4 query-time filter is live.
 
 ---
 
@@ -383,7 +430,7 @@ Indexes:
     "ix_properties_sale_yr1" btree (sale_yr1)
     "ix_properties_state_par_id" btree (state_par_id)
 
-### listing_events (confirmed 2026-04-27)
+### listing_events (confirmed 2026-05-04, updated v0.16)
 id                        INTEGER       PK
 county_fips               VARCHAR(5)    NOT NULL
 parcel_id                 VARCHAR(30)   NOT NULL
@@ -406,12 +453,6 @@ arv_spread                INTEGER
 zestimate_value           INTEGER
 zestimate_discount_pct    NUMERIC(6,3)
 zestimate_fetched_at      TIMESTAMPTZ
-deal_score                NUMERIC(5,4)
-deal_score_version        VARCHAR(20)
-deal_score_components     JSONB
-filter_profile_id         INTEGER
-passed_filters            BOOLEAN
-filter_rejection_reasons  JSONB
 workflow_status           VARCHAR(30)   NOT NULL
 notes                     TEXT
 raw_listing_json          JSONB
@@ -420,10 +461,35 @@ created_at                TIMESTAMPTZ   NOT NULL  default now()
 updated_at                TIMESTAMPTZ   NOT NULL  default now()
 signal_tier               INTEGER
 signal_type               VARCHAR(50)
-Indexes: listing_events_pkey, ix_le_county_parcel, ix_le_deal_score,
-         ix_le_listing_type, ix_le_status, ix_le_signal_tier,
-         ix_le_signal_type
-		 
+Indexes: listing_events_pkey, ix_le_county_parcel, ix_le_listing_type,
+         ix_le_status, ix_le_signal_tier, ix_le_signal_type
+-- Note: ix_le_deal_score, filter_profile_id, passed_filters,
+-- filter_rejection_reasons, deal_score, deal_score_version, and
+-- deal_score_components removed in v0.16. Scoring output lives in
+-- listing_scores.
+
+### listing_scores (v0.16)
+id                        INTEGER       PK autoincrement
+listing_event_id          INTEGER       NOT NULL FK → listing_events.id ON DELETE CASCADE
+filter_profile_id         INTEGER       NOT NULL FK → filter_profiles.id ON DELETE CASCADE
+user_id                   INTEGER       NOT NULL FK → users.id ON DELETE CASCADE
+county_fips               VARCHAR(5)    NOT NULL  -- denormalized for query performance
+passed_filters            BOOLEAN
+filter_rejection_reasons  JSONB
+deal_score                NUMERIC(5,4)
+deal_score_version        VARCHAR(20)
+deal_score_components     JSONB
+scored_at                 TIMESTAMPTZ   NOT NULL  default now()
+UNIQUE (listing_event_id, filter_profile_id)
+  -- uq_ls_event_profile
+Indexes: listing_scores_pkey, ix_ls_user_profile (user_id, filter_profile_id),
+         ix_ls_user_county_score (user_id, county_fips, deal_score),
+         ix_ls_passed_filters (filter_profile_id, passed_filters)
+
+Purpose: audit record only. A row is written when a user selects a property
+and initiates outreach — capturing the score at the moment of that action.
+Not a search cache. Not pre-computed. Written on user action, not on search execution.
+
 ### users (v0.13)
 id               INTEGER       PK autoincrement
 email            VARCHAR(255)  NOT NULL UNIQUE
@@ -468,6 +534,9 @@ page         VARCHAR(20)
 created_at   TIMESTAMPTZ  NOT NULL default now()
 UNIQUE (county_fips, parcel_id, sale_date, grantor, grantee)
   -- uq_psh_county_parcel_sale
+  -- qual codes for ARV: '01' primary, '02' caution, '03' distressed signal
+  -- all other qual codes excluded from comp pool
+  -- Santa Rosa verified: 35,340 records, 4,884 qualified '01' sales 2024-2025
 
 ### data_source_status (v0.12)
 source       VARCHAR(100)  NOT NULL  PK

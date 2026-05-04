@@ -48,6 +48,7 @@ Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`
 ## Context File Map
 | Work area | Paste this |
 |---|---|
+| ARV / deal scoring / comp engine | `context/arv.md` |
 | CAMA ingest / scraping | `context/cama.md` |
 | NAL / GIS ingest pipeline | `context/ingest.md` |
 | Scrapers / listing sources | `context/scrapers.md` |
