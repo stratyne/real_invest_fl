@@ -41,7 +41,7 @@ def map_nal_row(
         # ---------------------------------------------------------- #
         "co_no":       _int(row.get("CO_NO")),
         "asmnt_yr":    _int(row.get("ASMNT_YR")),
-        "dor_uc":      _str_max(row.get("DOR_UC"), 10),
+        "dor_uc":      _dor_uc(row.get("DOR_UC")),
         "pa_uc":       _str_max(row.get("PA_UC"), 10),
         "state_par_id": _str_max(row.get("STATE_PAR_ID"), 30),
 
@@ -241,3 +241,22 @@ def _str(val) -> str | None:
         return None
     s = str(val).strip()
     return s if s else None
+
+def _dor_uc(val) -> str | None:
+    """
+    Normalize DOR use code to zero-padded three digits.
+
+    Florida DOR specifies use codes as three-digit values (001, 002, etc.).
+    Some county NAL files ship unpadded integers (1, 2, 93). This function
+    normalizes all variants to '001', '002', '093' etc. for consistent
+    querying across all 67 counties.
+
+    Returns None if the value is missing or non-numeric.
+    """
+    s = _str(val)
+    if s is None:
+        return None
+    try:
+        return str(int(s)).zfill(3)
+    except ValueError:
+        return None

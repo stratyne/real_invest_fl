@@ -15,4 +15,5 @@ from .email_template import EmailTemplate                      # noqa: F401
 from .outreach_log import OutreachLog                          # noqa: F401
 from .ingest_run import IngestRun                              # noqa: F401
 from .data_source_status import DataSourceStatus               # noqa: F401
+from .parcel_sale_history import ParcelSaleHistory  # noqa: F401
 # ui_session intentionally omitted — dropped in v0.13

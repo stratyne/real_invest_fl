@@ -65,6 +65,62 @@ open — use CHECKPOINT.md for that.
   FL_LAT_MIN/MAX = 24.4/31.1, FL_LON_MIN/MAX = -87.65/-80.0.
   Western boundary is -87.65, not -87.6 — confirmed against 18 valid
   Escambia parcels along the Perdido River.
+  
+### CAMA Ingest Framework
+
+Subpackage: real_invest_fl/ingest/cama/
+  base.py        — shared framework, no county-specific logic
+  escambia.py    — Escambia County scraper
+  santa_rosa.py  — Santa Rosa County scraper
+  __init__.py    — package marker
+
+base.py design rules (never override):
+- coerce_building() returns (coerced: dict, null_cols: set[str])
+  null_cols contains columns explicitly rejected by sanity guards —
+  write_cama() writes NULL for these regardless of existing DB value.
+  This is distinct from absent/unparseable fields which return None
+  and are silently skipped.
+- write_cama() never overwrites a good DB value with None from a
+  failed parse, but DOES overwrite with NULL for guard-rejected values.
+- All rate-limiting parameters are county-supplied. base.py has no
+  defaults. County module must declare: DEFAULT_DELAY, DEFAULT_DELAY_MAX,
+  REST_EVERY (None = no rest pauses), REST_SECONDS.
+- target_dor_ucs is county-supplied — e.g. ['001'] for single-family.
+  Never hardcoded in base.py.
+- Soft-block sentinel: base.SOFT_BLOCK = "__SOFT_BLOCK__"
+  County fetch_page() returns this to stop the run cleanly.
+  Returning None skips the parcel and continues the run.
+
+parcel_sale_history table:
+  Stores full ownership chain per parcel from county PA scrape.
+  Distinct from sales_comps (SDF-sourced qualified arm's-length only).
+  Unique constraint: uq_psh_county_parcel_sale on
+  (county_fips, parcel_id, sale_date, grantor, grantee).
+  grantor/grantee NOT NULL DEFAULT '' — empty string used in place of
+  NULL to ensure unique constraint fires correctly.
+
+dor_uc normalization:
+  Florida DOR specifies use codes as three-digit zero-padded strings.
+  Some county NAL files ship unpadded (Escambia: '1', '2', '93').
+  nal_mapper.py _dor_uc() helper normalizes all variants to '001',
+  '002', '093' etc. at ingest time.
+  Escambia rows backfilled via:
+    UPDATE properties SET dor_uc = LPAD(TRIM(dor_uc), 3, '0')
+    WHERE county_fips = '12033' AND dor_uc IS NOT NULL
+    AND LENGTH(TRIM(dor_uc)) < 3;
+
+Santa Rosa parcelview notes:
+  URL: https://parcelview.srcpa.gov/?parcel={parcel_id}&baseUrl=http://srcpa.gov/
+  Server-rendered HTML, no JS/auth/cookies required.
+  Valid page marker: 'residentialBuildingsContainer'
+  Soft-block response: HTTP 200 with disclaimer-only body.
+  No robots.txt on srcpa.gov or parcelview.srcpa.gov.
+  Soft-block confirmed at ~2,859 requests over ~1h54m with no rest pauses.
+  Current rate limit settings: 1.0-3.0s delay, REST_EVERY=500,
+  REST_SECONDS=300.0.
+  Building data parsed from data-cell attribute pattern — no regex,
+  no sibling traversal. Sales data from salesContainer div, same pattern.
+  Zoning from zoningContainer div, Code cell.
 
 ### Scraping / Robots
 - Tier 1 government sources (RealForeclose, RealTaxDeed, LandmarkWeb):
@@ -621,3 +677,23 @@ Dependencies: get_current_user, require_county_access (superuser bypass).
 Seed scripts: seed_bundles.py, seed_superuser.py.
 115 tests passing. Two-pass code review completed and approved.
 passlib dropped — incompatible with bcrypt 4.0+/5.0.0.
+
+### Item 33 — parcel_sale_history Table (COMPLETE)
+Migrations g8h9i0j1k2l3 (v0.14) and h9i0j1k2l3m4 (v0.15).
+Stores full ownership chain per parcel from county PA scrape.
+Distinct from sales_comps (SDF-sourced qualified arm's-length only).
+Unique constraint uq_psh_county_parcel_sale on
+(county_fips, parcel_id, sale_date, grantor, grantee).
+grantor/grantee NOT NULL DEFAULT '' — empty string used in place of
+NULL to ensure unique constraint fires correctly.
+17,596+ rows as of 2026-05-04, Santa Rosa only.
+
+### Item 34 — Multi-County CAMA Framework (COMPLETE)
+Subpackage: real_invest_fl/ingest/cama/
+  base.py, escambia.py, santa_rosa.py, __init__.py
+All rate-limiting parameters county-supplied. No shared defaults.
+coerce_building() returns (coerced, null_cols) tuple.
+write_cama() explicitly NULLs guard-rejected fields.
+cama_ingest.py retained — do not delete until Escambia testing confirmed.
+Santa Rosa CAMA ingest in progress: 3,518/68,312 enriched as of 2026-05-04.
+See CAMA Status section in CHECKPOINT for full operational detail.

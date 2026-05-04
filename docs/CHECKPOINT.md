@@ -14,11 +14,13 @@ I will gladly share it with you. Do you understand the seriousness of the situat
 
 **Name:** Project Penstock
 **Repo:** stratyne/real_invest_fl (public)
+- GitHub requires login to view the repo despite it being public. You need to try the raw content URLs directly.
 **Local path:** D:\Chris\Documents\Stratyne\real_invest_fl
 **Python:** 3.13.5 | **Venv:** .venv | **Editor:** VSCodium 1.112.01907
 **DB container:** Docker — `real_invest_db`
 **DB verification:** Docker `psql` against `real_invest_db`
 (localhost:5432, user penstock, db real_invest_fl)
+docker exec -it real_invest_db psql -U penstock -d real_invest_fl -c "SELECT conname FROM pg_constraint WHERE conrelid = 'filter_profiles'::regclass AND contype = 'u';"
 
 ---
 
@@ -92,7 +94,7 @@ multi-county, subscription-gated.
 
 ---
 
-## Migration Chain (HEAD = f7a8b9c0d1e2)
+## Migration Chain (HEAD = h9i0j1k2l3m4)
 
 54c4159dbf59  v0.2   initial schema — 14 tables
 4ca6031e21c4  v0.3   NAL rename
@@ -109,6 +111,8 @@ f7a8b9c0d1e2  v0.13  user/tenant model — users, user_county_access,
                       subscription_bundles, bundle_counties,
                       filter_profiles.user_id, outreach_log.user_id,
                       drop ui_sessions
+g8h9i0j1k2l3  v0.14  add parcel_sale_history table
+h9i0j1k2l3m4  v0.15  parcel_sale_history grantor/grantee NOT NULL DEFAULT ''
 
 The ingest refactor (2026-05-02) produced NO migration. It is code-only.
 A future migration will remove mqi_qualified, mqi_rejection_reasons, and
@@ -118,17 +122,21 @@ mqi_qualified_at once Phase 4 query-time filter is live.
 
 ## Database State (verified 2026-05-02)
 
-| County | FIPS | NAL rows | GIS geometry | Notes |
-|---|---|---|---|---|
-| Escambia | 12033 | 170,561 | 160,264 | mqi nullified; CAMA partial |
-| Santa Rosa | 12113 | 120,500 | 108,493 | 12,007 no shapefile match (expected) |
-| All others | — | staged only | staged only | NAL CSVs + GIS shapefiles in place |
+| County | FIPS | NAL rows | GIS geometry | CAMA enriched | Notes |
+|---|---|---|---|---|---|
+| Escambia | 12033 | 170,561 | 160,264 | 0 | dor_uc backfilled to 3-digit; site down |
+| Santa Rosa | 12113 | 120,500 | 108,493 | 3,518 (in progress) | 64,794 remaining |
+| All others | — | staged only | staged only | 0 | NAL CSVs + GIS shapefiles in place |
 
 Total properties in DB: 291,061
+parcel_sale_history: 17,596+ rows (Santa Rosa, growing)
 All 67 county NAL CSVs staged under canonical folder structure.
 All 67 county GIS shapefiles staged under canonical folder structure.
 Miami-Dade has two shapefiles (main + condos). Saint Johns condos zip
 contained .dbf only — no .shp, no action required.
+dor_uc normalized to zero-padded three digits for all ingested counties.
+Escambia dor_uc backfilled via direct SQL UPDATE 2026-05-04.
+Santa Rosa NAL re-ingested 2026-05-04 with normalized dor_uc.
 
 ### Pre-2026-05-02 POC data counts (Escambia only, now superseded)
 | Dataset | Count | Notes |
@@ -142,30 +150,72 @@ contained .dbf only — no .shp, no action required.
 
 ---
 
-## CAMA Status (Escambia only)
+## CAMA Status
 
-Previous run wrote zoning to 1,399 Escambia parcels (dor_uc = '1') but
-cama_enriched_at was never set on any row — confirmed 2026-05-02. All
-remaining CAMA fields (foundation_type, exterior_wall, roof_type, etc.)
-are NULL for those 1,399 parcels. Full re-scrape of all 106,372 dor_uc
-= '1' Escambia parcels is required when escpa.org comes back online.
+### Escambia (12033)
+Previous run wrote zoning to 1,399 parcels (dor_uc = '001') but
+cama_enriched_at was never set — confirmed 2026-05-02. All remaining
+CAMA fields are NULL for those 1,399 parcels. Full re-scrape of all
+106,372 dor_uc = '001' Escambia parcels required when escpa.org comes
+back online. Verify with --limit 5 --dry-run before any live run.
 
 escpa.org was down as of 2026-05-02. Do not attempt live CAMA ingest
-until the site is confirmed back up. Verify with a --limit 5 --dry-run
-before any live run.
+until confirmed back up.
 
-cama_ingest.py now queries WHERE county_fips = '12033' AND dor_uc = '1'
-AND cama_enriched_at IS NULL. The previous mqi_qualified = true gate was
-removed 2026-05-02 — mqi_qualified is a neutral placeholder (all false)
-pending Phase 4 query-time filter implementation.
+Scraper: real_invest_fl/ingest/cama/escambia.py
+Runner: python -m real_invest_fl.ingest.cama.escambia [options]
+Rate limiting: DEFAULT_DELAY=1.5, DEFAULT_DELAY_MAX=4.0,
+               REST_EVERY=100, REST_SECONDS=270.0 (empirically tested)
+cama_ingest.py retained — do not delete until Escambia testing confirmed.
 
-Beds/baths NOT available from ECPA CAMA detail page — populated
-opportunistically from listing sources. Full CAMA enrichment is not
-POC-critical but must complete before Phase 4 UI surfaces CAMA fields.
+Beds/baths NOT available from ECPA CAMA detail page.
+Sale history NOT available from ECPA CAMA detail page — captured
+separately via escambia_taxdeed_clerk.py and staging parsers.
 
-Multi-county CAMA is deferred. Each county property appraiser has a
-different website, URL pattern, and HTML structure. No shared scraper
-is possible. This is a Phase 3 problem.
+### Santa Rosa (12113)
+Scraper: real_invest_fl/ingest/cama/santa_rosa.py
+Runner: python -m real_invest_fl.ingest.cama.santa_rosa [options]
+Data source: https://parcelview.srcpa.gov/?parcel={parcel_id}&baseUrl=http://srcpa.gov/
+Server-rendered HTML. No JavaScript, auth, or cookies required.
+Rate limiting: DEFAULT_DELAY=1.0, DEFAULT_DELAY_MAX=3.0,
+               REST_EVERY=500, REST_SECONDS=300.0
+No robots.txt on either srcpa.gov or parcelview.srcpa.gov.
+Soft-block confirmed at ~2,859 requests over ~1h54m at 1.0-3.0s delay
+with no rest pauses. REST_EVERY=500/REST_SECONDS=300.0 added as mitigation.
+Soft-block signature: HTTP 200 with disclaimer-only response body
+(residentialBuildingsContainer absent). Scraper stops cleanly on detection.
+Run is fully resumable — cama_enriched_at IS NULL filter skips
+already-processed parcels automatically.
+
+Status as of 2026-05-04: 3,518/68,312 enriched, run in progress.
+Target: 68,312 dor_uc = '001' parcels.
+Estimated remaining runtime at current settings: ~42 hours.
+
+Sale history captured from same parcelview page per request.
+parcel_sale_history populated with full ownership chain per parcel.
+
+### Multi-county CAMA architecture
+Each county property appraiser has a different website, URL pattern,
+and HTML structure. No shared scraper is possible.
+
+Shared framework: real_invest_fl/ingest/cama/base.py
+  - coerce_building() — returns (coerced, null_cols) tuple
+  - coerce_sale()
+  - fetch_qualified_parcels() — target_dor_ucs county-supplied
+  - write_cama() — writes non-None values; explicitly NULLs guard-rejected fields
+  - write_sales() — upserts to parcel_sale_history, idempotent
+  - run() / main() — all rate-limiting params county-supplied, no defaults
+
+County modules supply: COUNTY_FIPS, SOURCE_NAME, HEADERS,
+TARGET_DOR_UCS, DEFAULT_DELAY, DEFAULT_DELAY_MAX, REST_EVERY,
+REST_SECONDS, fetch_page(), parse_building(), parse_sales()
+
+New county checklist:
+  1. Check robots.txt at county PA domain
+  2. Inspect parcel page HTML structure
+  3. Determine rate limit empirically (start conservative)
+  4. Create real_invest_fl/ingest/cama/{county_snake}.py
+  5. Add to COUNTY_REGISTRY in nal_ingest.py and gis_ingest.py
 
 ---
 
@@ -181,22 +231,20 @@ is possible. This is a Phase 3 problem.
 6. **[COMPLETE]** Ingest pipeline refactor — nal_ingest.py and
    gis_ingest.py fully multi-county. --county-fips required CLI arg.
    Canonical path resolution. Filter logic removed from ingest.
-   mqi nullification complete for all Escambia rows.
+   mqi nullification complete for all Escambia rows. dor_uc normalized
+   to zero-padded three digits in nal_mapper.py (_dor_uc() helper).
+   Escambia dor_uc backfilled via direct SQL UPDATE 2026-05-04.
 7. **[COMPLETE]** Statewide NAL staging — all 67 county NAL CSVs staged.
 8. **[COMPLETE]** Statewide GIS staging — all 67 county GIS shapefiles staged.
-9. **[COMPLETE]** Santa Rosa NAL ingest — 120,500 rows.
+9. **[COMPLETE]** Santa Rosa NAL ingest — 120,500 rows. Re-ingested 2026-05-04 with normalized dor_uc.
 10. **[COMPLETE]** Santa Rosa GIS ingest — 108,493 rows with geometry.
-11. **[PENDING — BLOCKER]** Run seed_superuser.py — required before
-    Phase 4 auth can be tested.
-12. **[PENDING — BLOCKER]** Run seed_bundles.py — seeds Pensacola Metro
-    bundle, activates Santa Rosa county access.
+11. **[PENDING — BLOCKER]** Run seed_superuser.py — required before Phase 4 auth can be tested.
+12. **[PENDING — BLOCKER]** Run seed_bundles.py — seeds Pensacola Metro bundle, activates Santa Rosa county access.
 13. **[NEXT]** Phase 4 UI — FastAPI + React (Vite) + MapLibre GL JS.
-    Full detail in REFERENCE.md Item 6. Seed scripts (items 11-12) must
-    run first.
+    Seed scripts (items 11-12) must run first. Santa Rosa CAMA ingest runs in background — UI development proceeds in parallel.
 14. **[PENDING]** Statewide NAL ingest — 65 remaining counties.
 15. **[PENDING]** Statewide GIS ingest — 65 remaining counties.
-16. **[PENDING]** CAMA resume — Escambia only, 106,372 parcels,
-    when escpa.org comes back online.
+16. **[IN PROGRESS]** CAMA enrichment — Santa Rosa 3,518/68,312 complete, run in progress. Escambia pending escpa.org recovery.
 17. **[PENDING]** arv_calculator.py — same mqi_qualified drift as
     cama_ingest.py. Needs refactor before use.
 18. **[PENDING]** COUNTY_REGISTRY consolidation — currently duplicated
@@ -225,7 +273,6 @@ is possible. This is a Phase 3 problem.
 31. **[DEFERRED]** Full CAMA enrichment statewide — Phase 3, each
     county requires its own scraper.
 32. **[DEFERRED]** NAV data ingest.
-33. **[DEFERRED]** SDF comp engine.
 
 ---
 
