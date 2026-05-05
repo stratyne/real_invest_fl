@@ -86,9 +86,7 @@ Retained as reference for backfill completeness verification.
 | # | Status | Description | Next Action |
 |---|---|---|---|
 | 1 | PARTIAL | Beds/baths opportunistic population | Bulk source pending — not a blocker |
-| 11 | BLOCKER | seed_superuser.py not yet run | Run script before Phase 4 auth test |
-| 12 | BLOCKER | seed_bundles.py not yet run | Run script — seeds Pensacola Metro bundle |
-| 13 | NEXT | Phase 4 UI — FastAPI + React + MapLibre | Clear items 11–12 first |
+| 13 | ACTIVE | Phase 4 UI — FastAPI + React + MapLibre | Outreach design session (schema + templates + send mechanism) → routes/outreach.py |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running; Escambia blocked |
@@ -104,6 +102,8 @@ Retained as reference for backfill completeness verification.
 | 27 | PENDING | LienHub advertised list | Check 2026-05-05 — see URL in scrapers.md |
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
+| 36 | BLOCKED | routes/outreach.py | Requires: outreach_log full schema + migration, email_template seed + placeholder spec, send mechanism decision (SendGrid vs SMTP) |
+| 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py — add update to counties row on successful ingest completion |
 
 ## Deferred Items
 | # | Description | Reason |
@@ -125,5 +125,8 @@ Retained as reference for backfill completeness verification.
 | 8 | Statewide GIS staging — all 67 counties | 2026-05-02 |
 | 9 | Santa Rosa NAL ingest — 120,500 rows | 2026-05-04 |
 | 10 | Santa Rosa GIS ingest — 108,493 rows | 2026-05-02 |
+| 11 | seed_superuser.py — superuser created, Escambia access granted | 2026-05-04 |
+| 12 | seed_bundles.py — pensacola_metro bundle seeded, Santa Rosa activated | 2026-05-04 |
 | 33 | parcel_sale_history table (v0.14, v0.15) | 2026-05-04 |
 | 34 | Multi-county CAMA framework | 2026-05-04 |
+| 35 | Phase 4 API scaffold — deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |

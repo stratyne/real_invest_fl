@@ -258,6 +258,29 @@ WHERE conrelid = 'filter_profiles'::regclass AND contype = 'u';
 
 ---
 
+## Workflow Status Transition Map (locked 2026-05-04)
+
+Valid workflow_status values on listing_events:
+    NEW | REVIEWED | APPROVE_SEND | SENT | RESPONDED | REJECTED | CLOSED
+
+Enforced server-side in routes/listings.py PATCH status endpoint.
+No transition outside this map is permitted — returns 422.
+
+| From         | Permitted transitions                  |
+|---|---|
+| NEW          | REVIEWED, REJECTED                     |
+| REVIEWED     | APPROVE_SEND, REJECTED                 |
+| APPROVE_SEND | SENT, REVIEWED                         |
+| SENT         | RESPONDED, CLOSED, REJECTED            |
+| RESPONDED    | CLOSED, REVIEWED                       |
+| REJECTED     | REVIEWED, CLOSED                       |
+| CLOSED       | (terminal — no transitions permitted)  |
+
+CLOSED is terminal. A closed listing_event is never reopened.
+A new scrape event for the same parcel produces a new listing_events row.
+
+---
+
 ## Auth Model
 
 - JWT HS256 via PyJWT. sub = users.id as string. email included as display
@@ -271,6 +294,55 @@ WHERE conrelid = 'filter_profiles'::regclass AND contype = 'u';
   user_county_access for (user_id, county_fips) row, raises 403 on denial.
 - Auth routes: POST /auth/token, GET /auth/me only.
   Registration, password reset, user management deferred to Phase 4.
+
+---
+
+## require_county_access — Dependency Pattern (2026-05-04)
+
+`require_county_access` (explicit await call pattern) removed from deps.py.
+Replaced with `county_access()` factory function. No routes used the old
+pattern — replacement made at zero migration cost.
+
+### Rationale
+The explicit `await require_county_access(county_fips, current_user, db)`
+pattern inside route bodies is easy to omit on new routes and is not
+declarative — county access enforcement is invisible from the route signature.
+
+The factory pattern makes enforcement declarative and impossible to omit:
+removing `Depends(county_access())` also removes the path parameter, so a
+route cannot compile without access enforcement once the pattern is standard.
+
+### Standard Pattern
+
+Factory lives in `real_invest_fl/api/deps.py`.
+
+```python
+county_access()          # binds to path param named 'county_fips' (default)
+county_access("fips")    # use if path param has a different name
+```
+
+Route declaration — always use Depends, never call directly:
+
+```python
+@router.get("/{county_fips}/properties")
+async def list_properties(
+    county_fips: str = Depends(county_access()),
+    db: AsyncSession = Depends(get_db),
+) -> ...:
+    ...
+```
+
+`current_user` is available inside the factory dependency but is NOT
+injected into the route — routes that need the user object must declare
+`current_user: User = Depends(get_current_user)` separately.
+
+### Superuser Bypass
+Superusers bypass `user_county_access` check entirely. Enforced inside
+the factory, not at the application layer.
+
+### Scope
+Every county-scoped route must declare `county_fips: str = Depends(county_access())`.
+Non-county routes (e.g. /auth/*, /health) are exempt.
 
 ---
 
@@ -538,10 +610,15 @@ UNIQUE (county_fips, parcel_id, sale_date, grantor, grantee)
   -- all other qual codes excluded from comp pool
   -- Santa Rosa verified: 35,340 records, 4,884 qualified '01' sales 2024-2025
 
-### data_source_status (v0.12)
-source       VARCHAR(100)  NOT NULL  PK
-county_fips  VARCHAR(5)    NOT NULL  PK
-last_run_at  TIMESTAMPTZ
-last_status  VARCHAR(50)
-last_count   INTEGER
-notes        TEXT
+### data_source_status (v0.12, confirmed 2026-05-04)
+source               VARCHAR(100)  NOT NULL  PK
+county_fips          VARCHAR(5)    NOT NULL  PK
+display_name         VARCHAR(200)  NOT NULL
+last_success_at      TIMESTAMPTZ   nullable
+last_run_at          TIMESTAMPTZ   nullable
+last_run_status      VARCHAR(20)   nullable  -- SUCCESS | FAILED | PARTIAL
+last_record_count    INTEGER       nullable
+last_error_message   TEXT          nullable
+created_at           TIMESTAMPTZ   NOT NULL  default now()
+updated_at           TIMESTAMPTZ   NOT NULL  default now()
+
