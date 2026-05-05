@@ -1,13 +1,14 @@
 """
 Shared FastAPI dependencies — DB session, auth, county access enforcement.
 
-get_current_user: validates JWT, returns User ORM object.
-require_county_access: enforces user_county_access membership.
-    Superusers bypass the check entirely.
+get_current_user:  validates JWT, returns User ORM object.
+county_access():   factory — returns a dependency that enforces
+                   user_county_access membership for a county-scoped route.
+                   Superusers bypass the check entirely.
 """
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Path, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,41 +51,52 @@ async def get_current_user(
     return user
 
 
-async def require_county_access(
-    county_fips: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> str:
-    """Verify the current user is authorised to access county_fips.
+def county_access(fips_param: str = "county_fips"):
+    """Return a FastAPI dependency that enforces county access for a route.
 
-    Superusers bypass the check entirely.
-    Returns county_fips on success for use by the calling route.
-    Raises 403 if access is denied.
+    Extracts county_fips from the path parameter named by fips_param,
+    checks user_county_access, and returns the validated fips string.
+    Superusers bypass the access check entirely.
 
-    Note: county_fips must be passed explicitly by the route — this
-    dependency does not extract it from the path automatically.
-    Typical route usage:
-        fips = await require_county_access("12033", current_user, db)
-    Or as a FastAPI Depends chain in a sub-dependency per route.
+    Args:
+        fips_param: Name of the path parameter carrying the county FIPS.
+                    Defaults to 'county_fips'. Override only if the route
+                    uses a different path parameter name.
+
+    Usage:
+        @router.get("/{county_fips}/properties")
+        async def list_properties(
+            county_fips: str = Depends(county_access()),
+            db: AsyncSession = Depends(get_db),
+        ) -> ...:
+            ...
+
+    Routes that also need the current user must declare it separately:
+        current_user: User = Depends(get_current_user)
     """
-    if current_user.is_superuser:
+    async def _dep(
+        county_fips: str = Path(..., alias=fips_param),
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> str:
+        if current_user.is_superuser:
+            return county_fips
+
+        result = await db.execute(
+            select(UserCountyAccess).where(
+                UserCountyAccess.user_id == current_user.id,
+                UserCountyAccess.county_fips == county_fips,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access to county {county_fips} not authorised",
+            )
+
         return county_fips
 
-    result = await db.execute(
-        select(UserCountyAccess).where(
-            UserCountyAccess.user_id == current_user.id,
-            UserCountyAccess.county_fips == county_fips,
-        )
-    )
-    access_row = result.scalar_one_or_none()
-
-    if access_row is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Access to county {county_fips} not authorised",
-        )
-
-    return county_fips
+    return _dep
 
 
 # Re-export get_db for call sites that import everything from deps
