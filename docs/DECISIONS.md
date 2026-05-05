@@ -497,6 +497,23 @@ engine = create_engine(settings.sync_database_url)```
 - Snapshotted to outreach_log.calendar_link at generate time.
 - Exposed via UserUpdate Pydantic schema (item 42).
 
+---
+
+## booking_url removed (2026-05-05)
+
+Supersedes: `booking_url` setting introduced in original outreach config.
+
+`booking_url` removed from `settings.py` and `.env.example`.
+Single global booking URL is inconsistent with the multi-user design.
+Replaced by `users.calendar_link` (VARCHAR(1000) nullable, added v0.17).
+Per-user `calendar_link` is snapshotted to `outreach_log.calendar_link`
+at generate time. If `current_user.calendar_link` is NULL, `outreach_log`
+carries NULL and the UI surfaces "no booking link set" to the user.
+No silent fallback to a shared URL.
+
+Codebase search confirmed `booking_url` had zero references outside
+`config/settings.py` at time of removal — no other file required updating.
+
 ## Schema Reference
 
 ### properties (confirmed 2026-05-04)

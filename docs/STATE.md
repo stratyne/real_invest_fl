@@ -110,7 +110,6 @@ Retained as reference for backfill completeness verification.
 | 40 | PENDING | Pydantic schemas | Request/response models for all outreach routes |
 | 41 | PENDING | routes/outreach.py implementation | generate, send, list, skip_trace stub. Requires items 43, 38, 39, 40 complete first. |
 | 42 | PENDING | users.calendar_link — Pydantic + route exposure | Add to UserUpdate schema. Expose via PATCH /auth/me or user management route when implemented. |
-| 43 | PENDING | settings.py additions | Add: BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, SENDGRID_API_KEY, BUSINESS_ADDRESS. Required before items 38 and 41. |
 
 ## Deferred Items
 | # | Description | Reason |
@@ -139,4 +138,5 @@ Retained as reference for backfill completeness verification.
 | 33 | parcel_sale_history table (v0.14, v0.15) | 2026-05-04 |
 | 34 | Multi-county CAMA framework | 2026-05-04 |
 | 35 | Phase 4 API scaffold — deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |
+| 43 | settings.py additions | BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, BUSINESS_ADDRESS added. SENDGRID_API_KEY confirmed already present. booking_url removed. .env.example updated to match. |
 | 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |

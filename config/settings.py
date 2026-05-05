@@ -43,7 +43,14 @@ class Settings(BaseSettings):
 
     # Outreach
     allow_automated_outreach: bool = False
-    booking_url: str = ""
+
+    # Skip trace
+    batchdata_api_key: str = ""
+    skip_trace_cache_ttl_days: int = 30
+
+    # CAN-SPAM compliance — required in every outgoing commercial email
+    # send_outreach raises 503 if this is empty
+    business_address: str = ""
 
     # Notifications
     discord_webhook_url: str = ""
