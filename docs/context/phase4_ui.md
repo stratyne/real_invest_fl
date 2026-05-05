@@ -182,11 +182,20 @@ until it appears in this table. County-scoped routes always use
 | routes/approvals.py | Reserved — workflow approval step, Phase 4 tail |
 
 ### Outreach Implementation Order (locked 2026-05-05)
-1. settings.py — BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, SENDGRID_API_KEY, BUSINESS_ADDRESS (item 43)
-2. seed_outreach_templates.py — system EMAIL + LETTER templates (item 38)
+1. ✅ settings.py — BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, SENDGRID_API_KEY, BUSINESS_ADDRESS (item 43)
+2. ✅ seed_outreach_templates.py — system EMAIL + LETTER templates (item 38)
 3. ORM models — OutreachTemplate, SkipTraceCache, OutreachLog (item 39)
 4. Pydantic schemas — request/response models for outreach routes (item 40)
 5. routes/outreach.py — generate, send, list, skip_trace stub (item 41)
+
+### Outreach UI Requirements (locked 2026-05-05)
+- Warn user at generate time if current_user.calendar_link is NULL and the
+  selected template is the system EMAIL template. The rendered message will
+  contain a blank line where the booking link should appear.
+- Surface arv_source distinction (COMP vs JV_FALLBACK) in all property result
+  views — do not treat as equivalent. Already required by Key Design Constraints.
+- LETTER output: React react-to-print + window.print(). No server-side PDF.
+  UI presents rendered letter body; user triggers print dialog from browser.
 
 ### Deferred from Initial Phase 4 Scaffold
 - Zestimate fetch endpoint (item 21) — RapidAPI wrapper not yet built

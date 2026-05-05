@@ -514,6 +514,58 @@ No silent fallback to a shared URL.
 Codebase search confirmed `booking_url` had zero references outside
 `config/settings.py` at time of removal — no other file required updating.
 
+---
+
+## Outreach Template Seeding (2026-05-05)
+
+Two system-owned templates seeded via seed_outreach_templates.py:
+  - "System Default Email"  — template_type = EMAIL, county_fips = NULL (global)
+  - "System Default Letter" — template_type = LETTER, county_fips = NULL (global)
+
+ON CONFLICT clause uses explicit partial index target:
+  ON CONFLICT (template_name) WHERE user_id IS NULL DO NOTHING
+Matches uq_ot_system_name partial unique index exactly.
+Generic ON CONFLICT DO NOTHING is also valid in PostgreSQL for partial
+index violations but the explicit form is used throughout this project
+for clarity.
+
+### System EMAIL template — variable map
+Variables resolved at generate time in routes/outreach.py:
+  {{ owner_name }}         — properties.own_name
+  {{ property_address }}   — properties.phy_addr1
+  {{ property_city }}      — properties.phy_city
+  {{ property_zip }}       — properties.phy_zipcd
+  {{ sender_name }}        — users.full_name
+  {{ sender_email }}       — users.email
+  {{ calendar_link }}      — outreach_log.calendar_link (snapshot of users.calendar_link)
+  {{ business_address }}   — settings.BUSINESS_ADDRESS
+{{ calendar_link }} is unguarded in the system EMAIL template intentionally —
+system template is used for demo purposes. If current_user.calendar_link is
+NULL, a blank line is rendered in the message body.
+UI REQUIREMENT: warn the user at generate time if current_user.calendar_link
+is NULL and they have selected the system EMAIL template.
+
+### System LETTER template — variable map
+Variables resolved at generate time in routes/outreach.py:
+  {{ today_date }}         — datetime.today().strftime("%B %d, %Y") at generate time
+  {{ owner_name }}         — properties.own_name
+  {{ recipient_address1 }} — outreach_log.recipient_address1 (snapshot of properties.own_addr1)
+  {{ recipient_address2 }} — outreach_log.recipient_address2 (snapshot of properties.own_addr2)
+  {{ recipient_city }}     — outreach_log.recipient_city (snapshot of properties.own_city)
+  {{ recipient_state }}    — outreach_log.recipient_state (snapshot of properties.own_state)
+  {{ recipient_zip }}      — outreach_log.recipient_zip (snapshot of properties.own_zipcd)
+  {{ property_address }}   — properties.phy_addr1
+  {{ property_city }}      — properties.phy_city
+  {{ property_zip }}       — properties.phy_zipcd
+  {{ sender_name }}        — users.full_name
+  {{ sender_email }}       — users.email
+  {{ calendar_link }}      — outreach_log.calendar_link (snapshot of users.calendar_link)
+{% if calendar_link %} block guards the booking link section —
+LETTER renders cleanly without a calendar link set.
+Format: formal full-block business letter.
+Output: rendered string returned in response payload.
+React react-to-print + window.print() handles print/PDF on client side.
+
 ## Schema Reference
 
 ### properties (confirmed 2026-05-04)

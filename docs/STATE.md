@@ -138,5 +138,6 @@ Retained as reference for backfill completeness verification.
 | 33 | parcel_sale_history table (v0.14, v0.15) | 2026-05-04 |
 | 34 | Multi-county CAMA framework | 2026-05-04 |
 | 35 | Phase 4 API scaffold — deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |
+| 38 | seed_outreach_templates.py | System EMAIL + LETTER templates seeded. Explicit ON CONFLICT (template_name) WHERE user_id IS NULL DO NOTHING. |
 | 43 | settings.py additions | BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, BUSINESS_ADDRESS added. SENDGRID_API_KEY confirmed already present. booking_url removed. .env.example updated to match. |
 | 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |
