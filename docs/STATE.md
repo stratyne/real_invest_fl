@@ -27,7 +27,7 @@ no shared scraper possible).
 development proceeds in parallel. Seed scripts (items 11–12) must clear first.
 
 ## Migration Chain
-HEAD = i0j1k2l3m4n5 (v0.16)
+HEAD = j1k2l3m4n5o6 (v0.17)
 
 | Rev | Version | Description |
 |---|---|---|
@@ -46,6 +46,7 @@ HEAD = i0j1k2l3m4n5 (v0.16)
 | g8h9i0j1k2l3 | v0.14 | add parcel_sale_history table |
 | h9i0j1k2l3m4 | v0.15 | parcel_sale_history grantor/grantee NOT NULL DEFAULT '' |
 | i0j1k2l3m4n5 | v0.16 | listing_scores table; strip scoring columns from listing_events |
+| j1k2l3m4n5o6 | v0.17 | Phase 4 outreach schema — outreach_templates, skip_trace_cache, outreach_log (stub → full), users.calendar_link |
 
 **Note:** Ingest refactor (2026-05-02) produced NO migration — code only.
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
@@ -86,7 +87,7 @@ Retained as reference for backfill completeness verification.
 | # | Status | Description | Next Action |
 |---|---|---|---|
 | 1 | PARTIAL | Beds/baths opportunistic population | Bulk source pending — not a blocker |
-| 13 | ACTIVE | Phase 4 UI — FastAPI + React + MapLibre | Outreach design session (schema + templates + send mechanism) → routes/outreach.py |
+| 13 | ACTIVE | Phase 4 UI — FastAPI + React + MapLibre | settings.py additions (item 43) → seed_outreach_templates.py (item 38) → ORM models (item 39) → Pydantic schemas (item 40) → routes/outreach.py (item 41) |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running; Escambia blocked |
@@ -102,8 +103,14 @@ Retained as reference for backfill completeness verification.
 | 27 | PENDING | LienHub advertised list | Check 2026-05-05 — see URL in scrapers.md |
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
-| 36 | BLOCKED | routes/outreach.py | Requires: outreach_log full schema + migration, email_template seed + placeholder spec, send mechanism decision (SendGrid vs SMTP) |
+| 36 | ACTIVE | routes/outreach.py | Blocked items cleared. Next: settings.py (item 43) must be done first. |
 | 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py — add update to counties row on successful ingest completion |
+| 38 | PENDING | seed_outreach_templates.py | System EMAIL + LETTER seed templates. Run after settings.py (item 43). |
+| 39 | PENDING | ORM models | OutreachTemplate, SkipTraceCache, OutreachLog |
+| 40 | PENDING | Pydantic schemas | Request/response models for all outreach routes |
+| 41 | PENDING | routes/outreach.py implementation | generate, send, list, skip_trace stub. Requires items 43, 38, 39, 40 complete first. |
+| 42 | PENDING | users.calendar_link — Pydantic + route exposure | Add to UserUpdate schema. Expose via PATCH /auth/me or user management route when implemented. |
+| 43 | PENDING | settings.py additions | Add: BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, SENDGRID_API_KEY, BUSINESS_ADDRESS. Required before items 38 and 41. |
 
 ## Deferred Items
 | # | Description | Reason |
@@ -112,6 +119,8 @@ Retained as reference for backfill completeness verification.
 | 30 | Craigslist FSBO scraper | Effort/reward too low |
 | 31 | Full CAMA enrichment statewide | Phase 3 — each county needs own scraper |
 | 32 | NAV data ingest | Deferred |
+| 44 | Skip-trace live integration | BatchData API wrapper, credit/billing model, DNC compliance. Schema scaffold in place (v0.17). Unblock after Phase 4 outreach flow is live. |
+
 
 ## Completed Items (summary — detail in DECISIONS.md and context/ files)
 | # | Description | Completed |
@@ -130,3 +139,4 @@ Retained as reference for backfill completeness verification.
 | 33 | parcel_sale_history table (v0.14, v0.15) | 2026-05-04 |
 | 34 | Multi-county CAMA framework | 2026-05-04 |
 | 35 | Phase 4 API scaffold — deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |
+| 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |

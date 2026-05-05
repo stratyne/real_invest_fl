@@ -87,6 +87,7 @@ real_invest_fl/api/routes/
 - [✅] seed_bundles.py run (item 12)
 - [✅] require_county_access path-parameter pattern standardized
 - [✅] Phase 4 route design documented before code is written
+- [✅] v0.17 migration live — outreach_templates, skip_trace_cache, outreach_log, users.calendar_link
 
 ## Route Design (locked 2026-05-04)
 
@@ -145,9 +146,10 @@ until it appears in this table. County-scoped routes always use
 #### Outreach — /{county_fips}/outreach
 | Method | Path | Handler | Description |
 |---|---|---|---|
-| POST | /{county_fips}/outreach/generate | generate_outreach | Accepts parcel_id + listing_event_id + filter_profile_id. Generates outreach message from template. Writes listing_scores row (audit record). Returns draft message — does not send. |
-| POST | /{county_fips}/outreach/send | send_outreach | Accepts outreach_log_id. Sends the approved message via SendGrid/SMTP. Updates outreach_log with sent_at timestamp. |
-| GET | /{county_fips}/outreach | list_outreach | Returns outreach_log rows for the county, scoped to current user. |
+| POST | /{county_fips}/outreach/generate | generate_outreach | Accepts parcel_id + listing_event_id + filter_profile_id + template_id + optional force=true. Validates listing_event belongs to county_fips and parcel_id. Checks for existing listing_scores row — returns warning payload if found and force not set. Writes listing_scores audit row. Snapshots recipient data and skip_trace_cache result. Renders Jinja2 template. Writes DRAFT outreach_log row. Returns draft — does not send. |
+| POST | /{county_fips}/outreach/send | send_outreach | Accepts outreach_log_id. Validates log row belongs to current_user and status = DRAFT. Guards message_body NOT NULL. Sends via SendGrid. Updates status = SENT, sent_at = now(). On failure: status = FAILED, send_error populated. |
+| GET | /{county_fips}/outreach | list_outreach | Returns outreach_log rows for the county scoped to current_user. Superusers see only their own rows. |
+| POST | /{county_fips}/outreach/skip_trace | skip_trace | Accepts parcel_id. Returns cached skip_trace_cache row if present and not expired. Returns 501 when BATCHDATA_API_KEY not configured. |
 
 #### Dashboard — /dashboard (no county scope)
 | Method | Path | Handler | Description |
@@ -179,9 +181,19 @@ until it appears in this table. County-scoped routes always use
 | routes/ingest.py | /ingest/status |
 | routes/approvals.py | Reserved — workflow approval step, Phase 4 tail |
 
+### Outreach Implementation Order (locked 2026-05-05)
+1. settings.py — BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, SENDGRID_API_KEY, BUSINESS_ADDRESS (item 43)
+2. seed_outreach_templates.py — system EMAIL + LETTER templates (item 38)
+3. ORM models — OutreachTemplate, SkipTraceCache, OutreachLog (item 39)
+4. Pydantic schemas — request/response models for outreach routes (item 40)
+5. routes/outreach.py — generate, send, list, skip_trace stub (item 41)
+
 ### Deferred from Initial Phase 4 Scaffold
 - Zestimate fetch endpoint (item 21) — RapidAPI wrapper not yet built
 - Google Sheets export (item 22) — output pipeline Phase 2 tail
 - Email response tracking (item 23) — inbound webhook, Phase 4 tail
 - User management endpoints — registration, password reset, admin user CRUD
 - Approval workflow (approvals.py) — deferred until outreach flow is live
+- Skip-trace live integration (item 44) — BatchData API wrapper, credit/billing
+  model, DNC compliance. Schema scaffold in place. Unblock after outreach flow live.
+- users.calendar_link route exposure (item 42) — pending user management routes

@@ -383,6 +383,120 @@ engine = create_engine(settings.sync_database_url)```
 
 ---
 
+## Outreach Schema (v0.17, locked 2026-05-05)
+
+### outreach_log lifecycle
+- generate_outreach writes a DRAFT row to outreach_log and returns it.
+- send_outreach accepts outreach_log_id, sends via SendGrid, updates sent_at
+  and status = 'SENT'. send_error populated on failure, status = 'FAILED'.
+- Draft and sent state live on the same row — sent_at NULL means unsent.
+- outreach_log.status domain: DRAFT | SENT | FAILED (CHECK constraint live).
+- outreach_log.status is independent of listing_events.workflow_status.
+  The listing event transitions through its own map. The outreach log tracks
+  message lifecycle only.
+
+### outreach_log — re-generate blocking
+- generate_outreach checks for an existing listing_scores row for
+  (listing_event_id, filter_profile_id) before writing.
+- If one exists, route returns a warning payload instead of a new draft.
+- User must explicitly pass force=true to proceed past the warning.
+- On force=true: new outreach_log draft row is created. The existing
+  listing_scores row is NOT overwritten — uq_ls_event_profile enforces this.
+- Multiple outreach_log drafts for the same (user, listing_event, filter_profile)
+  are permitted. No unique constraint on outreach_log for this combination.
+
+### outreach_log — snapshot pattern
+- recipient_name, recipient_email, recipient_phone, recipient_address1,
+  recipient_address2, recipient_city, recipient_state, recipient_zip are
+  all snapshotted from properties at generate time.
+- Mailing address columns always populated regardless of template_type —
+  LETTER path always has what it needs; audit record is self-contained.
+- calendar_link snapshotted from users.calendar_link at generate time.
+  If user changes their link after drafting, the draft retains the original.
+- skip_trace_result snapshotted from skip_trace_cache at generate time
+  if a non-expired cache row exists for the parcel. NULL otherwise.
+- template_type snapshotted from outreach_templates row at generate time.
+
+### outreach_log — cascade rules
+- user_id: CASCADE — deleted user's log goes with them.
+- listing_event_id: CASCADE — no orphaned log rows.
+- filter_profile_id: SET NULL — deleted profile orphans the row gracefully.
+  Audit record preserved. filter_profile_id becomes NULL.
+- template_id: RESTRICT — template cannot be deleted while log rows
+  reference it. Preserves audit trail of what was sent.
+- listing_score_id: SET NULL — log row preserved if score row is deleted.
+
+### outreach_templates model
+- Mirrors filter_profiles system/user pattern exactly.
+- System templates: user_id IS NULL. Visible to all authorized users.
+  Not editable or deletable by users.
+- User templates: user_id = owner. Private. Cloneable from system templates.
+- county_fips nullable: NULL = global template (available across all counties
+  the user has access to). Non-NULL = county-scoped template.
+- A global system template and a county-scoped system template may share the
+  same template_name — this is intentional (county override pattern).
+- template_type domain: EMAIL | LETTER (CHECK constraint live on both
+  outreach_templates and outreach_log).
+- subject_template nullable — EMAIL only. LETTER has no subject line.
+- Partial unique indexes (live in DB, v0.17):
+  - System: UNIQUE (template_name) WHERE user_id IS NULL
+  - User: UNIQUE (user_id, template_name) WHERE user_id IS NOT NULL
+
+### Template selection at generate time
+- template_id is supplied by the user in the generate_outreach request body.
+- Route validates: template is visible to current user (system or own),
+  is_active = true, template_type is appropriate given contact info available.
+- No auto-selection. UI presents eligible templates; user chooses explicitly.
+
+### skip_trace_cache
+- One cached result per (county_fips, parcel_id) — uq_stc_county_parcel.
+- TTL controlled by settings.SKIP_TRACE_CACHE_TTL_DAYS. expires_at set at
+  write time as fetched_at + TTL. ix_stc_expires_at supports cleanup sweeps.
+- On cache miss or expiry: generate_outreach proceeds with NULL contact info.
+  LETTER template selected automatically when recipient_email is NULL.
+- provider field records the data source. Default: 'BATCHDATA'.
+  No CHECK constraint — additional providers may be added without migration.
+- Cache row is UPSERTed on refresh — never duplicated.
+
+### Skip-trace integration
+- Live BatchData API integration deferred. Schema scaffold in place (v0.17).
+- Route stub: POST /{county_fips}/outreach/skip_trace. Returns cached result
+  if available. Returns 501 Not Implemented when BATCHDATA_API_KEY not set.
+- When live: BatchData POST /property/skip-tracing. Input: address or APN +
+  county. Output: phone array (number, type, confidence, DNC flag) and email
+  array (address, confidence). Result stored in skip_trace_cache.skip_trace_result
+  as full response snapshot.
+- DNC compliance required at send time when skip-trace is live.
+- Credit/billing model decision required before live integration.
+
+### Email send path
+- Provider: SendGrid Python SDK.
+- settings.SENDGRID_API_KEY required. Route raises 503 if not configured.
+- CAN-SPAM compliance: every outgoing EMAIL must include sender's valid
+  physical postal address (15 U.S.C. § 7704). Sourced from
+  settings.BUSINESS_ADDRESS. Rendered as footer variable in EMAIL Jinja2
+  template. Not optional.
+
+### LETTER output path
+- No server-side PDF generation. No WeasyPrint, ReportLab, or headless browser.
+- React react-to-print library + window.print() + @media print CSS.
+- FastAPI renders Jinja2 LETTER body template and returns rendered string
+  in response payload. React component receives string, mounts hidden
+  print-targeted component, calls window.print(). User's OS print dialog
+  opens — user selects printer or Save as PDF.
+- Zero new Python dependencies. Zero new server-side infrastructure.
+
+### Superuser scope on list_outreach
+- Superusers see only their own outreach_log rows on GET /{county_fips}/outreach.
+- Superuser privilege is county access bypass, not data omniscience.
+- Cross-user outreach visibility belongs on a separate admin route if ever needed.
+
+### users.calendar_link (v0.17)
+- New column: calendar_link VARCHAR(1000) nullable.
+- Renamed from original calendly_link design — any booking service supported.
+- Snapshotted to outreach_log.calendar_link at generate time.
+- Exposed via UserUpdate Pydantic schema (item 42).
+
 ## Schema Reference
 
 ### properties (confirmed 2026-05-04)
@@ -571,6 +685,8 @@ is_active        BOOLEAN       NOT NULL default true
 is_superuser     BOOLEAN       NOT NULL default false
 created_at       TIMESTAMPTZ   NOT NULL default now()
 updated_at       TIMESTAMPTZ   NOT NULL default now()
+#### users (v0.17 addition)
+calendar_link    VARCHAR(1000) nullable  -- any booking service link; snapshotted at outreach generate time
 
 ### user_county_access (v0.13)
 id                  INTEGER      PK autoincrement
@@ -622,3 +738,75 @@ last_error_message   TEXT          nullable
 created_at           TIMESTAMPTZ   NOT NULL  default now()
 updated_at           TIMESTAMPTZ   NOT NULL  default now()
 
+### outreach_templates (v0.17)
+id               INTEGER        PK autoincrement
+user_id          INTEGER        nullable  FK → users.id ON DELETE SET NULL
+county_fips      VARCHAR(5)     nullable  -- NULL = global template
+template_name    VARCHAR(100)   NOT NULL
+description      TEXT           nullable
+template_type    VARCHAR(50)    NOT NULL  -- CHECK: EMAIL | LETTER
+subject_template TEXT           nullable  -- EMAIL only
+body_template    TEXT           NOT NULL
+is_active        BOOLEAN        NOT NULL  default true
+created_at       TIMESTAMPTZ    NOT NULL  default now()
+updated_at       TIMESTAMPTZ    NOT NULL  default now()
+Indexes:
+  outreach_templates_pkey  PRIMARY KEY (id)
+  uq_ot_system_name        UNIQUE (template_name) WHERE user_id IS NULL
+  uq_ot_user_name          UNIQUE (user_id, template_name) WHERE user_id IS NOT NULL
+  ix_ot_user_id            btree (user_id)
+  ix_ot_template_type      btree (template_type)
+Check constraints:
+  chk_ot_template_type     template_type IN ('EMAIL', 'LETTER')
+
+### skip_trace_cache (v0.17)
+id                  INTEGER        PK autoincrement
+county_fips         VARCHAR(5)     NOT NULL
+parcel_id           VARCHAR(30)    NOT NULL
+skip_trace_result   JSONB          NOT NULL
+fetched_at          TIMESTAMPTZ    NOT NULL  default now()
+expires_at          TIMESTAMPTZ    NOT NULL
+provider            VARCHAR(50)    NOT NULL  default 'BATCHDATA'
+created_at          TIMESTAMPTZ    NOT NULL  default now()
+Indexes:
+  skip_trace_cache_pkey   PRIMARY KEY (id)
+  uq_stc_county_parcel    UNIQUE (county_fips, parcel_id)
+  ix_stc_expires_at       btree (expires_at)
+
+### outreach_log (v0.17, expanded from v0.13 stub)
+id                  INTEGER        PK autoincrement
+county_fips         VARCHAR(5)     NOT NULL
+user_id             INTEGER        nullable  FK → users.id ON DELETE CASCADE
+  -- nullable inherited from v0.13 stub; application layer always populates
+parcel_id           VARCHAR(30)    NOT NULL
+listing_event_id    INTEGER        NOT NULL  FK → listing_events.id ON DELETE CASCADE
+filter_profile_id   INTEGER        nullable  FK → filter_profiles.id ON DELETE SET NULL
+template_id         INTEGER        NOT NULL  FK → outreach_templates.id ON DELETE RESTRICT
+listing_score_id    INTEGER        nullable  FK → listing_scores.id ON DELETE SET NULL
+recipient_name      VARCHAR(200)   nullable
+recipient_email     VARCHAR(255)   nullable
+recipient_phone     VARCHAR(30)    nullable
+recipient_address1  VARCHAR(200)   nullable
+recipient_address2  VARCHAR(200)   nullable
+recipient_city      VARCHAR(100)   nullable
+recipient_state     VARCHAR(25)    nullable
+recipient_zip       VARCHAR(10)    nullable
+skip_trace_result   JSONB          nullable
+message_subject     VARCHAR(500)   nullable
+message_body        TEXT           nullable
+calendar_link       VARCHAR(1000)  nullable
+template_type       VARCHAR(50)    NOT NULL  -- CHECK: EMAIL | LETTER (snapshot)
+status              VARCHAR(30)    NOT NULL  default 'DRAFT'  -- CHECK: DRAFT | SENT | FAILED
+sent_at             TIMESTAMPTZ    nullable
+send_error          TEXT           nullable
+created_at          TIMESTAMPTZ    NOT NULL  default now()
+updated_at          TIMESTAMPTZ    NOT NULL  default now()
+Indexes:
+  outreach_log_pkey       PRIMARY KEY (id)
+  ix_ol_county_user       btree (county_fips, user_id)
+  ix_ol_listing_event     btree (listing_event_id)
+  ix_ol_status            btree (status)
+  ix_ol_parcel            btree (county_fips, parcel_id)
+Check constraints:
+  chk_ol_template_type    template_type IN ('EMAIL', 'LETTER')
+  chk_ol_status           status IN ('DRAFT', 'SENT', 'FAILED')
