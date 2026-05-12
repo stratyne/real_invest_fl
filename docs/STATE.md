@@ -106,7 +106,6 @@ Retained as reference for backfill completeness verification.
 | 36 | ACTIVE | routes/outreach.py | Blocked items cleared. Next: settings.py (item 43) must be done first. |
 | 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py — add update to counties row on successful ingest completion |
 | 38 | PENDING | seed_outreach_templates.py | System EMAIL + LETTER seed templates. Run after settings.py (item 43). |
-| 39 | PENDING | ORM models | OutreachTemplate, SkipTraceCache, OutreachLog |
 | 40 | PENDING | Pydantic schemas | Request/response models for all outreach routes |
 | 41 | PENDING | routes/outreach.py implementation | generate, send, list, skip_trace stub. Requires items 43, 38, 39, 40 complete first. |
 | 42 | PENDING | users.calendar_link — Pydantic + route exposure | Add to UserUpdate schema. Expose via PATCH /auth/me or user management route when implemented. |
@@ -139,5 +138,6 @@ Retained as reference for backfill completeness verification.
 | 34 | Multi-county CAMA framework | 2026-05-04 |
 | 35 | Phase 4 API scaffold — deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |
 | 38 | seed_outreach_templates.py | System EMAIL + LETTER templates seeded. Explicit ON CONFLICT (template_name) WHERE user_id IS NULL DO NOTHING. |
+| 39 | ORM models — OutreachTemplate, SkipTraceCache, OutreachLog (full); user.py calendar_link + relationships; listing_event.py, listing_score.py, filter_profile.py back-populates patches; __init__.py updated | 2026-05-12 |
 | 43 | settings.py additions | BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, BUSINESS_ADDRESS added. SENDGRID_API_KEY confirmed already present. booking_url removed. .env.example updated to match. |
 | 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |

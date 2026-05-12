@@ -13,8 +13,10 @@ from .sales_comp import SalesComp                              # noqa: F401
 from .public_record import PublicRecordSignal                  # noqa: F401
 from .permit_record import PermitRecord                        # noqa: F401
 from .email_template import EmailTemplate                      # noqa: F401
+from .outreach_template import OutreachTemplate                # noqa: F401
+from .skip_trace_cache import SkipTraceCache                   # noqa: F401
 from .outreach_log import OutreachLog                          # noqa: F401
 from .ingest_run import IngestRun                              # noqa: F401
 from .data_source_status import DataSourceStatus               # noqa: F401
-from .parcel_sale_history import ParcelSaleHistory  # noqa: F401
+from .parcel_sale_history import ParcelSaleHistory             # noqa: F401
 # ui_session intentionally omitted — dropped in v0.13

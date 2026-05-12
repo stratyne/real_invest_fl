@@ -114,3 +114,10 @@ class FilterProfile(Base):
         foreign_keys="[ListingScore.filter_profile_id]",
         cascade="all, delete-orphan",
     )
+
+    outreach_logs: Mapped[list[OutreachLog]] = relationship(
+        "OutreachLog",
+        back_populates="filter_profile",
+        foreign_keys="[OutreachLog.filter_profile_id]",
+    )
+    

@@ -184,7 +184,7 @@ until it appears in this table. County-scoped routes always use
 ### Outreach Implementation Order (locked 2026-05-05)
 1. ✅ settings.py — BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, SENDGRID_API_KEY, BUSINESS_ADDRESS (item 43)
 2. ✅ seed_outreach_templates.py — system EMAIL + LETTER templates (item 38)
-3. ORM models — OutreachTemplate, SkipTraceCache, OutreachLog (item 39)
+3. ✅ ORM models — OutreachTemplate, SkipTraceCache, OutreachLog (item 39)
 4. Pydantic schemas — request/response models for outreach routes (item 40)
 5. routes/outreach.py — generate, send, list, skip_trace stub (item 41)
 

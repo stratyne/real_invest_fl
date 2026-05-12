@@ -21,6 +21,9 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # v0.17 — any booking service link; snapshotted to outreach_log at generate time
+    calendar_link: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -41,10 +44,22 @@ class User(Base):
         back_populates="owner",
         foreign_keys="[FilterProfile.user_id]",
     )
-
     listing_scores: Mapped[list[ListingScore]] = relationship(
         "ListingScore",
         back_populates="user",
         foreign_keys="[ListingScore.user_id]",
+        cascade="all, delete-orphan",
+    )
+    # v0.17
+    outreach_templates: Mapped[list[OutreachTemplate]] = relationship(
+        "OutreachTemplate",
+        back_populates="owner",
+        foreign_keys="[OutreachTemplate.user_id]",
+    )
+    # v0.17
+    outreach_logs: Mapped[list[OutreachLog]] = relationship(
+        "OutreachLog",
+        back_populates="user",
+        foreign_keys="[OutreachLog.user_id]",
         cascade="all, delete-orphan",
     )

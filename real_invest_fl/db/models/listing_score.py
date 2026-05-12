@@ -99,3 +99,10 @@ class ListingScore(Base):
         "User",
         back_populates="listing_scores"
     )
+
+    outreach_log: Mapped[OutreachLog | None] = relationship(
+        "OutreachLog",
+        back_populates="listing_score",
+        foreign_keys="[OutreachLog.listing_score_id]",
+    )
+    

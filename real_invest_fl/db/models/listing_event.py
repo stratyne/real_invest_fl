@@ -131,3 +131,10 @@ class ListingEvent(Base):
         back_populates="listing_event",
         cascade="all, delete-orphan"
     )
+
+    outreach_logs: Mapped[list[OutreachLog]] = relationship(
+        "OutreachLog",
+        back_populates="listing_event",
+        foreign_keys="[OutreachLog.listing_event_id]",
+        cascade="all, delete-orphan",
+    )    
