@@ -27,7 +27,8 @@ no shared scraper possible).
 development proceeds in parallel. Seed scripts (items 11–12) must clear first.
 
 ## Migration Chain
-HEAD = j1k2l3m4n5o6 (v0.17)
+HEAD = k2l3m4n5o6p7 (v0.18) — PENDING
+Previous: j1k2l3m4n5o6 (v0.17) — live and verified
 
 | Rev | Version | Description |
 |---|---|---|
@@ -47,6 +48,7 @@ HEAD = j1k2l3m4n5o6 (v0.17)
 | h9i0j1k2l3m4 | v0.15 | parcel_sale_history grantor/grantee NOT NULL DEFAULT '' |
 | i0j1k2l3m4n5 | v0.16 | listing_scores table; strip scoring columns from listing_events |
 | j1k2l3m4n5o6 | v0.17 | Phase 4 outreach schema — outreach_templates, skip_trace_cache, outreach_log (stub → full), users.calendar_link |
+| k2l3m4n5o6p7 | v0.18 | user_profile_prefs — PENDING |
 
 **Note:** Ingest refactor (2026-05-02) produced NO migration — code only.
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
@@ -87,13 +89,13 @@ Retained as reference for backfill completeness verification.
 | # | Status | Description | Next Action |
 |---|---|---|---|
 | 1 | PARTIAL | Beds/baths opportunistic population | Bulk source pending — not a blocker |
-| 13 | ACTIVE | Phase 4 UI — FastAPI + React + MapLibre | settings.py additions (item 43) → seed_outreach_templates.py (item 38) → ORM models (item 39) → Pydantic schemas (item 40) → routes/outreach.py (item 41) |
+| 13 | ACTIVE | Phase 4 UI — FastAPI + React + MapLibre | v0.18 migration → ORM model → dashboard route → favorite toggle → search upsert → DashboardPage.tsx rewrite |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running; Escambia blocked |
-| 17 | PENDING | arv_calculator.py refactor | Refactor into comp-based ARV engine using parcel_sale_history + NAL qual codes. mqi_qualified drift fix included. Santa Rosa: 4,884 qualified sales available. |
-| 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py |
-| 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job. |
+| 17 | PENDING | arv_calculator.py refactor | Comp-based ARV engine using parcel_sale_history + NAL qual codes |
+| 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
+| 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job |
 | 20 | PENDING | Daily scheduler | Windows Task Scheduler → master runner script |
 | 21 | PENDING | Zestimate integration | RapidAPI wrapper, rate-limited |
 | 22 | PENDING | Output pipeline — Google Sheets export | — |
@@ -103,13 +105,16 @@ Retained as reference for backfill completeness verification.
 | 27 | PENDING | LienHub advertised list | Check 2026-05-05 — see URL in scrapers.md |
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
-| 36 | ACTIVE | routes/outreach.py | Blocked items cleared. Next: settings.py (item 43) must be done first. |
-| 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py — add update to counties row on successful ingest completion |
-| 38 | PENDING | seed_outreach_templates.py | System EMAIL + LETTER seed templates. Run after settings.py (item 43). |
-| 48 | ACTIVE | Docker-based deployment — Cloudflare Tunnel + Nginx + Uvicorn on home machine, served at stratyne.com/app | Next session |
-| 49 | ACTIVE | Map pins — PropertySearchResult does not carry lat/lng. Pins require coordinate data from PropertyDetail. Deferred. | After deployment |
-| 50 | ACTIVE | Server-side pagination — current implementation is client-side. Route change + limit/offset params needed at scale. | Phase 4 tail |
-| 51 | ACTIVE | phase4_ui.md + DECISIONS.md — remove filter-first bias. Dashboard metrics are inventory counts only, not filter-relative signals. | Next session |
+| 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py |
+| 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | After dashboard rewrite |
+| 49 | ACTIVE | Map pins — PropertySearchResult does not carry lat/lng | After deployment |
+| 50 | ACTIVE | Server-side pagination — currently client-side | Phase 4 tail |
+| 52 | ACTIVE | v0.18 migration — user_profile_prefs table | Next session — start here |
+| 53 | ACTIVE | ORM model — UserProfilePrefs | After item 52 |
+| 54 | ACTIVE | routes/dashboard.py — get_dashboard | After item 53 |
+| 55 | ACTIVE | routes/profiles.py — toggle_favorite | After item 53 |
+| 56 | ACTIVE | routes/properties.py — upsert to search_properties | After item 53 |
+| 57 | ACTIVE | DashboardPage.tsx — rewrite to profile activity + pipeline status | After items 54-56 |
 
 ## Deferred Items
 | # | Description | Reason |
@@ -147,3 +152,4 @@ Retained as reference for backfill completeness verification.
 | 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |
 | 46 | seed_demo_account.py — demo superuser, Escambia + Santa Rosa access, calendar_link set, idempotency verified | 2026-05-14 |
 | 47 | React frontend scaffold — Vite + TypeScript, axios client, API types, LoginPage, DashboardPage, ResultsPage | 2026-05-14 |
+| 51 | Documentation — remove filter-first bias; rewrite phase4_ui.md, DECISIONS.md, create context/schema.md, delete REFERENCE.md + CHECKPOINT.md | 2026-05-14 |
