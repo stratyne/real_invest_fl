@@ -9,7 +9,7 @@ from real_invest_fl.api.routes.listings import router as listings_router
 from real_invest_fl.api.routes.profiles import router as profiles_router
 from real_invest_fl.api.routes.dashboard import router as dashboard_router
 from real_invest_fl.api.routes.ingest import router as ingest_router
-# from real_invest_fl.api.routes.outreach import router as outreach_router  # pending outreach design session (item 36)
+from real_invest_fl.api.routes.outreach import router as outreach_router
 
 app = FastAPI(
     title="real_invest_fl",
@@ -25,7 +25,7 @@ app.include_router(listings_router)
 app.include_router(profiles_router)
 app.include_router(dashboard_router)
 app.include_router(ingest_router)
-# app.include_router(outreach_router)  # pending outreach design session (item 36)
+app.include_router(outreach_router)
 
 
 @app.get("/health")

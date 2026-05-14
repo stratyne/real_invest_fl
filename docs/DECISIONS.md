@@ -566,6 +566,18 @@ Format: formal full-block business letter.
 Output: rendered string returned in response payload.
 React react-to-print + window.print() handles print/PDF on client side.
 
+## settings import convention in API routes (2026-05-12)
+
+All files under real_invest_fl/ import settings as:
+    from config.settings import settings
+NOT as:
+    from real_invest_fl.config.settings import settings
+
+Confirmed from all working files in the project. routes/outreach.py
+corrected to match on first startup.
+
+---
+
 ## Schema Reference
 
 ### properties (confirmed 2026-05-04)
