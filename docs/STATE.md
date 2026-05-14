@@ -106,7 +106,6 @@ Retained as reference for backfill completeness verification.
 | 36 | ACTIVE | routes/outreach.py | Blocked items cleared. Next: settings.py (item 43) must be done first. |
 | 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py — add update to counties row on successful ingest completion |
 | 38 | PENDING | seed_outreach_templates.py | System EMAIL + LETTER seed templates. Run after settings.py (item 43). |
-| 42 | PENDING | users.calendar_link — Pydantic + route exposure | Add to UserUpdate schema. Expose via PATCH /auth/me or user management route when implemented. |
 
 ## Deferred Items
 | # | Description | Reason |
@@ -139,5 +138,7 @@ Retained as reference for backfill completeness verification.
 | 39 | ORM models — OutreachTemplate, SkipTraceCache, OutreachLog (full); user.py calendar_link + relationships; listing_event.py, listing_score.py, filter_profile.py back-populates patches; __init__.py updated | 2026-05-12 |
 | 40 | Pydantic schemas — GenerateRequest, SendRequest, SkipTraceRequest, OutreachLogResponse, GenerateResponse, SkipTraceCacheResponse — inline in routes/outreach.py | 2026-05-12 |
 | 41 | routes/outreach.py — generate_outreach, send_outreach, list_outreach, skip_trace. Jinja2 rendering, SendGrid send path, listing_scores audit row (PENDING scoring), snapshot pattern, re-generate blocking, calendar_link warning, LETTER guard on send. All 4 routes confirmed in Swagger UI. | 2026-05-12 |
+| 42 | users.calendar_link — Pydantic + route exposure | 2026-05-14 |
 | 43 | settings.py additions | BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, BUSINESS_ADDRESS added. SENDGRID_API_KEY confirmed already present. booking_url removed. .env.example updated to match. |
 | 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |
+| 46 | seed_demo_account.py — demo superuser, Escambia + Santa Rosa access, calendar_link set, idempotency verified | 2026-05-14 |
