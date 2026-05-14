@@ -1,12 +1,10 @@
 # Project Penstock — context/phase4_ui.md
 # Paste this alongside AGENTS.md when working on Phase 4 UI.
-# Last updated: 2026-05-04
-# NOTE: Phase 4 has not started. This file is a pre-flight scaffold.
-# Update this file as decisions are made during Phase 4 development.
+# Last updated: 2026-05-14
 
 ## Status
 
-NEXT — blocked on items 11 and 12 (seed scripts). See auth.md.
+ACTIVE — Phase 4 in progress. See STATE.md for item status.
 
 ## Tech Stack
 
@@ -20,35 +18,59 @@ NEXT — blocked on items 11 and 12 (seed scripts). See auth.md.
 
 ## User Flow (process sequence — applies to all users regardless of criteria)
 
-1. **Define** — user creates or selects a saved filter profile for their county.
-2. **Execute** — user hits Search. FastAPI runs live query against `properties`
-   and `listing_events`. ARV pulled from listing_events.arv_estimate
-   (comp-based where available, jv fallback). Results returned ranked by
-   deal score.
-3. **Review** — user sees ranked property list with key metrics. Map view
+1. Orient — user logs in and lands on the dashboard. Sees their saved
+   filter profiles ordered by favorite → last run → run count, plus
+   outreach pipeline status (drafts pending, sent this week, responses
+   received). No filter profile is required to reach this view. No
+   inventory counts are shown. A user who has never run a search sees an
+   empty profile list with a prompt to select or create one.
+2. Select profile — user picks a saved profile from the dashboard to
+   run, or navigates to create or edit a profile. The most recently run
+   profile is at the top of the list unless a favorite is pinned above it.
+   County is implied by the profile's county_fips — there is no separate
+   county selection step on the dashboard.
+3. Define — if creating or editing, user configures filter parameters
+   for their selected county. Filter profile save and execute are distinct
+   operations. Save writes to filter_profiles only. Execute triggers the
+   live search query.
+4. Execute — user hits Search. FastAPI builds a live query against
+   properties and listing_events using filter criteria as WHERE clauses
+   and deal score weights for ORDER BY. ARV pulled from
+   listing_events.arv_estimate (comp-based where available, jv fallback).
+   Results returned ranked by deal score. user_profile_prefs upserted
+   after successful fetch — last_searched_at, last_result_count, and
+   run_count updated.
+5. Review — user sees ranked property list with key metrics. Map view
    available via MapLibre GL JS.
-4. **Select** — user selects one or more properties to act on.
-5. **Generate** — system auto-generates outreach message from template,
-   with Calendly/Google Calendar booking link embedded.
-6. **Approve and Send** — user reviews generated message, clicks to send.
+6. Select — user selects one or more properties to act on.
+7. Generate — system auto-generates outreach message from template,
+   with calendar booking link embedded.
+8. Approve and Send — user reviews generated message, clicks to send.
    One-click trigger. Email sent via SendGrid/Gmail SMTP.
-7. **Log** — sent message, timestamp, recipient, and property recorded in
-   `outreach_log`. Responses logged when received.
-8. **Recurring** — daily scheduler (item 20) runs the pipeline on cadence,
-   keeping `listing_events` current so search results reflect latest signals.
+9. Log — sent message, timestamp, recipient, and property recorded in
+   outreach_log. Responses logged when received.
+10. Recurring — daily scheduler (item 20) runs the pipeline on cadence,
+    keeping listing_events current so search results reflect latest signals.
 
 ## Planned Features
 
+- Inventory dashboard — profile activity list (favorites + last run +
+  run count) and outreach pipeline status. No inventory counts. No raw
+  signals outside search context.
+- Favorite toggle on any profile (system or user-owned) — per-user
+  bookmark, pure UI, no functional weight.
+- Ranked property list (query-time, sorted by deal score, requires
+  filter profile)
 - Filter profile management (create, clone system profile, edit, delete)
-- Ranked property list (query-time, sorted by deal score)
 - Map view (MapLibre GL JS, PostGIS geometry)
-- Outreach template generation (triggered by user selection at step 4)
-- One-click email send with Calendly/Google Calendar booking link
+- Outreach template generation (triggered by user selection)
+- One-click email send with calendar booking link
 - Full outreach log with response tracking
 - Multi-user, multi-county, subscription-gated
-- On-demand search (user-initiated) and recurring cadence (scheduler) both supported
+- On-demand search (user-initiated) and recurring cadence (scheduler)
+  both supported
 
-## API Route Stubs (currently empty)
+## API Route Files
 
 real_invest_fl/api/routes/
   approvals.py
@@ -57,56 +79,64 @@ real_invest_fl/api/routes/
   dashboard.py
   ingest.py
   listings.py
-  outreach.py
+  outreach.py       -- implemented (items 39-41)
   properties.py
+  profiles.py
 
 ## Key Design Constraints
 
+- The dashboard is a user-activity view. It never surfaces raw inventory
+  counts or listing_events rows. Signals have no meaning outside a search
+  execution and do not appear on the dashboard under any circumstances.
 - Search execution is query-time only. FastAPI builds a SQL query against
-  `properties` and `listing_events` using filter profile criteria as WHERE
+  properties and listing_events using filter profile criteria as WHERE
   clauses and deal score weights for ORDER BY. No pre-computation, no cache.
-- `listing_events` is a pure event log. It carries no scoring columns.
-  Scoring output lives in `listing_scores`.
-- `listing_scores` is written only when a user acts on a result (selects a
-  property and initiates outreach). It is an audit record, not a search index.
+- listing_events is a pure event log. It carries no scoring columns.
+  Scoring output lives in listing_scores.
+- listing_scores is written only when a user acts on a result (selects
+  a property and initiates outreach). It is an audit record, not a search
+  index.
 - Filter profile save and execute are distinct operations — save writes to
-  `filter_profiles` only, execute triggers the live search query.
-- County access enforced via require_county_access dependency on every
+  filter_profiles only, execute triggers the live search query.
+- County access enforced via county_access() dependency on every
   county-scoped route — not at the application layer.
-- Standardize require_county_access path-parameter pattern before
-  endpoints proliferate.
 - Phase 4 route design must be documented before code is written.
-- ARV displayed in results is comp-based (parcel_sale_history qual_cd='01')
-  where sufficient comps exist, jv fallback otherwise. arv_source column
-  indicates which was used. Do not treat jv and comp-based ARV as equivalent
-  in UI display — surface the distinction to the user.
+- ARV displayed in results is comp-based where sufficient comps exist,
+  jv fallback otherwise. arv_source surfaced in all result views.
+  Do not treat COMP and JV_FALLBACK as equivalent in UI display.
+- user_profile_prefs is upserted by the search route on every successful
+  execution. It is the authoritative source for dashboard profile ordering.
+  It is never written by any route except search and the favorite toggle.
 
 ## Pre-flight Checklist
 
-- [✅] seed_superuser.py run (item 11)
-- [✅] seed_bundles.py run (item 12)
-- [✅] require_county_access path-parameter pattern standardized
-- [✅] Phase 4 route design documented before code is written
-- [✅] v0.17 migration live — outreach_templates, skip_trace_cache, outreach_log, users.calendar_link
+- [x] seed_superuser.py run (item 11)
+- [x] seed_bundles.py run (item 12)
+- [x] require_county_access path-parameter pattern standardized
+- [x] Phase 4 route design documented before code is written
+- [x] v0.17 migration live — outreach_templates, skip_trace_cache,
+      outreach_log, users.calendar_link
+- [ ] v0.18 migration — user_profile_prefs
 
-## Route Design (locked 2026-05-04)
+## Route Design (locked 2026-05-04, updated 2026-05-14)
 
 All routes documented here before implementation. No route is written
 until it appears in this table. County-scoped routes always use
-`Depends(county_access())` — never the explicit await pattern.
+Depends(county_access()) — never the explicit await pattern.
 
 ### Conventions
 
-- County-scoped routes: prefix `/{county_fips}/`
-- Auth dependency: `county_fips: str = Depends(county_access())`
+- County-scoped routes: prefix /{county_fips}/
+- Auth dependency: county_fips: str = Depends(county_access())
 - Routes needing the user object declare it separately:
-  `current_user: User = Depends(get_current_user)`
+  current_user: User = Depends(get_current_user)
 - All responses use Pydantic response models — no ORM objects returned raw.
 - HTTP methods follow REST strictly:
   GET = read, POST = create, PATCH = partial update, DELETE = remove.
-- 404 returned when a resource does not exist within the user's authorized scope.
-- 403 returned by county_access() before the route body executes — routes
-  never manually re-check county access.
+- 404 returned when a resource does not exist within the user's
+  authorized scope.
+- 403 returned by county_access() before the route body executes —
+  routes never manually re-check county access.
 
 ### Route Table
 
@@ -124,16 +154,17 @@ until it appears in this table. County-scoped routes always use
 #### Filter Profiles — /{county_fips}/profiles
 | Method | Path | Handler | Description |
 |---|---|---|---|
-| GET | /{county_fips}/profiles | list_profiles | Returns all system profiles + current user's own profiles for the county. System profiles: user_id IS NULL. User profiles: user_id = current_user.id. |
+| GET | /{county_fips}/profiles | list_profiles | Returns all system profiles + current user's own profiles for the county. Each profile includes the user's user_profile_prefs row if one exists (is_favorite, last_searched_at, last_result_count, run_count). |
 | POST | /{county_fips}/profiles | create_profile | Creates a new user-owned profile. user_id set server-side to current_user.id — never accepted from request body. |
 | POST | /{county_fips}/profiles/{profile_id}/clone | clone_profile | Clones any visible profile (system or own) into a new user-owned profile. New profile name required in request body. |
-| PATCH | /{county_fips}/profiles/{profile_id} | update_profile | Updates a user-owned profile. Returns 403 if profile belongs to another user. Returns 403 if profile is a system profile (user_id IS NULL). |
-| DELETE | /{county_fips}/profiles/{profile_id} | delete_profile | Deletes a user-owned profile. Returns 403 if system profile. Returns 403 if profile belongs to another user. Superusers may delete any non-system profile. |
+| PATCH | /{county_fips}/profiles/{profile_id} | update_profile | Updates a user-owned profile. Returns 403 if profile belongs to another user or is a system profile. |
+| DELETE | /{county_fips}/profiles/{profile_id} | delete_profile | Deletes a user-owned profile. Returns 403 if system profile or belongs to another user. Superusers may delete any non-system profile. |
+| PATCH | /{county_fips}/profiles/{profile_id}/favorite | toggle_favorite | Toggles is_favorite on user_profile_prefs for (current_user.id, profile_id). Creates row if not exists. No request body. Returns { "is_favorite": bool }. |
 
 #### Properties — /{county_fips}/properties
 | Method | Path | Handler | Description |
 |---|---|---|---|
-| GET | /{county_fips}/properties | search_properties | Core search route. Accepts filter_profile_id as query param. Loads the profile, builds WHERE clauses from filter_criteria, computes deal score at query time, returns results ranked by deal score. ARV sourced from listing_events.arv_estimate; arv_source surfaced in response. jv fallback clearly distinguished from COMP in response payload. |
+| GET | /{county_fips}/properties | search_properties | Core search route. Accepts filter_profile_id as query param. Loads profile, builds WHERE clauses from filter_criteria, computes deal score at query time, returns results ranked by deal score. arv_source surfaced in response. After successful fetch, upserts user_profile_prefs — increments run_count, sets last_searched_at = now(), sets last_result_count = len(results). |
 | GET | /{county_fips}/properties/{parcel_id} | get_property | Returns full property detail for a single parcel. Includes latest listing_event if present. |
 
 #### Listings — /{county_fips}/listings
@@ -154,7 +185,7 @@ until it appears in this table. County-scoped routes always use
 #### Dashboard — /dashboard (no county scope)
 | Method | Path | Handler | Description |
 |---|---|---|---|
-| GET | /dashboard | get_dashboard | Returns cross-county summary for the current user: active listings count, recent signals, outreach activity. Scoped to counties the user has access to. |
+| GET | /dashboard | get_dashboard | Returns two payloads for the current user. (1) Profile activity list: user_profile_prefs joined to filter_profiles, ordered by is_favorite DESC, last_searched_at DESC NULLS LAST, run_count DESC. Each entry carries profile_id, profile_name, county_fips, is_system, is_favorite, last_searched_at, last_result_count, run_count. (2) Outreach pipeline status: drafts_pending, sent_this_week, responses_received. No inventory counts. No raw listing_events. No filter profile applied. |
 
 #### Ingest — /ingest (superuser only, no county scope)
 | Method | Path | Handler | Description |
@@ -176,39 +207,38 @@ until it appears in this table. County-scoped routes always use
 | routes/config.py | /config/counties (list + update) |
 | routes/properties.py | /{county_fips}/properties (search + detail) |
 | routes/listings.py | /{county_fips}/listings (list + detail + status update) |
-| routes/outreach.py | /{county_fips}/outreach (generate + send + list) |
+| routes/outreach.py | /{county_fips}/outreach (generate + send + list + skip_trace) |
+| routes/profiles.py | /{county_fips}/profiles (list + create + clone + update + delete + favorite toggle) |
 | routes/dashboard.py | /dashboard |
 | routes/ingest.py | /ingest/status |
 | routes/approvals.py | Reserved — workflow approval step, Phase 4 tail |
 
-### Outreach Implementation Order (locked 2026-05-05)
-1. ✅ settings.py — BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, SENDGRID_API_KEY, BUSINESS_ADDRESS (item 43)
-2. ✅ seed_outreach_templates.py — system EMAIL + LETTER templates (item 38)
-3. ✅ ORM models — OutreachTemplate, SkipTraceCache, OutreachLog (item 39)
-4. ✅ Pydantic schemas — inline in routes/outreach.py (item 40)
-5. ✅ routes/outreach.py — generate, send, list, skip_trace (item 41)
-6. ✅ React frontend scaffold live — Login, Dashboard, Results pages
-7. ✅ Demo account seeded — demo@stratyne.com, superuser, Escambia + Santa Rosa access
+### Dashboard + Profile Prefs Implementation Order (locked 2026-05-14)
 
+1. [ ] DECISIONS.md + phase4_ui.md + schema.md updated (item 51) -- current step
+2. [ ] v0.18 migration — user_profile_prefs
+3. [ ] ORM model — UserProfilePrefs
+4. [ ] routes/dashboard.py — get_dashboard
+5. [ ] routes/profiles.py — toggle_favorite added
+6. [ ] routes/properties.py — upsert added to search_properties
+7. [ ] DashboardPage.tsx — rewrite to profile activity + pipeline status
 
 ### Outreach UI Requirements (locked 2026-05-05)
-- Warn user at generate time if current_user.calendar_link is NULL and the
-  selected template is the system EMAIL template. The rendered message will
-  contain a blank line where the booking link should appear.
-- Surface arv_source distinction (COMP vs JV_FALLBACK) in all property result
-  views — do not treat as equivalent. Already required by Key Design Constraints.
-- LETTER output: React react-to-print + window.print(). No server-side PDF.
-  UI presents rendered letter body; user triggers print dialog from browser.
 
-### Deferred from Initial Phase 4 Scaffold
+- Warn user at generate time if current_user.calendar_link is NULL and
+  the selected template is the system EMAIL template.
+- Surface arv_source distinction (COMP vs JV_FALLBACK) in all property
+  result views — do not treat as equivalent.
+- LETTER output: React react-to-print + window.print(). No server-side PDF.
+
+### Deferred from Phase 4 Scaffold
+
 - Zestimate fetch endpoint (item 21) — RapidAPI wrapper not yet built
 - Google Sheets export (item 22) — output pipeline Phase 2 tail
 - Email response tracking (item 23) — inbound webhook, Phase 4 tail
 - User management endpoints — registration, password reset, admin user CRUD
 - Approval workflow (approvals.py) — deferred until outreach flow is live
-- Skip-trace live integration (item 44) — BatchData API wrapper, credit/billing
-  model, DNC compliance. Schema scaffold in place. Unblock after outreach flow live.
-- users.calendar_link route exposure (item 42) — pending user management routes
-- Map pins — coordinate data not available on PropertySearchResult. Requires PropertyDetail fetch per parcel or lat/lng added to search response.
-- Server-side pagination — currently client-side, 25 records per page.
-- Multi-county search — single-county per execution. Cross-county profiles deferred Phase 3+. Document in DECISIONS.md that single-county-per-route was explicit architectural choice tied to subscription model.
+- Skip-trace live integration (item 44) — schema scaffold in place
+- Map pins — coordinate data not on PropertySearchResult (item 49)
+- Server-side pagination — currently client-side (item 50), Phase 4 tail
+- Multi-county search — single-county per execution, cross-county Phase 3+

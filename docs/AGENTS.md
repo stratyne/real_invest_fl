@@ -55,4 +55,5 @@ Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`
 | Auth / users / seeds | `context/auth.md` |
 | Phase 4 UI (FastAPI + React) | `context/phase4_ui.md` |
 | Address normalization / matching | `context/scrapers.md` |
-| Schema questions | `docs/DECISIONS.md` (Schema Reference section) |
+| Schema questions / migrations / ORM models | `context/schema.md` |
+

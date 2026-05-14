@@ -52,6 +52,23 @@ FL_LAT_MIN = 24.4   FL_LAT_MAX = 31.1
 FL_LON_MIN = -87.65  FL_LON_MAX = -80.0
 Western boundary is -87.65 (confirmed against 18 Escambia parcels, Perdido River).
 
+## ROOT Path Bootstrap Rules
+
+| File location | ROOT expression |
+|---|---|
+| scripts/*.py | Path(__file__).resolve().parent.parent |
+| real_invest_fl/ingest/*.py | Path(__file__).resolve().parent.parent.parent |
+| real_invest_fl/scrapers/*.py | Path(__file__).resolve().parent.parent.parent |
+| real_invest_fl/ingest/staging_parsers/*.py | Path(__file__).resolve().parent.parent.parent.parent |
+
+Standard bootstrap block:
+
+    ROOT = Path(__file__).resolve().parent.parent.parent  # adjust per table
+    sys.path.insert(0, str(ROOT))
+    from config.settings import settings
+    from sqlalchemy import create_engine, text
+    engine = create_engine(settings.sync_database_url)
+
 ## Special Cases
 
 - Miami-Dade: two shapefiles (main + condos)

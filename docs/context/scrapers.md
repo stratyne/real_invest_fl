@@ -86,6 +86,13 @@ Library: rapidfuzz v3.14.5
 - Do NOT call normalize_parcel_id() — it zero-pads to 18 and will break the join
 - Use raw strip+uppercase only
 
+## Windows / Python Platform Note
+
+Windows / Python 3.13 strptime: use %b (abbreviated month) not %B (full month).
+Escambia Clerk pages deliver abbreviated month names. %B fails silently.
+Applies to escambia_taxdeed_clerk.py and any future scraper parsing month
+names from Escambia Clerk pages.
+
 ## Per-Scraper Notes
 
 ### auction_com.py
