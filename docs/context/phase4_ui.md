@@ -187,6 +187,9 @@ until it appears in this table. County-scoped routes always use
 3. ✅ ORM models — OutreachTemplate, SkipTraceCache, OutreachLog (item 39)
 4. ✅ Pydantic schemas — inline in routes/outreach.py (item 40)
 5. ✅ routes/outreach.py — generate, send, list, skip_trace (item 41)
+6. ✅ React frontend scaffold live — Login, Dashboard, Results pages
+7. ✅ Demo account seeded — demo@stratyne.com, superuser, Escambia + Santa Rosa access
+
 
 ### Outreach UI Requirements (locked 2026-05-05)
 - Warn user at generate time if current_user.calendar_link is NULL and the
@@ -206,3 +209,6 @@ until it appears in this table. County-scoped routes always use
 - Skip-trace live integration (item 44) — BatchData API wrapper, credit/billing
   model, DNC compliance. Schema scaffold in place. Unblock after outreach flow live.
 - users.calendar_link route exposure (item 42) — pending user management routes
+- Map pins — coordinate data not available on PropertySearchResult. Requires PropertyDetail fetch per parcel or lat/lng added to search response.
+- Server-side pagination — currently client-side, 25 records per page.
+- Multi-county search — single-county per execution. Cross-county profiles deferred Phase 3+. Document in DECISIONS.md that single-county-per-route was explicit architectural choice tied to subscription model.

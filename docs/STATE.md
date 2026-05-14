@@ -106,6 +106,10 @@ Retained as reference for backfill completeness verification.
 | 36 | ACTIVE | routes/outreach.py | Blocked items cleared. Next: settings.py (item 43) must be done first. |
 | 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py — add update to counties row on successful ingest completion |
 | 38 | PENDING | seed_outreach_templates.py | System EMAIL + LETTER seed templates. Run after settings.py (item 43). |
+| 48 | ACTIVE | Docker-based deployment — Cloudflare Tunnel + Nginx + Uvicorn on home machine, served at stratyne.com/app | Next session |
+| 49 | ACTIVE | Map pins — PropertySearchResult does not carry lat/lng. Pins require coordinate data from PropertyDetail. Deferred. | After deployment |
+| 50 | ACTIVE | Server-side pagination — current implementation is client-side. Route change + limit/offset params needed at scale. | Phase 4 tail |
+| 51 | ACTIVE | phase4_ui.md + DECISIONS.md — remove filter-first bias. Dashboard metrics are inventory counts only, not filter-relative signals. | Next session |
 
 ## Deferred Items
 | # | Description | Reason |
@@ -142,3 +146,4 @@ Retained as reference for backfill completeness verification.
 | 43 | settings.py additions | BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, BUSINESS_ADDRESS added. SENDGRID_API_KEY confirmed already present. booking_url removed. .env.example updated to match. |
 | 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |
 | 46 | seed_demo_account.py — demo superuser, Escambia + Santa Rosa access, calendar_link set, idempotency verified | 2026-05-14 |
+| 47 | React frontend scaffold — Vite + TypeScript, axios client, API types, LoginPage, DashboardPage, ResultsPage | 2026-05-14 |
