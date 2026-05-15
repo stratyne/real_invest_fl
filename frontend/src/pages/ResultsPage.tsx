@@ -4,9 +4,9 @@ import Map, { Marker, Popup } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { searchProperties, getProperty } from '../api/properties'
 import { createProfile } from '../api/profiles'
-import { filterStateToPayload, countActiveFilters } from './DashboardPage'
+import { filterStateToPayload } from './SearchPage'
 import type { PropertySearchResult, PropertyDetail } from '../types/api'
-import type { FilterState } from './DashboardPage'
+import type { FilterState } from './SearchPage'
 
 const PAGE_SIZE = 25
 
@@ -248,7 +248,7 @@ export default function ResultsPage() {
     setSaving(true)
     setSaveError(null)
     try {
-      const payload = filterStateToPayload(filterState, countyFips, name)
+      const payload = filterStateToPayload(filterState, name)
       await createProfile(countyFips, payload)
       setShowSaveModal(false)
       setSaveSuccess(`Profile "${name}" saved.`)

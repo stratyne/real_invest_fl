@@ -108,8 +108,9 @@ Retained as reference for backfill completeness verification.
 | 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | After dashboard rewrite |
 | 49 | ACTIVE | Map pins — PropertySearchResult does not carry lat/lng | After deployment |
 | 50 | ACTIVE | Server-side pagination — currently client-side | Phase 4 tail |
-| 55 | ACTIVE | routes/profiles.py — toggle_favorite | After item 53 |
-| 56 | ACTIVE | routes/properties.py — upsert to search_properties | After item 53 |
+| 55 | ACTIVE | routes/profiles.py — toggle_favorite | Implement route + wire star click in DashboardPage.tsx |
+| 56 | ACTIVE | routes/properties.py — upsert to search_properties | After item 55 |
+| 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
 
 ## Deferred Items
 | # | Description | Reason |
@@ -151,4 +152,4 @@ Retained as reference for backfill completeness verification.
 | 52 | v0.18 migration — user_profile_prefs table | 2026-05-14 |
 | 53 | ORM model — UserProfilePrefs | 2026-05-14 |
 | 54 | routes/dashboard.py — get_dashboard rewrite to profile activity + outreach pipeline status | 2026-05-14 |
-| 57 | DashboardPage.tsx rewrite (profile activity + outreach pipeline); SearchPage.tsx extracted (filter editor, row layout); App.tsx updated | 2026-05-14 |
+| 57 | DashboardPage.tsx rewrite (profile activity + outreach pipeline); SearchPage.tsx extracted (filter editor, row layout); App.tsx updated; ResultsPage.tsx import fix | 2026-05-14 |

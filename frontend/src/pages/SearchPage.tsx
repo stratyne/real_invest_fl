@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { getMe } from '../api/auth'
 import { listCounties } from '../api/counties'
@@ -127,7 +127,7 @@ const EMPTY_FILTER: FilterState = {
   min_deal_score: null,
   rehab_cost_per_sqft: 22.0,
   min_comp_sales_for_arv: 3,
-  comp_radius_miles: 0.5,
+  comp_radius_miles: 1.0,
   comp_year_built_tolerance: 15,
   max_results: null,
   sort_by_field: 'deal_score',
@@ -432,6 +432,7 @@ export default function SearchPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const navState = (location.state as NavState)
+  const navStateConsumed = useRef(false)
 
   const [user, setUser] = useState<UserProfile | null>(null)
   const [counties, setCounties] = useState<CountyResponse[]>([])
@@ -463,15 +464,20 @@ export default function SearchPage() {
     listProfiles(selectedFips)
       .then((ps) => {
         setProfiles(ps)
-        // If arriving from dashboard with a profileId, honour it.
-        // Otherwise default to first profile.
-        const targetId = navState?.profileId ?? (ps.length > 0 ? ps[0].id : null)
+        const useNav =
+          !navStateConsumed.current &&
+            navState?.countyFips === selectedFips &&
+            navState?.profileId != null
+        const targetId = useNav
+            ? navState!.profileId!
+            : ps.length > 0 ? ps[0].id : null
         setSelectedProfileId(targetId)
-        if (!navState?.filterState) {
-          const target = ps.find((p) => p.id === targetId) ?? ps[0]
-          setFilterState(target ? profileToFilterState(target) : EMPTY_FILTER)
+        if (!useNav || !navState?.filterState) {
+            const target = ps.find((p) => p.id === targetId) ?? ps[0]
+            setFilterState(target ? profileToFilterState(target) : EMPTY_FILTER)
         }
-      })
+        navStateConsumed.current = true
+        })
       .catch(() => setLoadError('Failed to load filter profiles.'))
   }, [selectedFips])
 
@@ -681,7 +687,7 @@ export default function SearchPage() {
               <Section title="ARV Engine">
                 <NumInput label="Rehab Cost / sqft ($)" value={filterState.rehab_cost_per_sqft} onChange={(v) => setFs({ rehab_cost_per_sqft: v ?? 22 })} />
                 <NumInput label="Min Comp Sales for ARV" value={filterState.min_comp_sales_for_arv} onChange={(v) => setFs({ min_comp_sales_for_arv: v ?? 3 })} />
-                <NumInput label="Comp Radius (miles)" value={filterState.comp_radius_miles} onChange={(v) => setFs({ comp_radius_miles: v ?? 0.5 })} />
+                <NumInput label="Comp Radius (miles)" value={filterState.comp_radius_miles} onChange={(v) => setFs({ comp_radius_miles: v ?? 1.0 })} />
                 <NumInput label="Comp Year Built Tolerance" value={filterState.comp_year_built_tolerance} onChange={(v) => setFs({ comp_year_built_tolerance: v ?? 15 })} />
               </Section>
 
