@@ -136,7 +136,7 @@ function ProfileRow({
             {entry.is_system && <span style={s.systemBadge}>system</span>}
           </div>
           <div style={s.profileMeta}>
-            {entry.county_fips}
+            {entry.county_fips.join(', ')}
             {entry.last_searched_at
               ? ` · Last run ${new Date(entry.last_searched_at).toLocaleDateString()}`
               : ' · Never run'}

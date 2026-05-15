@@ -1,10 +1,10 @@
 """
-Properties routes — core search and single-parcel detail.
+Properties routes — profile-driven multi-county search and single-parcel detail.
 
-GET /{county_fips}/properties
-    Loads the specified filter profile, builds a query-time WHERE clause
-    from filter_criteria, computes deal score, returns results ranked by
-    deal score descending.
+GET /properties
+    Loads the specified filter profile, validates access to all counties
+    in the profile, builds a query-time WHERE clause from filter_criteria,
+    computes deal score, returns results ranked by deal score descending.
 
 GET /{county_fips}/properties/{parcel_id}
     Returns full property detail for a single parcel, including the most
@@ -20,13 +20,73 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from real_invest_fl.api.deps import county_access, get_db
+from real_invest_fl.api.deps import county_access, get_current_user, get_db
 from real_invest_fl.db.models.filter_profile import FilterProfile
 from real_invest_fl.db.models.listing_event import ListingEvent
 from real_invest_fl.db.models.property import Property
+from real_invest_fl.db.models.user import User
+from real_invest_fl.db.models.user_county_access import UserCountyAccess
 
-router = APIRouter(prefix="/{county_fips}/properties", tags=["properties"])
+router = APIRouter(tags=["properties"])
 
+def _assert_county_access(
+    requested_fips: list[str],
+    accessible_fips: set[str],
+    is_superuser: bool,
+) -> None:
+    if is_superuser:
+        return
+
+    denied = [f for f in requested_fips if f not in accessible_fips]
+    if denied:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied for counties: {', '.join(denied)}",
+        )
+
+
+async def _get_accessible_fips(
+    current_user: User,
+    db: AsyncSession,
+) -> set[str]:
+    result = await db.execute(
+        select(UserCountyAccess.county_fips).where(
+            UserCountyAccess.user_id == current_user.id
+        )
+    )
+    return set(result.scalars().all())
+
+
+async def _get_visible_active_profile(
+    filter_profile_id: int,
+    current_user: User,
+    db: AsyncSession,
+) -> FilterProfile:
+    result = await db.execute(
+        select(FilterProfile).where(
+            FilterProfile.id == filter_profile_id,
+            FilterProfile.is_active.is_(True),
+        )
+    )
+    profile: FilterProfile | None = result.scalar_one_or_none()
+
+    if profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Filter profile {filter_profile_id} not found",
+        )
+
+    if not current_user.is_superuser:
+        if profile.user_id is not None and profile.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Filter profile {filter_profile_id} not found",
+            )
+
+        accessible = await _get_accessible_fips(current_user, db)
+        _assert_county_access(profile.county_fips, accessible, current_user.is_superuser)
+
+    return profile
 
 # ── Response schemas ─────────────────────────────────────────────────────
 
@@ -138,13 +198,29 @@ class PropertyDetail(BaseModel):
 
     model_config = {"from_attributes": True}
 
+class InlineSearchRequest(BaseModel):
+    """Inline search payload — same shape as FilterProfileCreateRequest.
+
+    county_fips: list of FIPS codes the search spans. User must have
+    access to all of them. No profile is written.
+    filter_criteria: same structure as filter_profile.filter_criteria.
+    All ARV engine params carried inline.
+    """
+    county_fips: list[str]
+    filter_criteria: dict
+    rehab_cost_per_sqft: float = 22.00
+    min_comp_sales_for_arv: int = 3
+    comp_radius_miles: float = 1.0
+    comp_year_built_tolerance: int = 15
+    deal_score_weights: dict = {}
+    # profile_name not required — no write occurs
 
 # ── Filter application ───────────────────────────────────────────────────
 
 def _apply_filters(
     stmt,
     filters: dict[str, Any],
-) :
+):
     """Apply filter_criteria filter dimensions as WHERE clauses.
 
     Only non-null filter values are applied. Null values in the criteria
@@ -166,6 +242,23 @@ def _apply_filters(
         stmt = stmt.where(Property.list_price >= lp["min"])
     if lp.get("max") is not None:
         stmt = stmt.where(Property.list_price <= lp["max"])
+    
+    # list_price_to_jv_ratio
+    lpjr = f.get("list_price_to_jv_ratio", {})
+    if lpjr.get("min") is not None:
+        stmt = stmt.where(
+            Property.list_price.isnot(None),
+            Property.jv.isnot(None),
+            Property.jv > 0,
+            (Property.list_price / Property.jv) >= lpjr["min"],
+        )
+    if lpjr.get("max") is not None:
+        stmt = stmt.where(
+            Property.list_price.isnot(None),
+            Property.jv.isnot(None),
+            Property.jv > 0,
+            (Property.list_price / Property.jv) <= lpjr["max"],
+        )       
 
     # year_built (act_yr_blt)
     yb = f.get("year_built", {})
@@ -244,7 +337,7 @@ def _apply_filters(
     if lv.get("min") is not None:
         stmt = stmt.where(Property.lnd_val >= lv["min"])
     if lv.get("max") is not None:
-        stmt = stmt.where(Property.lnd_val <= lv["max"])
+        stmt = stmt.where(Property.lnd_val <= lv["max"]) 
 
     # nav_total_assessment
     nav = f.get("nav_total_assessment", {})
@@ -306,11 +399,6 @@ def _apply_filters(
     zc = f.get("zip_codes", {})
     if zc.get("include"):
         stmt = stmt.where(Property.phy_zipcd.in_(zc["include"]))
-
-    # county_nos (include list — dor co_no integer)
-    cn = f.get("county_nos", {})
-    if cn.get("include"):
-        stmt = stmt.where(Property.co_no.in_(cn["include"]))
 
     # mkt_ar_codes (include list)
     mac = f.get("mkt_ar_codes", {})
@@ -422,94 +510,83 @@ def _compute_deal_score(
 
 # ── Routes ───────────────────────────────────────────────────────────────
 
-@router.get("", response_model=list[PropertySearchResult])
+@router.get("/properties", response_model=list[PropertySearchResult])
 async def search_properties(
-    county_fips: str = Depends(county_access()),
     filter_profile_id: int = Query(..., description="ID of the filter profile to execute"),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[PropertySearchResult]:
-    """Execute a live query against properties using the specified filter profile.
+    """Execute a live multi-county property search using the specified filter profile.
 
-    Applies filter_criteria as WHERE clauses at query time.
-    Computes deal score at query time using deal_score_weights.
-    Returns results ranked by deal score descending, then arv_spread descending.
-    ARV source distinction (COMP vs JV_FALLBACK) is surfaced in each result.
+    Loads the profile by ID, validates that the current user may access
+    all counties in profile.county_fips, applies filter_criteria at query
+    time, computes deal score, and returns results ranked according to
+    filter_criteria.filters.sort_by when supported, otherwise by deal score
+    descending with arv_spread as a tiebreaker.
+
     max_results from filter_criteria is honoured if set.
     """
-    # Load and validate the filter profile
-    fp_result = await db.execute(
-        select(FilterProfile).where(
-            FilterProfile.id == filter_profile_id,
-            FilterProfile.county_fips == county_fips,
-            FilterProfile.is_active.is_(True),
-        )
-    )
-    profile: FilterProfile | None = fp_result.scalar_one_or_none()
+    profile = await _get_visible_active_profile(filter_profile_id, current_user, db)
 
-    if profile is None:
+    profile_counties = list(dict.fromkeys(profile.county_fips))
+    if not profile_counties:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Filter profile {filter_profile_id} not found for county {county_fips}",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Filter profile {filter_profile_id} has no counties configured",
         )
 
     filters: dict[str, Any] = profile.filter_criteria.get("filters", {})
     weights: dict[str, Any] = profile.deal_score_weights or {}
 
-    # Base query — county scoped
-    stmt = select(Property).where(Property.county_fips == county_fips)
+    sort_cfg = filters.get("sort_by", {})
+    sort_field = sort_cfg.get("field") if isinstance(sort_cfg, dict) else None
+    sort_direction = sort_cfg.get("direction", "DESC") if isinstance(sort_cfg, dict) else "DESC"
+    sort_direction = str(sort_direction).upper()
 
-    # Apply filter dimensions
+    stmt = select(Property).where(Property.county_fips.in_(profile_counties))
     stmt = _apply_filters(stmt, filters)
 
-    # max_results
     max_res = filters.get("max_results", {})
     limit = max_res.get("value") if max_res else None
 
-    # Fetch properties
     result = await db.execute(stmt)
     properties = result.scalars().all()
 
-    # For each property fetch latest listing_event
-    parcel_ids = [p.parcel_id for p in properties]
-    latest_events: dict[str, ListingEvent] = {}
+    property_keys = [(p.county_fips, p.parcel_id) for p in properties]
+    latest_events: dict[tuple[str, str], ListingEvent] = {}
 
-    if parcel_ids:
-        # Subquery: max id per parcel within county — id is append-only autoincrement
-        sub = (
-            select(
-                ListingEvent.parcel_id,
-                ListingEvent.id,
-            )
-            .where(
-                ListingEvent.county_fips == county_fips,
-                ListingEvent.parcel_id.in_(parcel_ids),
-            )
-            .distinct(ListingEvent.parcel_id)
-            .order_by(ListingEvent.parcel_id, ListingEvent.id.desc())
-            .subquery()
-        )
+    if property_keys:
+        # Fetch all listing events for the county set, then resolve latest
+        # per parcel in Python. Avoids a large tuple IN(...) list that
+        # exceeds PostgreSQL's stack depth limit at scale.
+        property_key_set = set(property_keys)
         ev_result = await db.execute(
-            select(ListingEvent).join(sub, ListingEvent.id == sub.c.id)
+            select(ListingEvent)
+            .where(ListingEvent.county_fips.in_(profile_counties))
+            .order_by(ListingEvent.county_fips, ListingEvent.parcel_id, ListingEvent.id.desc())
         )
         for ev in ev_result.scalars().all():
-            latest_events[ev.parcel_id] = ev
+            key = (ev.county_fips, ev.parcel_id)
+            if key not in property_key_set:
+                continue
+            if key not in latest_events:
+                latest_events[key] = ev
+            # Already have the latest (highest id) for this key — skip
 
-    # Apply listing_type filter if set — post-fetch against latest event
     lt = filters.get("listing_types", {})
     if lt.get("include"):
         allowed = set(lt["include"])
         properties = [
             p for p in properties
-            if latest_events.get(p.parcel_id) is not None
-            and latest_events[p.parcel_id].listing_type in allowed
+            if (ev := latest_events.get((p.county_fips, p.parcel_id))) is not None
+            and ev.listing_type in allowed
         ]
 
-    # Apply days_on_market filter — lives on listing_event, not property
     dom = filters.get("days_on_market", {})
     if dom.get("min") is not None or dom.get("max") is not None:
         filtered = []
         for p in properties:
-            ev = latest_events.get(p.parcel_id)
+            ev = latest_events.get((p.county_fips, p.parcel_id))
             if ev is None:
                 continue
             if dom.get("min") is not None and (ev.days_on_market is None or ev.days_on_market < dom["min"]):
@@ -519,70 +596,274 @@ async def search_properties(
             filtered.append(p)
         properties = filtered
 
-    # Apply min_deal_score filter — computed, not stored
     min_ds = filters.get("min_deal_score", {})
     min_deal_score_val = min_ds.get("value") if min_ds else None
 
-    # Compute deal scores
     scored: list[tuple[Property, ListingEvent | None, float | None]] = []
     for p in properties:
-        ev = latest_events.get(p.parcel_id)
+        ev = latest_events.get((p.county_fips, p.parcel_id))
         ds = _compute_deal_score(p, ev, weights)
         if min_deal_score_val is not None and (ds is None or ds < min_deal_score_val):
             continue
         scored.append((p, ev, ds))
 
-    # Sort — deal_score desc, arv_spread desc as tiebreaker
-    scored.sort(
-        key=lambda x: (
-            x[2] if x[2] is not None else -1.0,
-            x[0].arv_spread if x[0].arv_spread is not None else -1,
-        ),
-        reverse=True,
-    )
+    supported_sort_fields = {
+        "deal_score",
+        "arv_spread",
+        "list_price",
+        "jv",
+        "years_since_last_sale",
+    }
 
-    # Apply max_results
+    reverse = sort_direction != "ASC"
+
+    if sort_field not in supported_sort_fields:
+        sort_field = "deal_score"
+        reverse = True
+
+    def _sort_key(item: tuple[Property, ListingEvent | None, float | None]):
+        prop, ev, ds = item
+
+        if sort_field == "deal_score":
+            primary = ds if ds is not None else -1.0
+            secondary = prop.arv_spread if prop.arv_spread is not None else -1
+            return (primary, secondary)
+
+        if sort_field == "arv_spread":
+            primary = prop.arv_spread if prop.arv_spread is not None else -1
+            secondary = ds if ds is not None else -1.0
+            return (primary, secondary)
+
+        if sort_field == "list_price":
+            primary = prop.list_price if prop.list_price is not None else -1
+            secondary = ds if ds is not None else -1.0
+            return (primary, secondary)
+
+        if sort_field == "jv":
+            primary = prop.jv if prop.jv is not None else -1
+            secondary = ds if ds is not None else -1.0
+            return (primary, secondary)
+
+        if sort_field == "years_since_last_sale":
+            primary = prop.years_since_last_sale if prop.years_since_last_sale is not None else -1
+            secondary = ds if ds is not None else -1.0
+            return (primary, secondary)
+
+        return (
+            ds if ds is not None else -1.0,
+            prop.arv_spread if prop.arv_spread is not None else -1,
+        )
+
+    scored.sort(key=_sort_key, reverse=reverse)
+
     if limit:
         scored = scored[:limit]
 
-    # Build response
     out: list[PropertySearchResult] = []
     for prop, ev, ds in scored:
         latest = ListingEventSummary.model_validate(ev) if ev else None
         arv_source = ev.arv_source if ev else None
-        arv_estimate = ev.arv_estimate if ev else None
+        arv_estimate = (ev.arv_estimate if ev else None) or prop.arv_estimate
 
-        out.append(PropertySearchResult(
-            county_fips=prop.county_fips,
-            parcel_id=prop.parcel_id,
-            phy_addr1=prop.phy_addr1,
-            phy_city=prop.phy_city,
-            phy_zipcd=prop.phy_zipcd,
-            dor_uc=prop.dor_uc,
-            jv=prop.jv,
-            tot_lvg_area=prop.tot_lvg_area,
-            lnd_sqfoot=prop.lnd_sqfoot,
-            act_yr_blt=prop.act_yr_blt,
-            eff_yr_blt=prop.eff_yr_blt,
-            bedrooms=prop.bedrooms,
-            bathrooms=float(prop.bathrooms) if prop.bathrooms is not None else None,
-            absentee_owner=prop.absentee_owner,
-            imp_qual=prop.imp_qual,
-            years_since_last_sale=prop.years_since_last_sale,
-            improvement_to_land_ratio=float(prop.improvement_to_land_ratio) if prop.improvement_to_land_ratio is not None else None,
-            soh_compression_ratio=float(prop.soh_compression_ratio) if prop.soh_compression_ratio is not None else None,
-            arv_estimate=arv_estimate,
-            arv_spread=prop.arv_spread,
-            jv_per_sqft=float(prop.jv_per_sqft) if prop.jv_per_sqft is not None else None,
-            deal_score=ds,
-            arv_source=arv_source,
-            latest_listing=latest,
-        ))
+        out.append(
+            PropertySearchResult(
+                county_fips=prop.county_fips,
+                parcel_id=prop.parcel_id,
+                phy_addr1=prop.phy_addr1,
+                phy_city=prop.phy_city,
+                phy_zipcd=prop.phy_zipcd,
+                dor_uc=prop.dor_uc,
+                jv=prop.jv,
+                tot_lvg_area=prop.tot_lvg_area,
+                lnd_sqfoot=prop.lnd_sqfoot,
+                act_yr_blt=prop.act_yr_blt,
+                eff_yr_blt=prop.eff_yr_blt,
+                bedrooms=prop.bedrooms,
+                bathrooms=float(prop.bathrooms) if prop.bathrooms is not None else None,
+                absentee_owner=prop.absentee_owner,
+                imp_qual=prop.imp_qual,
+                years_since_last_sale=prop.years_since_last_sale,
+                improvement_to_land_ratio=float(prop.improvement_to_land_ratio) if prop.improvement_to_land_ratio is not None else None,
+                soh_compression_ratio=float(prop.soh_compression_ratio) if prop.soh_compression_ratio is not None else None,
+                arv_estimate=arv_estimate,
+                arv_spread=prop.arv_spread,
+                jv_per_sqft=float(prop.jv_per_sqft) if prop.jv_per_sqft is not None else None,
+                deal_score=ds,
+                arv_source=arv_source,
+                latest_listing=latest,
+            )
+        )
 
     return out
 
 
-@router.get("/{parcel_id}", response_model=PropertyDetail)
+@router.post("/properties/search", response_model=list[PropertySearchResult])
+async def search_properties_inline(
+    body: InlineSearchRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[PropertySearchResult]:
+    """Execute a live multi-county property search from inline filter criteria.
+
+    No filter profile is required and none is written. Access to all
+    counties in body.county_fips is validated against the current user's
+    county access grants. Superusers bypass county access checks.
+    Filter criteria, deal score weights, and ARV engine params are taken
+    directly from the request body. Behaviour is otherwise identical to
+    search_properties.
+    """
+    profile_counties = list(dict.fromkeys(body.county_fips))
+    if not profile_counties:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="county_fips must contain at least one county",
+        )
+
+    if not current_user.is_superuser:
+        accessible = await _get_accessible_fips(current_user, db)
+        _assert_county_access(profile_counties, accessible, is_superuser=False)
+
+    filters: dict[str, Any] = body.filter_criteria.get("filters", {})
+    weights: dict[str, Any] = body.deal_score_weights or {}
+
+    sort_cfg = filters.get("sort_by", {})
+    sort_field = sort_cfg.get("field") if isinstance(sort_cfg, dict) else None
+    sort_direction = sort_cfg.get("direction", "DESC") if isinstance(sort_cfg, dict) else "DESC"
+    sort_direction = str(sort_direction).upper()
+
+    stmt = select(Property).where(Property.county_fips.in_(profile_counties))
+    stmt = _apply_filters(stmt, filters)
+
+    max_res = filters.get("max_results", {})
+    limit = max_res.get("value") if max_res else None
+
+    result = await db.execute(stmt)
+    properties = result.scalars().all()
+
+    property_keys = [(p.county_fips, p.parcel_id) for p in properties]
+    latest_events: dict[tuple[str, str], ListingEvent] = {}
+
+    if property_keys:
+        # Fetch all listing events for the county set, then resolve latest
+        # per parcel in Python. Avoids a large tuple IN(...) list that
+        # exceeds PostgreSQL's stack depth limit at scale.
+        property_key_set = set(property_keys)
+        ev_result = await db.execute(
+            select(ListingEvent)
+            .where(ListingEvent.county_fips.in_(profile_counties))
+            .order_by(ListingEvent.county_fips, ListingEvent.parcel_id, ListingEvent.id.desc())
+        )
+        for ev in ev_result.scalars().all():
+            key = (ev.county_fips, ev.parcel_id)
+            if key not in property_key_set:
+                continue
+            if key not in latest_events:
+                latest_events[key] = ev
+            # Already have the latest (highest id) for this key — skip
+
+    lt = filters.get("listing_types", {})
+    if lt.get("include"):
+        allowed = set(lt["include"])
+        properties = [
+            p for p in properties
+            if (ev := latest_events.get((p.county_fips, p.parcel_id))) is not None
+            and ev.listing_type in allowed
+        ]
+
+    dom = filters.get("days_on_market", {})
+    if dom.get("min") is not None or dom.get("max") is not None:
+        filtered = []
+        for p in properties:
+            ev = latest_events.get((p.county_fips, p.parcel_id))
+            if ev is None:
+                continue
+            if dom.get("min") is not None and (
+                ev.days_on_market is None or ev.days_on_market < dom["min"]
+            ):
+                continue
+            if dom.get("max") is not None and (
+                ev.days_on_market is None or ev.days_on_market > dom["max"]
+            ):
+                continue
+            filtered.append(p)
+        properties = filtered
+
+    min_ds = filters.get("min_deal_score", {})
+    min_deal_score_val = min_ds.get("value") if min_ds else None
+
+    scored: list[tuple[Property, ListingEvent | None, float | None]] = []
+    for p in properties:
+        ev = latest_events.get((p.county_fips, p.parcel_id))
+        ds = _compute_deal_score(p, ev, weights)
+        if min_deal_score_val is not None and (ds is None or ds < min_deal_score_val):
+            continue
+        scored.append((p, ev, ds))
+
+    supported_sort_fields = {
+        "deal_score", "arv_spread", "list_price", "jv", "years_since_last_sale",
+    }
+    reverse = sort_direction != "ASC"
+    if sort_field not in supported_sort_fields:
+        sort_field = "deal_score"
+        reverse = True
+
+    def _sort_key(item: tuple[Property, ListingEvent | None, float | None]):
+        prop, ev, ds = item
+        if sort_field == "deal_score":
+            return (ds if ds is not None else -1.0, prop.arv_spread if prop.arv_spread is not None else -1)
+        if sort_field == "arv_spread":
+            return (prop.arv_spread if prop.arv_spread is not None else -1, ds if ds is not None else -1.0)
+        if sort_field == "list_price":
+            return (prop.list_price if prop.list_price is not None else -1, ds if ds is not None else -1.0)
+        if sort_field == "jv":
+            return (prop.jv if prop.jv is not None else -1, ds if ds is not None else -1.0)
+        if sort_field == "years_since_last_sale":
+            return (prop.years_since_last_sale if prop.years_since_last_sale is not None else -1, ds if ds is not None else -1.0)
+        return (ds if ds is not None else -1.0, prop.arv_spread if prop.arv_spread is not None else -1)
+
+    scored.sort(key=_sort_key, reverse=reverse)
+    if limit:
+        scored = scored[:limit]
+
+    out: list[PropertySearchResult] = []
+    for prop, ev, ds in scored:
+        latest = ListingEventSummary.model_validate(ev) if ev else None
+        arv_source = ev.arv_source if ev else None
+        arv_estimate = (ev.arv_estimate if ev else None) or prop.arv_estimate
+
+        out.append(
+            PropertySearchResult(
+                county_fips=prop.county_fips,
+                parcel_id=prop.parcel_id,
+                phy_addr1=prop.phy_addr1,
+                phy_city=prop.phy_city,
+                phy_zipcd=prop.phy_zipcd,
+                dor_uc=prop.dor_uc,
+                jv=prop.jv,
+                tot_lvg_area=prop.tot_lvg_area,
+                lnd_sqfoot=prop.lnd_sqfoot,
+                act_yr_blt=prop.act_yr_blt,
+                eff_yr_blt=prop.eff_yr_blt,
+                bedrooms=prop.bedrooms,
+                bathrooms=float(prop.bathrooms) if prop.bathrooms is not None else None,
+                absentee_owner=prop.absentee_owner,
+                imp_qual=prop.imp_qual,
+                years_since_last_sale=prop.years_since_last_sale,
+                improvement_to_land_ratio=float(prop.improvement_to_land_ratio) if prop.improvement_to_land_ratio is not None else None,
+                soh_compression_ratio=float(prop.soh_compression_ratio) if prop.soh_compression_ratio is not None else None,
+                arv_estimate=arv_estimate,
+                arv_spread=prop.arv_spread,
+                jv_per_sqft=float(prop.jv_per_sqft) if prop.jv_per_sqft is not None else None,
+                deal_score=ds,
+                arv_source=arv_source,
+                latest_listing=latest,
+            )
+        )
+
+    return out
+
+
+@router.get("/{county_fips}/properties/{parcel_id}", response_model=PropertyDetail)
 async def get_property(
     county_fips: str = Depends(county_access()),
     parcel_id: str = Path(..., description="16-character alphanumeric parcel ID"),

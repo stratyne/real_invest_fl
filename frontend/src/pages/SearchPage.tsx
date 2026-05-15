@@ -13,7 +13,6 @@ import type {
 // ── Filter state type ─────────────────────────────────────────────────────
 
 export interface FilterState {
-  county_nos: number[]
   zip_codes: string[]
   mkt_ar_codes: string[]
   nbrhd_codes: string[]
@@ -74,7 +73,6 @@ export interface FilterState {
 }
 
 const EMPTY_FILTER: FilterState = {
-  county_nos: [],
   zip_codes: [],
   mkt_ar_codes: [],
   nbrhd_codes: [],
@@ -145,7 +143,6 @@ function profileToFilterState(p: FilterProfileResponse): FilterState {
   function excludeList(key: string): string[] { return ((f[key] as Record<string, unknown>)?.exclude as string[]) ?? [] }
 
   return {
-    county_nos: (includeList('county_nos') as number[]) ?? [],
     zip_codes: (includeList('zip_codes') as string[]) ?? [],
     mkt_ar_codes: (includeList('mkt_ar_codes') as string[]) ?? [],
     nbrhd_codes: (includeList('nbrhd_codes') as string[]) ?? [],
@@ -211,15 +208,16 @@ function profileToFilterState(p: FilterProfileResponse): FilterState {
 export function filterStateToPayload(
   fs: FilterState,
   profileName: string,
+  countyFips: string[],
 ): FilterProfileCreateRequest {
   return {
     profile_name: profileName,
+    county_fips: countyFips,
     filter_criteria: {
       logic: 'AND',
       version: 1,
       filters: {
         sort_by: { field: fs.sort_by_field, direction: fs.sort_by_direction },
-        county_nos: { include: fs.county_nos.length ? fs.county_nos : null },
         zip_codes: { include: fs.zip_codes.length ? fs.zip_codes : null },
         mkt_ar_codes: { include: fs.mkt_ar_codes.length ? fs.mkt_ar_codes : null },
         nbrhd_codes: { include: fs.nbrhd_codes.length ? fs.nbrhd_codes : null },
@@ -273,7 +271,6 @@ export function filterStateToPayload(
 
 function countActiveFilters(fs: FilterState): number {
   let count = 0
-  if (fs.county_nos.length) count++
   if (fs.zip_codes.length) count++
   if (fs.mkt_ar_codes.length) count++
   if (fs.nbrhd_codes.length) count++
@@ -426,7 +423,7 @@ function SaveModal({ onSave, onClose, saving, error }: {
 
 // ── Main SearchPage ───────────────────────────────────────────────────────
 
-type NavState = { profileId?: number; countyFips?: string; filterState?: FilterState } | null
+type NavState = { profileId?: number; countyFips?: string[]; filterState?: FilterState } | null
 
 export default function SearchPage() {
   const navigate = useNavigate()
@@ -438,7 +435,7 @@ export default function SearchPage() {
   const [counties, setCounties] = useState<CountyResponse[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [selectedFips, setSelectedFips] = useState<string | null>(navState?.countyFips ?? null)
+  const [selectedFips, setSelectedFips] = useState<string[]>(navState?.countyFips ?? [])
   const [profiles, setProfiles] = useState<FilterProfileResponse[]>([])
   const [selectedProfileId, setSelectedProfileId] = useState<number | null>(navState?.profileId ?? null)
   const [filterState, setFilterState] = useState<FilterState>(navState?.filterState ?? EMPTY_FILTER)
@@ -449,7 +446,8 @@ export default function SearchPage() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   const activeCount = countActiveFilters(filterState)
-  const canSearch = activeCount >= 2 && selectedFips != null && selectedProfileId != null
+  const canSearch = activeCount >= 2 && selectedFips.length > 0
+  const canSave = activeCount >= 2 && selectedFips.length > 0
 
   // ── On mount — load user and accessible counties
   useEffect(() => {
@@ -458,52 +456,83 @@ export default function SearchPage() {
       .catch(() => setLoadError('Failed to load.'))
   }, [])
 
-  // ── Load profiles when county selected
+  // ── Load visible profiles once
   useEffect(() => {
-    if (!selectedFips) return
-    listProfiles(selectedFips)
+    listProfiles()
       .then((ps) => {
         setProfiles(ps)
+
         const useNav =
           !navStateConsumed.current &&
-            navState?.countyFips === selectedFips &&
-            navState?.profileId != null
-        const targetId = useNav
-            ? navState!.profileId!
-            : ps.length > 0 ? ps[0].id : null
-        setSelectedProfileId(targetId)
-        if (!useNav || !navState?.filterState) {
-            const target = ps.find((p) => p.id === targetId) ?? ps[0]
+          navState?.profileId != null
+
+        if (useNav) {
+          setSelectedProfileId(navState.profileId!)
+
+          if (navState?.countyFips) {
+            setSelectedFips(navState.countyFips)
+          } else {
+            setSelectedFips([])
+          }
+
+          if (navState?.filterState) {
+            setFilterState(navState.filterState)
+          } else {
+            const target = ps.find((p) => p.id === navState.profileId) ?? null
             setFilterState(target ? profileToFilterState(target) : EMPTY_FILTER)
+          }
+        } else {
+          setSelectedProfileId(null)
+          setSelectedFips([])
+          setFilterState(EMPTY_FILTER)
         }
+
         navStateConsumed.current = true
-        })
+      })
       .catch(() => setLoadError('Failed to load filter profiles.'))
-  }, [selectedFips])
+  }, [])
 
   function handleCountySelect(fips: string) {
-    if (fips === selectedFips) return
-    setSelectedFips(fips)
+    setSelectedFips((prev) =>
+      prev.includes(fips)
+        ? prev.filter((x) => x !== fips)
+        : [...prev, fips]
+    )
     setSelectedProfileId(null)
-    setFilterState(EMPTY_FILTER)
-    setProfiles([])
   }
 
-  function handleProfileSelect(id: number) {
-    setSelectedProfileId(id)
-    const p = profiles.find((x) => x.id === id)
-    if (p) setFilterState(profileToFilterState(p))
+  function handleProfileSelect(id: number | null) {
+  if (id == null) {
+    setSelectedProfileId(null)
+    setSelectedFips([])
+    setFilterState(EMPTY_FILTER)
+    return
   }
+
+  setSelectedProfileId(id)
+  const p = profiles.find((x) => x.id === id)
+  if (p) {
+    setFilterState(profileToFilterState(p))
+    setSelectedFips(p.county_fips)
+  }
+}
+
+  const handleClearAll = useCallback(() => {
+    setSelectedProfileId(null)
+    setSelectedFips([])
+    setFilterState(EMPTY_FILTER)
+  }, [])
 
   const handleSave = useCallback(async (name: string) => {
-    if (!selectedFips) return
+    if (selectedFips.length === 0) return
     setSaving(true)
     setSaveError(null)
     try {
-      const payload = filterStateToPayload(filterState, name)
-      const created = await createProfile(selectedFips, payload)
+      const payload = filterStateToPayload(filterState, name, selectedFips)
+      const created = await createProfile(payload)
       setProfiles((prev) => [...prev, created])
       setSelectedProfileId(created.id)
+      setSelectedFips(created.county_fips)
       setShowSaveModal(false)
       setSaveSuccess(`Profile "${name}" saved.`)
       setTimeout(() => setSaveSuccess(null), 3000)
@@ -515,9 +544,13 @@ export default function SearchPage() {
   }, [filterState, selectedFips])
 
   function handleSearch() {
-    if (!canSearch || !selectedFips || selectedProfileId == null) return
-    navigate(`/results/${selectedFips}/${selectedProfileId}`, {
-      state: { filterState, countyFips: selectedFips },
+    if (!canSearch) return
+    navigate('/results', {
+      state: {
+        profileId: selectedProfileId ?? undefined,
+        filterState,
+        countyFips: selectedFips,
+      },
     })
   }
 
@@ -548,14 +581,14 @@ export default function SearchPage() {
 
         {/* ── County picker ── */}
         <section style={pg.section}>
-          <h2 style={pg.sectionTitle}>County</h2>
+          <h2 style={pg.sectionTitle}>Counties</h2>
           <div style={pg.countyRow}>
             {counties.map((c) => (
               <button
                 key={c.county_fips}
                 style={{
                   ...pg.countyBtn,
-                  ...(selectedFips === c.county_fips ? pg.countyBtnSelected : {}),
+                  ...(selectedFips.includes(c.county_fips) ? pg.countyBtnSelected : {}),
                 }}
                 onClick={() => handleCountySelect(c.county_fips)}
               >
@@ -566,35 +599,66 @@ export default function SearchPage() {
         </section>
 
         {/* ── Profile picker ── */}
-        {selectedFips && profiles.length > 0 && (
-          <section style={pg.section}>
-            <h2 style={pg.sectionTitle}>Filter Profile</h2>
-            <div style={pg.profilePickerRow}>
-              <select
-                style={pg.profileSelect}
-                value={selectedProfileId ?? ''}
-                onChange={(e) => handleProfileSelect(Number(e.target.value))}
-              >
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.profile_name}{p.user_id == null ? ' (system)' : ' (mine)'}
-                  </option>
-                ))}
-              </select>
+        <section style={pg.section}>
+          <h2 style={pg.sectionTitle}>Filter Profile</h2>
+
+          <div style={pg.profilePickerRow}>
+            <select
+              style={pg.profileSelect}
+              value={selectedProfileId == null ? '' : String(selectedProfileId)}
+              onChange={(e) => {
+                const value = e.target.value
+
+                if (value === '') {
+                  setSelectedProfileId(null)
+                  setSelectedFips([])
+                  setFilterState(EMPTY_FILTER)
+                  return
+                }
+
+                handleProfileSelect(Number(value))
+              }}
+            >
+              <option value="">Select...</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={String(p.id)}>
+                  {p.profile_name}{p.user_id == null ? ' (system)' : ' (mine)'}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={handleClearAll}
+              style={{
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #d0d7de',
+                background: '#fff',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >
+              Clear all
+            </button>
+          </div>
+
+          {profiles.length === 0 && (
+            <div style={{ marginTop: 8, fontSize: 14, color: '#6b7280' }}>
+              No saved profiles available.
             </div>
-          </section>
-        )}
+          )}
+        </section>
 
         {/* ── Filter editor ── */}
-        {selectedFips && (
+        {selectedFips.length > 0 && (
           <section style={pg.section}>
             <h2 style={pg.sectionTitle}>Filter Parameters</h2>
             <div style={pg.filterStack}>
 
               <Section title="Location" defaultOpen>
-                <NumListInput label="DOR County Numbers" value={filterState.county_nos}
-                  onChange={(v) => setFs({ county_nos: v })} placeholder="e.g. 27, 67"
-                  hint="Escambia = 27 · Santa Rosa = 67" />
                 <TextListInput label="ZIP Codes" value={filterState.zip_codes}
                   onChange={(v) => setFs({ zip_codes: v as string[] })} placeholder="e.g. 32501, 32502" />
                 <TextListInput label="Market Area Codes" value={filterState.mkt_ar_codes}
@@ -728,26 +792,31 @@ export default function SearchPage() {
               {saveSuccess && <span style={pg.saveSuccess}>{saveSuccess}</span>}
               <div style={pg.actionBtns}>
                 <button
-                  style={{ ...pg.saveBtn, opacity: activeCount < 2 ? 0.5 : 1 }}
-                  onClick={() => activeCount >= 2 && setShowSaveModal(true)}
-                  disabled={activeCount < 2}
+                    style={{ ...pg.saveBtn, opacity: canSave ? 1 : 0.5 }}
+                    onClick={() => canSave && setShowSaveModal(true)}
+                    disabled={!canSave}
                 >
-                  Save Filter
+                    Save Filter
                 </button>
                 <button
-                  style={{ ...pg.searchBtn, opacity: canSearch ? 1 : 0.5 }}
-                  onClick={handleSearch}
-                  disabled={!canSearch}
+                    style={{ ...pg.searchBtn, opacity: canSearch ? 1 : 0.5 }}
+                    onClick={handleSearch}
+                    disabled={!canSearch}
                 >
-                  Search
+                    Search
                 </button>
-              </div>
+                </div>
+                {!canSearch && (
+                <div style={{ marginTop: 8, fontSize: 14, color: '#6b7280' }}>
+                    Select one or more counties, select a profile, and set at least 2 active filters.
+                </div>
+                )}
             </div>
           </section>
         )}
 
-        {!selectedFips && counties.length > 0 && (
-          <div style={pg.centerMsg}>Select a county above to configure filter parameters.</div>
+        {selectedFips.length === 0 && counties.length > 0 && (
+          <div style={pg.centerMsg}>Select one or more counties above to configure filter parameters.</div>
         )}
 
       </div>

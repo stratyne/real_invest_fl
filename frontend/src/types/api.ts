@@ -38,7 +38,7 @@ export interface CountyResponse {
 export interface ProfileActivityEntry {
   profile_id: number
   profile_name: string
-  county_fips: string
+  county_fips: string[]
   is_system: boolean
   is_favorite: boolean
   last_searched_at: string | null
@@ -68,7 +68,7 @@ export interface FilterCriteria {
 export interface FilterProfileResponse {
   id: number
   profile_name: string
-  county_fips: string
+  county_fips: string[]
   description: string | null
   is_active: boolean
   version: number
@@ -88,6 +88,7 @@ export interface FilterProfileResponse {
 
 export interface FilterProfileCreateRequest {
   profile_name: string
+  county_fips: string[]
   description?: string | null
   is_active?: boolean
   filter_criteria: FilterCriteria
@@ -103,6 +104,7 @@ export interface FilterProfileCreateRequest {
 
 export interface FilterProfileUpdateRequest {
   profile_name?: string | null
+  county_fips?: string[] | null
   description?: string | null
   is_active?: boolean | null
   filter_criteria?: FilterCriteria | null
@@ -118,6 +120,7 @@ export interface FilterProfileUpdateRequest {
 
 export interface CloneProfileRequest {
   profile_name: string
+  county_fips?: string[] | null
 }
 
 // ── Properties ───────────────────────────────────────────────────────────

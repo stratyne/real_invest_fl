@@ -28,8 +28,7 @@ Standard bootstrap block:
 
 ## Migration Chain
 
-HEAD = j1k2l3m4n5o6 (v0.17) — live and verified
-Pending: k2l3m4n5o6p7 (v0.18) — user_profile_prefs
+HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
 
 | Rev | Version | Description |
 |---|---|---|
@@ -49,7 +48,8 @@ Pending: k2l3m4n5o6p7 (v0.18) — user_profile_prefs
 | h9i0j1k2l3m4 | v0.15 | parcel_sale_history grantor/grantee NOT NULL DEFAULT '' |
 | i0j1k2l3m4n5 | v0.16 | listing_scores table; strip scoring columns from listing_events |
 | j1k2l3m4n5o6 | v0.17 | Phase 4 outreach schema |
-| k2l3m4n5o6p7 | v0.18 | user_profile_prefs — PENDING |
+| k2l3m4n5o6p7 | v0.18 | user_profile_prefs |
+| l3m4n5o6p7q8 | v0.19 | multi-county filter profiles — county_fips VARCHAR(5)[] |
 
 ---
 
@@ -278,7 +278,7 @@ Pending: k2l3m4n5o6p7 (v0.18) — user_profile_prefs
     id                        INTEGER       PK autoincrement
     user_id                   INTEGER                 FK → users.id ON DELETE CASCADE
                                                       -- NULL = system profile
-    county_fips               VARCHAR(5)    NOT NULL  FK → counties.county_fips
+    county_fips               VARCHAR(5)[]  NOT NULL  -- array, GIN indexed
     profile_name              VARCHAR(100)  NOT NULL
     description               TEXT
     is_active                 BOOLEAN       NOT NULL  DEFAULT true
@@ -296,12 +296,13 @@ Pending: k2l3m4n5o6p7 (v0.18) — user_profile_prefs
     updated_at                TIMESTAMPTZ   NOT NULL  DEFAULT now()
 
     Partial unique indexes:
-      UNIQUE (county_fips, profile_name) WHERE user_id IS NULL
-        -- uq_fp_system_name
-      UNIQUE (user_id, county_fips, profile_name) WHERE user_id IS NOT NULL
-        -- uq_fp_user_name
+    UNIQUE (profile_name) WHERE user_id IS NULL -- uq_fp_system_name
+    UNIQUE (user_id, profile_name) WHERE user_id IS NOT NULL -- uq_fp_user_name
 
-### user_profile_prefs  -- v0.18 PENDING MIGRATION
+    Indexes:
+      ix_fp_county_fips_gin  gin (county_fips)
+
+### user_profile_prefs  -- v0.18
 
     id                  INTEGER      PK autoincrement
     user_id             INTEGER      NOT NULL  FK → users.id ON DELETE CASCADE

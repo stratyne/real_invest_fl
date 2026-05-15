@@ -35,7 +35,7 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 class ProfileActivityEntry(BaseModel):
     profile_id: int
     profile_name: str
-    county_fips: str
+    county_fips: list[str]
     is_system: bool
     is_favorite: bool
     last_searched_at: datetime | None

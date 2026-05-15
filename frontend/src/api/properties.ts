@@ -1,13 +1,20 @@
 import client from './client'
 import type { PropertySearchResult, PropertyDetail } from '../types/api'
+import type { FilterProfileCreateRequest } from '../types/api'
 
 export async function searchProperties(
-  countyFips: string,
   filterProfileId: number
 ): Promise<PropertySearchResult[]> {
-  const res = await client.get<PropertySearchResult[]>(`/${countyFips}/properties`, {
+  const res = await client.get<PropertySearchResult[]>('/properties', {
     params: { filter_profile_id: filterProfileId },
   })
+  return res.data
+}
+
+export async function searchPropertiesInline(
+  payload: FilterProfileCreateRequest
+): Promise<PropertySearchResult[]> {
+  const res = await client.post<PropertySearchResult[]>('/properties/search', payload)
   return res.data
 }
 

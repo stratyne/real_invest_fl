@@ -1,11 +1,14 @@
 """
-Filter profile routes — profile management for county-scoped investment filters.
+Filter profile routes — profile management for multi-county investment filters.
 
-GET    /{county_fips}/profiles                        — list system + own profiles.
+GET    /{county_fips}/profiles                        — list system + own profiles
+       visible to the user for the given county.
 POST   /{county_fips}/profiles                        — create a new user-owned profile.
 POST   /{county_fips}/profiles/{profile_id}/clone     — clone any visible profile.
 PATCH  /{county_fips}/profiles/{profile_id}           — update a user-owned profile.
 DELETE /{county_fips}/profiles/{profile_id}           — delete a user-owned profile.
+PATCH  /{county_fips}/profiles/{profile_id}/favorite  — toggle is_favorite on
+       user_profile_prefs for (current_user.id, profile_id).
 """
 from __future__ import annotations
 
@@ -17,11 +20,12 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from real_invest_fl.api.deps import county_access, get_current_user, get_db
+from real_invest_fl.api.deps import get_current_user, get_db
 from real_invest_fl.db.models.filter_profile import FilterProfile
 from real_invest_fl.db.models.user import User
+from real_invest_fl.db.models.user_profile_prefs import UserProfilePrefs
 
-router = APIRouter(prefix="/{county_fips}/profiles", tags=["profiles"])
+router = APIRouter(prefix="/profiles", tags=["profiles"])
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
@@ -29,7 +33,7 @@ router = APIRouter(prefix="/{county_fips}/profiles", tags=["profiles"])
 class FilterProfileResponse(BaseModel):
     id: int
     profile_name: str
-    county_fips: str
+    county_fips: list[str]
     description: str | None
     is_active: bool
     version: int
@@ -51,6 +55,7 @@ class FilterProfileResponse(BaseModel):
 
 class FilterProfileCreateRequest(BaseModel):
     profile_name: str
+    county_fips: list[str]
     description: str | None = None
     is_active: bool = True
     filter_criteria: dict
@@ -66,6 +71,7 @@ class FilterProfileCreateRequest(BaseModel):
 
 class FilterProfileUpdateRequest(BaseModel):
     profile_name: str | None = None
+    county_fips: list[str] | None = None
     description: str | None = None
     is_active: bool | None = None
     filter_criteria: dict | None = None
@@ -81,65 +87,107 @@ class FilterProfileUpdateRequest(BaseModel):
 
 class CloneProfileRequest(BaseModel):
     profile_name: str
+    county_fips: list[str] | None = None
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────
+class ToggleFavoriteResponse(BaseModel):
+    is_favorite: bool
+
+
+# ── Access validation helpers ─────────────────────────────────────────────
+
+def _assert_county_access(
+    requested_fips: list[str],
+    accessible_fips: set[str],
+    is_superuser: bool,
+) -> None:
+    """Raise 403 if the user does not have access to all requested counties.
+
+    Superusers bypass this check entirely.
+    """
+    if is_superuser:
+        return
+    denied = [f for f in requested_fips if f not in accessible_fips]
+    if denied:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied for counties: {', '.join(denied)}",
+        )
+
+
+async def _get_accessible_fips(
+    current_user: User,
+    db: AsyncSession,
+) -> set[str]:
+    """Return the set of county FIPS the current user can access.
+
+    Superusers get an empty set — callers must check is_superuser first
+    and bypass this result entirely.
+    """
+    from real_invest_fl.db.models.user_county_access import UserCountyAccess
+    result = await db.execute(
+        select(UserCountyAccess.county_fips).where(
+            UserCountyAccess.user_id == current_user.id
+        )
+    )
+    return {row for row in result.scalars().all()}
+
+
+# ── Profile visibility helpers ────────────────────────────────────────────
 
 async def _get_visible_profile(
     profile_id: int,
-    county_fips: str,
     current_user: User,
     db: AsyncSession,
 ) -> FilterProfile:
-    """Return a profile visible to the user — system or own.
+    """Return a profile visible to the user.
 
-    Raises 404 if not found or not visible.
-    A profile is visible if it is a system profile (user_id IS NULL)
-    or owned by the current user.
-    Superusers can see all profiles in the county.
+    A profile is visible if it is a system profile (user_id IS NULL) or
+    owned by the current user, and the user has access to all counties in
+    the profile. Superusers see all profiles.
     """
-    stmt = select(FilterProfile).where(
-        FilterProfile.id == profile_id,
-        FilterProfile.county_fips == county_fips,
+    result = await db.execute(
+        select(FilterProfile).where(
+            FilterProfile.id == profile_id,
+        )
     )
-    result = await db.execute(stmt)
     profile: FilterProfile | None = result.scalar_one_or_none()
 
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Filter profile {profile_id} not found in county {county_fips}",
+            detail=f"Filter profile {profile_id} not found",
         )
 
-    if not current_user.is_superuser:
-        if profile.user_id is not None and profile.user_id != current_user.id:
-            # Exists but belongs to another user — return 404, not 403,
-            # to avoid leaking the existence of other users' profiles.
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Filter profile {profile_id} not found in county {county_fips}",
-            )
+    if current_user.is_superuser:
+        return profile
+
+    if profile.user_id is not None and profile.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Filter profile {profile_id} not found",
+        )
+
+    accessible = await _get_accessible_fips(current_user, db)
+    _assert_county_access(profile.county_fips, accessible, current_user.is_superuser)
 
     return profile
 
 
 async def _get_owned_profile(
     profile_id: int,
-    county_fips: str,
     current_user: User,
     db: AsyncSession,
 ) -> FilterProfile:
     """Return a profile the user owns and may mutate.
 
     Raises 404 if not found.
-    Raises 403 if the profile is a system profile.
-    Raises 403 if the profile belongs to another user.
+    Raises 403 if system profile or belongs to another user.
     Superusers may mutate any non-system profile.
     """
     result = await db.execute(
         select(FilterProfile).where(
             FilterProfile.id == profile_id,
-            FilterProfile.county_fips == county_fips,
         )
     )
     profile: FilterProfile | None = result.scalar_one_or_none()
@@ -147,7 +195,7 @@ async def _get_owned_profile(
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Filter profile {profile_id} not found in county {county_fips}",
+            detail=f"Filter profile {profile_id} not found",
         )
 
     if profile.user_id is None:
@@ -162,61 +210,60 @@ async def _get_owned_profile(
             detail="You do not have permission to modify this profile",
         )
 
+    if not current_user.is_superuser:
+        accessible = await _get_accessible_fips(current_user, db)
+        _assert_county_access(profile.county_fips, accessible, current_user.is_superuser)
+
     return profile
 
 
-# ── Routes ───────────────────────────────────────────────────────────────
+# ── Routes ────────────────────────────────────────────────────────────────
 
 @router.get("", response_model=list[FilterProfileResponse])
 async def list_profiles(
-    county_fips: str = Depends(county_access()),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[FilterProfileResponse]:
-    """Return all visible profiles for the county.
-
-    Includes system profiles (user_id IS NULL) and the current user's
-    own profiles. Superusers see all profiles in the county.
-    Results ordered by user_id nulls first (system profiles first),
-    then profile_name.
-    """
     if current_user.is_superuser:
         stmt = (
             select(FilterProfile)
-            .where(FilterProfile.county_fips == county_fips)
             .order_by(FilterProfile.user_id.nullsfirst(), FilterProfile.profile_name)
         )
-    else:
-        stmt = (
-            select(FilterProfile)
-            .where(
-                FilterProfile.county_fips == county_fips,
-                (FilterProfile.user_id.is_(None))
-                | (FilterProfile.user_id == current_user.id),
-            )
-            .order_by(FilterProfile.user_id.nullsfirst(), FilterProfile.profile_name)
-        )
+        result = await db.execute(stmt)
+        profiles = result.scalars().all()
+        return [FilterProfileResponse.model_validate(p) for p in profiles]
 
+    stmt = (
+        select(FilterProfile)
+        .where(
+            (FilterProfile.user_id.is_(None))
+            | (FilterProfile.user_id == current_user.id),
+        )
+        .order_by(FilterProfile.user_id.nullsfirst(), FilterProfile.profile_name)
+    )
     result = await db.execute(stmt)
     profiles = result.scalars().all()
-    return [FilterProfileResponse.model_validate(p) for p in profiles]
+
+    accessible = await _get_accessible_fips(current_user, db)
+    visible = [
+        p for p in profiles
+        if all(f in accessible for f in p.county_fips)
+    ]
+    return [FilterProfileResponse.model_validate(p) for p in visible]
 
 
 @router.post("", response_model=FilterProfileResponse, status_code=status.HTTP_201_CREATED)
 async def create_profile(
-    county_fips: str = Depends(county_access()),
     current_user: User = Depends(get_current_user),
     body: FilterProfileCreateRequest = ...,
     db: AsyncSession = Depends(get_db),
 ) -> FilterProfileResponse:
-    """Create a new user-owned filter profile.
+    accessible = await _get_accessible_fips(current_user, db)
+    _assert_county_access(body.county_fips, accessible, current_user.is_superuser)
 
-    user_id is set server-side to current_user.id — never accepted
-    from the request body. version starts at 1.
-    """
     profile = FilterProfile(
         profile_name=body.profile_name,
-        county_fips=county_fips,
+        county_fips=body.county_fips,
         description=body.description,
         is_active=body.is_active,
         version=1,
@@ -243,23 +290,21 @@ async def create_profile(
     status_code=status.HTTP_201_CREATED,
 )
 async def clone_profile(
-    county_fips: str = Depends(county_access()),
     current_user: User = Depends(get_current_user),
     profile_id: int = Path(..., description="ID of the profile to clone"),
     body: CloneProfileRequest = ...,
     db: AsyncSession = Depends(get_db),
 ) -> FilterProfileResponse:
-    """Clone any visible profile into a new user-owned profile.
+    source = await _get_visible_profile(profile_id, current_user, db)
 
-    The source profile may be a system profile or the user's own.
-    The clone is always user-owned (user_id = current_user.id).
-    version resets to 1 on the clone.
-    """
-    source = await _get_visible_profile(profile_id, county_fips, current_user, db)
+    target_fips = body.county_fips if body.county_fips is not None else source.county_fips
+
+    accessible = await _get_accessible_fips(current_user, db)
+    _assert_county_access(target_fips, accessible, current_user.is_superuser)
 
     clone = FilterProfile(
         profile_name=body.profile_name,
-        county_fips=county_fips,
+        county_fips=target_fips,
         description=source.description,
         is_active=True,
         version=1,
@@ -282,21 +327,21 @@ async def clone_profile(
 
 @router.patch("/{profile_id}", response_model=FilterProfileResponse)
 async def update_profile(
-    county_fips: str = Depends(county_access()),
     current_user: User = Depends(get_current_user),
     profile_id: int = Path(..., description="ID of the profile to update"),
     body: FilterProfileUpdateRequest = ...,
     db: AsyncSession = Depends(get_db),
 ) -> FilterProfileResponse:
-    """Update a user-owned filter profile.
-
-    Only fields present in the request body are updated.
-    version is incremented on every successful update.
-    System profiles and profiles owned by other users return 403.
-    """
-    profile = await _get_owned_profile(profile_id, county_fips, current_user, db)
+    profile = await _get_owned_profile(profile_id, current_user, db)
 
     update_data = body.model_dump(exclude_unset=True)
+
+    if "county_fips" in update_data:
+        accessible = await _get_accessible_fips(current_user, db)
+        _assert_county_access(
+            update_data["county_fips"], accessible, current_user.is_superuser
+        )
+
     for field, value in update_data.items():
         setattr(profile, field, value)
 
@@ -309,17 +354,45 @@ async def update_profile(
 
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_profile(
-    county_fips: str = Depends(county_access()),
     current_user: User = Depends(get_current_user),
     profile_id: int = Path(..., description="ID of the profile to delete"),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete a user-owned filter profile.
-
-    System profiles and profiles owned by other users return 403.
-    Superusers may delete any non-system profile.
-    Cascades to listing_scores rows via FK ON DELETE CASCADE.
-    """
-    profile = await _get_owned_profile(profile_id, county_fips, current_user, db)
+    profile = await _get_owned_profile(profile_id, current_user, db)
     await db.delete(profile)
     await db.flush()
+
+
+@router.patch(
+    "/{profile_id}/favorite",
+    response_model=ToggleFavoriteResponse,
+)
+async def toggle_favorite(
+    current_user: User = Depends(get_current_user),
+    profile_id: int = Path(..., description="ID of the profile to favorite/unfavorite"),
+    db: AsyncSession = Depends(get_db),
+) -> ToggleFavoriteResponse:
+    await _get_visible_profile(profile_id, current_user, db)
+
+    result = await db.execute(
+        select(UserProfilePrefs).where(
+            UserProfilePrefs.user_id == current_user.id,
+            UserProfilePrefs.profile_id == profile_id,
+        )
+    )
+    prefs: UserProfilePrefs | None = result.scalar_one_or_none()
+
+    if prefs is None:
+        prefs = UserProfilePrefs(
+            user_id=current_user.id,
+            profile_id=profile_id,
+            is_favorite=True,
+            run_count=0,
+        )
+        db.add(prefs)
+    else:
+        prefs.is_favorite = not prefs.is_favorite
+
+    await db.flush()
+    await db.refresh(prefs)
+    return ToggleFavoriteResponse(is_favorite=prefs.is_favorite)

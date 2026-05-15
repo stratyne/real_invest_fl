@@ -89,6 +89,20 @@ class Property(Base):
     spec_feat_val: Mapped[int | None] = mapped_column(Integer) # SPEC_FEAT_VAL field 53
 
     # ------------------------------------------------------------------ #
+    # v0.5 additions — zoning, nav_total_assessment                       #
+    # ------------------------------------------------------------------ #
+    zoning:                Mapped[str | None]   = mapped_column(String(20))
+    nav_total_assessment:  Mapped[float | None] = mapped_column(Numeric(12, 2))
+
+    # ------------------------------------------------------------------ #
+    # v0.9 additions — computed value fields                              #
+    # ------------------------------------------------------------------ #
+    jv_per_sqft:           Mapped[float | None] = mapped_column(Numeric)
+    arv_estimate:          Mapped[int | None]   = mapped_column(Integer)
+    arv_spread:            Mapped[int | None]   = mapped_column(Integer)
+    list_price:            Mapped[int | None]   = mapped_column(Integer)
+
+    # ------------------------------------------------------------------ #
     # NAL — Embedded sale history (fields 54-73, merged from SDF by DOR)  #
     # Up to two most recent qualifying sales per parcel.                  #
     # For complete sale history use sales_comps table (SDF source).       #

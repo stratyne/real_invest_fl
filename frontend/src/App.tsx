@@ -32,7 +32,7 @@ export default function App() {
           }
         />
         <Route
-          path="/results/:countyFips/:profileId"
+          path="/results"
           element={
             <RequireAuth>
               <ResultsPage />

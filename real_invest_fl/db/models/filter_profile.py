@@ -8,16 +8,17 @@ outreach settings, rehab cost) are retained as scalar columns because
 they govern pipeline behaviour, not property selection criteria.
 
 Uniqueness model:
-  System profiles (user_id IS NULL): unique on (county_fips, profile_name).
-  User profiles   (user_id NOT NULL): unique on (user_id, county_fips, profile_name).
-  Enforced via two partial unique indexes — see __table_args__.
-  The old global unique constraint on profile_name alone was dropped in v0.13.
+  System profiles (user_id IS NULL): unique on (profile_name).
+  User profiles   (user_id IS NOT NULL): unique on (user_id, profile_name).
+  county_fips is now an array — cannot participate in a PostgreSQL unique
+  index directly. Uniqueness enforced via two partial unique indexes —
+  see __table_args__.
 """
 from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import String, Integer, Float, Boolean, DateTime, Text, Index, ForeignKey, func
 from sqlalchemy import text as sa_text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from real_invest_fl.db.base import Base
 
@@ -26,19 +27,22 @@ class FilterProfile(Base):
     __tablename__ = "filter_profiles"
     __table_args__ = (
         Index(
-            "uq_fp_system_county_name",
-            "county_fips",
+            "uq_fp_system_name",
             "profile_name",
             unique=True,
             postgresql_where=sa_text("user_id IS NULL"),
         ),
         Index(
-            "uq_fp_user_county_name",
+            "uq_fp_user_name",
             "user_id",
-            "county_fips",
             "profile_name",
             unique=True,
             postgresql_where=sa_text("user_id IS NOT NULL"),
+        ),
+        Index(
+            "ix_fp_county_fips_gin",
+            "county_fips",
+            postgresql_using="gin",
         ),
     )
 
@@ -46,9 +50,8 @@ class FilterProfile(Base):
     # Identity                                                             #
     # ------------------------------------------------------------------ #
     id:           Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # profile_name: no unique=True here — uniqueness handled by partial indexes above
     profile_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    county_fips:  Mapped[str] = mapped_column(String(5), nullable=False)
+    county_fips:  Mapped[list[str]] = mapped_column(ARRAY(String(5)), nullable=False)
     description:  Mapped[str | None] = mapped_column(Text)
     is_active:    Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     version:      Mapped[int] = mapped_column(Integer, nullable=False, default=1)
@@ -56,7 +59,6 @@ class FilterProfile(Base):
     # ------------------------------------------------------------------ #
     # Ownership — NULL = system catalog profile                            #
     # ------------------------------------------------------------------ #
-
     user_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
@@ -120,12 +122,10 @@ class FilterProfile(Base):
         back_populates="filter_profile",
         foreign_keys="[OutreachLog.filter_profile_id]",
     )
-    
-    # v0.18
+
     user_prefs: Mapped[list[UserProfilePrefs]] = relationship(
         "UserProfilePrefs",
         back_populates="profile",
         foreign_keys="[UserProfilePrefs.profile_id]",
         cascade="all, delete-orphan",
     )
-        

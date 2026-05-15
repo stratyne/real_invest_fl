@@ -150,21 +150,22 @@ Depends(county_access()) — never the explicit await pattern.
 |---|---|---|---|
 | GET | /counties | list_counties | Returns all active counties the current user has access to. Joins user_county_access to counties WHERE active = TRUE. Superusers see all active counties. |
 
-#### Filter Profiles — /{county_fips}/profiles
+#### Filter Profiles — /profiles (no county scope)
 | Method | Path | Handler | Description |
 |---|---|---|---|
-| GET | /{county_fips}/profiles | list_profiles | Returns all system profiles + current user's own profiles for the county. Each profile includes the user's user_profile_prefs row if one exists (is_favorite, last_searched_at, last_result_count, run_count). |
-| POST | /{county_fips}/profiles | create_profile | Creates a new user-owned profile. user_id set server-side to current_user.id — never accepted from request body. |
-| POST | /{county_fips}/profiles/{profile_id}/clone | clone_profile | Clones any visible profile (system or own) into a new user-owned profile. New profile name required in request body. |
-| PATCH | /{county_fips}/profiles/{profile_id} | update_profile | Updates a user-owned profile. Returns 403 if profile belongs to another user or is a system profile. |
-| DELETE | /{county_fips}/profiles/{profile_id} | delete_profile | Deletes a user-owned profile. Returns 403 if system profile or belongs to another user. Superusers may delete any non-system profile. |
-| PATCH | /{county_fips}/profiles/{profile_id}/favorite | toggle_favorite | Toggles is_favorite on user_profile_prefs for (current_user.id, profile_id). Creates row if not exists. No request body. Returns { "is_favorite": bool }. |
+| GET | /profiles | list_profiles | Returns all system profiles + current user's own profiles visible to the user. Each profile includes the user's user_profile_prefs row if one exists (is_favorite, last_searched_at, last_result_count, run_count). Access filtered internally via _get_accessible_fips() — no county path parameter. |
+| POST | /profiles | create_profile | Creates a new user-owned profile. user_id set server-side. county_fips is list[str] in request body — user must have access to all counties listed. |
+| POST | /profiles/{profile_id}/clone | clone_profile | Clones any visible profile into a new user-owned profile. New profile name required in request body. Optional county_fips override accepted as list[str]. |
+| PATCH | /profiles/{profile_id} | update_profile | Updates a user-owned profile. Returns 403 if system profile or belongs to another user. |
+| DELETE | /profiles/{profile_id} | delete_profile | Deletes a user-owned profile. Returns 403 if system profile or belongs to another user. Superusers may delete any non-system profile. |
+| PATCH | /profiles/{profile_id}/favorite | toggle_favorite | Toggles is_favorite on user_profile_prefs for (current_user.id, profile_id). Creates row if not exists. No request body. Returns { "is_favorite": bool }. |
 
-#### Properties — /{county_fips}/properties
+#### Properties — /properties (no county scope) and /{county_fips}/properties/{parcel_id}
 | Method | Path | Handler | Description |
 |---|---|---|---|
-| GET | /{county_fips}/properties | search_properties | Core search route. Accepts filter_profile_id as query param. Loads profile, builds WHERE clauses from filter_criteria, computes deal score at query time, returns results ranked by deal score. arv_source surfaced in response. After successful fetch, upserts user_profile_prefs — increments run_count, sets last_searched_at = now(), sets last_result_count = len(results). |
-| GET | /{county_fips}/properties/{parcel_id} | get_property | Returns full property detail for a single parcel. Includes latest listing_event if present. |
+| GET | /properties | search_properties | Core search route. Accepts filter_profile_id as query param. Loads profile, builds WHERE clauses from filter_criteria across all counties in profile.county_fips, computes deal score at query time, returns results ranked by deal score. Upserts user_profile_prefs after successful fetch. |
+| POST | /properties/search | search_properties_inline | Inline search — accepts full filter payload in request body (county_fips list, filter_criteria, deal_score_weights, ARV engine params). No profile written. Access validated against county_fips array. Behaviour otherwise identical to search_properties. Used when executing unsaved filter state. |
+| GET | /{county_fips}/properties/{parcel_id} | get_property | Returns full property detail for a single parcel. Includes latest listing_event if present. county_fips path parameter enforced via county_access() dependency. |
 
 #### Listings — /{county_fips}/listings
 | Method | Path | Handler | Description |
@@ -204,10 +205,10 @@ Depends(county_access()) — never the explicit await pattern.
 | routes/auth.py | /auth/token, /auth/me — already implemented |
 | routes/counties.py | /counties |
 | routes/config.py | /config/counties (list + update) |
-| routes/properties.py | /{county_fips}/properties (search + detail) |
+| routes/properties.py | /properties (search + inline search), /{county_fips}/properties/{parcel_id} (detail) |
 | routes/listings.py | /{county_fips}/listings (list + detail + status update) |
 | routes/outreach.py | /{county_fips}/outreach (generate + send + list + skip_trace) |
-| routes/profiles.py | /{county_fips}/profiles (list + create + clone + update + delete + favorite toggle) |
+| routes/profiles.py | /profiles (list + create + clone + update + delete + favorite toggle) |
 | routes/dashboard.py | /dashboard |
 | routes/ingest.py | /ingest/status |
 | routes/approvals.py | Reserved — workflow approval step, Phase 4 tail |
@@ -218,8 +219,8 @@ Depends(county_access()) — never the explicit await pattern.
 2. [x] v0.18 migration — user_profile_prefs
 3. [x] ORM model — UserProfilePrefs
 4. [x] routes/dashboard.py — get_dashboard
-5. [ ] routes/profiles.py — toggle_favorite added
-6. [ ] routes/properties.py — upsert added to search_properties
+5. [x] routes/profiles.py — toggle_favorite added
+6. [ ] routes/properties.py — upsert added to search_properties and search_properties_inline
 7. [x] DashboardPage.tsx — rewrite to profile activity + pipeline status
 
 ### Outreach UI Requirements (locked 2026-05-05)
@@ -240,4 +241,4 @@ Depends(county_access()) — never the explicit await pattern.
 - Skip-trace live integration (item 44) — schema scaffold in place
 - Map pins — coordinate data not on PropertySearchResult (item 49)
 - Server-side pagination — currently client-side (item 50), Phase 4 tail
-- Multi-county search — single-county per execution, cross-county Phase 3+
+- Cross-county profile search beyond user's granted counties — access gating enforced per county

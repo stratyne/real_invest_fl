@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import Map, { Marker, Popup } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { searchProperties, getProperty } from '../api/properties'
+import { searchProperties, searchPropertiesInline, getProperty } from '../api/properties'
 import { createProfile } from '../api/profiles'
 import { filterStateToPayload } from './SearchPage'
 import type { PropertySearchResult, PropertyDetail } from '../types/api'
@@ -199,22 +199,26 @@ function SaveModal({ onSave, onClose, saving, error }: SaveModalProps) {
 // ── Main ResultsPage ──────────────────────────────────────────────────────
 
 export default function ResultsPage() {
-  const { countyFips, profileId } = useParams<{ countyFips: string; profileId: string }>()
+  // REMOVED: useParams — profileId now comes from nav state only
   const navigate = useNavigate()
   const location = useLocation()
 
   const locationState = location.state as {
-    filterState?: FilterState
-    countyFips?: string
+    profileId?: number
+    filterState: FilterState
+    countyFips: string[]
   } | null
 
+  // If nav state is missing entirely the user landed here directly — send them back
   const filterState: FilterState | null = locationState?.filterState ?? null
+  const countyFips: string[] = locationState?.countyFips ?? []
+  const profileId: number | undefined = locationState?.profileId
 
   const [results, setResults] = useState<PropertySearchResult[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
-  const [selectedParcel, setSelectedParcel] = useState<string | null>(null)
+  const [selectedResult, setSelectedResult] = useState<PropertySearchResult | null>(null)
   const [popupResult, setPopupResult] = useState<PropertySearchResult | null>(null)
 
   const [showSaveModal, setShowSaveModal] = useState(false)
@@ -223,33 +227,47 @@ export default function ResultsPage() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!countyFips || !profileId) return
+    // Guard: if no filter state reached this page, nothing to search
+    if (!filterState || countyFips.length === 0) {
+      setError('No filter state available. Return to search and try again.')
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
-    searchProperties(countyFips, Number(profileId))
+
+    const run = profileId != null
+      ? searchProperties(profileId)
+      : searchPropertiesInline(
+          filterStateToPayload(filterState, '__inline__', countyFips)
+        )
+
+    run
       .then((data) => { setResults(data); setLoading(false) })
       .catch(() => { setError('Search failed.'); setLoading(false) })
-  }, [countyFips, profileId])
+  }, [])
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE))
   const pageResults = results.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function handleEditFilter() {
-    navigate('/dashboard', {
+    navigate('/search', {
       state: {
-        filterState,
+        profileId,
         countyFips,
+        filterState,
       },
     })
   }
 
   async function handleSave(name: string) {
-    if (!countyFips || !filterState) return
+    if (!filterState || countyFips.length === 0) return
     setSaving(true)
     setSaveError(null)
     try {
-      const payload = filterStateToPayload(filterState, name)
-      await createProfile(countyFips, payload)
+      const payload = filterStateToPayload(filterState, name, countyFips)
+      await createProfile(payload)
       setShowSaveModal(false)
       setSaveSuccess(`Profile "${name}" saved.`)
       setTimeout(() => setSaveSuccess(null), 3000)
@@ -321,13 +339,16 @@ export default function ResultsPage() {
                   <tbody>
                     {pageResults.map((r) => (
                       <tr
-                        key={r.parcel_id}
-                        id={`row-${r.parcel_id}`}
+                        key={`${r.county_fips}:${r.parcel_id}`}
+                        id={`row-${r.county_fips}-${r.parcel_id}`}
                         style={{
                           ...pageStyles.tr,
-                          ...(selectedParcel === r.parcel_id ? pageStyles.trSelected : {}),
+                          ...(selectedResult?.county_fips === r.county_fips &&
+                          selectedResult?.parcel_id === r.parcel_id
+                            ? pageStyles.trSelected
+                            : {}),
                         }}
-                        onClick={() => setSelectedParcel(r.parcel_id)}
+                        onClick={() => setSelectedResult(r)}
                       >
                         <td style={pageStyles.td}>
                           <div style={pageStyles.addrLine1}>{r.phy_addr1 ?? '—'}</div>
@@ -444,11 +465,11 @@ export default function ResultsPage() {
       </div>
 
       {/* Property drawer */}
-      {selectedParcel && countyFips && (
+      {selectedResult && (
         <PropertyDrawer
-          countyFips={countyFips}
-          parcelId={selectedParcel}
-          onClose={() => setSelectedParcel(null)}
+          countyFips={selectedResult.county_fips}
+          parcelId={selectedResult.parcel_id}
+          onClose={() => setSelectedResult(null)}
         />
       )}
 
