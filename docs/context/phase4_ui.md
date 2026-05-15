@@ -1,6 +1,6 @@
 # Project Penstock — context/phase4_ui.md
 # Paste this alongside AGENTS.md when working on Phase 4 UI.
-# Last updated: 2026-05-14
+# Last updated: 2026-05-15
 
 ## Status
 
@@ -25,14 +25,14 @@ ACTIVE — Phase 4 in progress. See STATE.md for item status.
    inventory counts are shown. A user who has never run a search sees an
    empty profile list with a prompt to select or create one.
 2. Select profile — user picks a saved profile from the dashboard to
-   run, or navigates to create or edit a profile. The most recently run
-   profile is at the top of the list unless a favorite is pinned above it.
+   run or edit. Run navigates directly to /results and executes
+   immediately. Edit navigates to /search with the profile pre-loaded.
    County is implied by the profile's county_fips — there is no separate
    county selection step on the dashboard.
 3. Define — if creating or editing, user configures filter parameters
-   for their selected county. Filter profile save and execute are distinct
-   operations. Save writes to filter_profiles only. Execute triggers the
-   live search query.
+   for their selected county on the Search page. Filter profile save and
+   execute are distinct operations. Save writes to filter_profiles only.
+   Execute triggers the live search query.
 4. Execute — user hits Search. FastAPI builds a live query against
    properties and listing_events using filter criteria as WHERE clauses
    and deal score weights for ORDER BY. ARV pulled from
@@ -41,7 +41,7 @@ ACTIVE — Phase 4 in progress. See STATE.md for item status.
    after successful fetch — last_searched_at, last_result_count, and
    run_count updated.
 5. Review — user sees ranked property list with key metrics. Map view
-   available via MapLibre GL JS.
+   available via MapLibre GL JS with coordinate pins.
 6. Select — user selects one or more properties to act on.
 7. Generate — system auto-generates outreach message from template,
    with calendar booking link embedded.
@@ -58,11 +58,16 @@ ACTIVE — Phase 4 in progress. See STATE.md for item status.
   run count) and outreach pipeline status. No inventory counts. No raw
   signals outside search context.
 - Favorite toggle on any profile (system or user-owned) — per-user
-  bookmark, pure UI, no functional weight.
+  bookmark, pure UI, no functional weight. Implemented and verified.
+- Run button per profile row — executes search directly, bypasses Search
+  page. Implemented and verified.
+- Edit button per profile row — opens Search page with profile
+  pre-loaded. Implemented and verified.
 - Ranked property list (query-time, sorted by deal score, requires
   filter profile)
 - Filter profile management (create, clone system profile, edit, delete)
-- Map view (MapLibre GL JS, PostGIS geometry)
+- Map view (MapLibre GL JS, PostGIS geometry) — coordinate data live,
+  pin rendering pending (item 85)
 - Outreach template generation (triggered by user selection)
 - One-click email send with calendar booking link
 - Full outreach log with response tracking
@@ -107,6 +112,11 @@ real_invest_fl/api/routes/
 - user_profile_prefs is upserted by the search route on every successful
   execution. It is the authoritative source for dashboard profile ordering.
   It is never written by any route except search and the favorite toggle.
+- Dashboard Run navigates to /results directly — Search page is bypassed.
+  Dashboard Edit navigates to /search with profileId + countyFips in nav
+  state. Edit Filter from ResultsPage navigates to /search with the same
+  state. SearchPage useEffect depends on location.state — re-runs on every
+  navigation into the page regardless of remount.
 
 ## Pre-flight Checklist
 
@@ -116,8 +126,9 @@ real_invest_fl/api/routes/
 - [x] Phase 4 route design documented before code is written
 - [x] v0.17 migration live — outreach_templates, skip_trace_cache, outreach_log, users.calendar_link
 - [x] v0.18 migration — user_profile_prefs
+- [x] v0.19 migration — multi-county filter profiles, county_fips VARCHAR(5)[]
 
-## Route Design (locked 2026-05-04, updated 2026-05-14)
+## Route Design (locked 2026-05-04, updated 2026-05-15)
 
 All routes documented here before implementation. No route is written
 until it appears in this table. County-scoped routes always use
@@ -163,8 +174,8 @@ Depends(county_access()) — never the explicit await pattern.
 #### Properties — /properties (no county scope) and /{county_fips}/properties/{parcel_id}
 | Method | Path | Handler | Description |
 |---|---|---|---|
-| GET | /properties | search_properties | Core search route. Accepts filter_profile_id as query param. Loads profile, builds WHERE clauses from filter_criteria across all counties in profile.county_fips, computes deal score at query time, returns results ranked by deal score. Upserts user_profile_prefs after successful fetch. |
-| POST | /properties/search | search_properties_inline | Inline search — accepts full filter payload in request body (county_fips list, filter_criteria, deal_score_weights, ARV engine params). No profile written. Access validated against county_fips array. Behaviour otherwise identical to search_properties. Used when executing unsaved filter state. |
+| GET | /properties | search_properties | Core search route. Accepts filter_profile_id as query param. Loads profile, builds WHERE clauses from filter_criteria across all counties in profile.county_fips, computes deal score at query time, returns results ranked by deal score. Upserts user_profile_prefs after successful fetch. Results include latitude and longitude. |
+| POST | /properties/search | search_properties_inline | Inline search — accepts full filter payload in request body (county_fips list, filter_criteria, deal_score_weights, ARV engine params). No profile written. Access validated against county_fips array. Behaviour otherwise identical to search_properties. Used when executing unsaved filter state. Results include latitude and longitude. |
 | GET | /{county_fips}/properties/{parcel_id} | get_property | Returns full property detail for a single parcel. Includes latest listing_event if present. county_fips path parameter enforced via county_access() dependency. |
 
 #### Listings — /{county_fips}/listings
@@ -220,8 +231,12 @@ Depends(county_access()) — never the explicit await pattern.
 3. [x] ORM model — UserProfilePrefs
 4. [x] routes/dashboard.py — get_dashboard
 5. [x] routes/profiles.py — toggle_favorite added
-6. [ ] routes/properties.py — upsert added to search_properties and search_properties_inline
+6. [x] routes/properties.py — upsert added to search_properties
 7. [x] DashboardPage.tsx — rewrite to profile activity + pipeline status
+8. [x] DashboardPage.tsx — Run navigates to /results directly
+9. [x] DashboardPage.tsx — Edit button added, navigates to /search pre-loaded
+10. [x] DashboardPage.tsx — star toggle wired to toggleFavorite
+11. [x] SearchPage.tsx — useEffect dependency changed to location.state; navStateConsumed ref removed
 
 ### Outreach UI Requirements (locked 2026-05-05)
 
@@ -239,6 +254,6 @@ Depends(county_access()) — never the explicit await pattern.
 - User management endpoints — registration, password reset, admin user CRUD
 - Approval workflow (approvals.py) — deferred until outreach flow is live
 - Skip-trace live integration (item 44) — schema scaffold in place
-- Map pins — coordinate data not on PropertySearchResult (item 49)
+- Map pin rendering (item 85) — coordinate data live, Marker wiring pending
 - Server-side pagination — currently client-side (item 50), Phase 4 tail
 - Cross-county profile search beyond user's granted counties — access gating enforced per county

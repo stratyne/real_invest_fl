@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getMe } from '../api/auth'
 import { getDashboard } from '../api/dashboard'
+import { toggleFavorite } from '../api/profiles'
 import type { UserProfile, DashboardResponse, ProfileActivityEntry } from '../types/api'
 
 export default function DashboardPage() {
@@ -23,11 +24,45 @@ export default function DashboardPage() {
   }
 
   function handleRunProfile(entry: ProfileActivityEntry) {
-    navigate('/search', { state: { profileId: entry.profile_id, countyFips: entry.county_fips } })
+    navigate('/results', {
+      state: {
+        profileId: entry.profile_id,
+        countyFips: entry.county_fips,
+        filterState: null,
+      },
+    })
+  }
+
+  function handleEditProfile(entry: ProfileActivityEntry) {
+    navigate('/search', {
+      state: {
+        profileId: entry.profile_id,
+        countyFips: entry.county_fips,
+      },
+    })
   }
 
   function handleNewSearch() {
     navigate('/search')
+  }
+
+  async function handleToggleFavorite(entry: ProfileActivityEntry) {
+    try {
+      const res = await toggleFavorite(entry.profile_id)
+      setDashboard((prev: DashboardResponse | null) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          profile_activity: prev.profile_activity.map((e) =>
+            e.profile_id === entry.profile_id
+              ? { ...e, is_favorite: res.is_favorite }
+              : e
+          ),
+        }
+      })
+    } catch {
+      // silent — star reverts visually on next load
+    }
   }
 
   if (loadError) return <div style={s.centerMsg}>{loadError}</div>
@@ -87,6 +122,8 @@ export default function DashboardPage() {
                   key={entry.profile_id}
                   entry={entry}
                   onRun={() => handleRunProfile(entry)}
+                  onEdit={() => handleEditProfile(entry)}
+                  onToggleFavorite={() => handleToggleFavorite(entry)}
                 />
               ))}
             </div>
@@ -119,15 +156,21 @@ function PipelineTile({
 }
 
 function ProfileRow({
-  entry, onRun,
+  entry, onRun, onEdit, onToggleFavorite,
 }: {
   entry: ProfileActivityEntry
   onRun: () => void
+  onEdit: () => void
+  onToggleFavorite: () => void
 }) {
   return (
     <div style={s.profileRow}>
       <div style={s.profileLeft}>
-        <span style={s.favStar} title={entry.is_favorite ? 'Favorited' : 'Not favorited'}>
+        <span
+          style={{ ...s.favStar, cursor: 'pointer' }}
+          title={entry.is_favorite ? 'Remove from favorites' : 'Add to favorites'}
+          onClick={onToggleFavorite}
+        >
           {entry.is_favorite ? '★' : '☆'}
         </span>
         <div style={s.profileInfo}>
@@ -145,9 +188,10 @@ function ProfileRow({
           </div>
         </div>
       </div>
-      <button style={s.runBtn} onClick={onRun}>
-        Run
-      </button>
+      <div style={s.rowActions}>
+        <button style={s.editBtn} onClick={onEdit}>Edit</button>
+        <button style={s.runBtn} onClick={onRun}>Run</button>
+      </div>
     </div>
   )
 }
@@ -212,4 +256,10 @@ const s: Record<string, React.CSSProperties> = {
   emptyState: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '48px 0' },
   emptyText: { color: 'var(--color-text-muted)', fontSize: '14px', margin: 0 },
   centerMsg: { padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' },
+  rowActions: { display: 'flex', gap: '8px', alignItems: 'center' },
+  editBtn: {
+    background: 'transparent', border: '1px solid var(--color-border)',
+    borderRadius: '6px', color: 'var(--color-text)', padding: '7px 18px',
+    fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+  },  
 }

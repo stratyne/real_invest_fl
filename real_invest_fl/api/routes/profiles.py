@@ -280,6 +280,7 @@ async def create_profile(
     )
     db.add(profile)
     await db.flush()
+    await db.commit()
     await db.refresh(profile)
     return FilterProfileResponse.model_validate(profile)
 
@@ -321,6 +322,7 @@ async def clone_profile(
     )
     db.add(clone)
     await db.flush()
+    await db.commit()
     await db.refresh(clone)
     return FilterProfileResponse.model_validate(clone)
 
@@ -348,6 +350,7 @@ async def update_profile(
     profile.version += 1
 
     await db.flush()
+    await db.commit()
     await db.refresh(profile)
     return FilterProfileResponse.model_validate(profile)
 
@@ -361,6 +364,7 @@ async def delete_profile(
     profile = await _get_owned_profile(profile_id, current_user, db)
     await db.delete(profile)
     await db.flush()
+    await db.commit()
 
 
 @router.patch(
@@ -394,5 +398,6 @@ async def toggle_favorite(
         prefs.is_favorite = not prefs.is_favorite
 
     await db.flush()
+    await db.commit()
     await db.refresh(prefs)
     return ToggleFavoriteResponse(is_favorite=prefs.is_favorite)

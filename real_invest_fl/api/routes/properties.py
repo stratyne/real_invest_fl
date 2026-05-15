@@ -17,7 +17,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from real_invest_fl.api.deps import county_access, get_current_user, get_db
@@ -25,6 +26,7 @@ from real_invest_fl.db.models.filter_profile import FilterProfile
 from real_invest_fl.db.models.listing_event import ListingEvent
 from real_invest_fl.db.models.property import Property
 from real_invest_fl.db.models.user import User
+from real_invest_fl.db.models.user_profile_prefs import UserProfilePrefs
 from real_invest_fl.db.models.user_county_access import UserCountyAccess
 
 router = APIRouter(tags=["properties"])
@@ -132,6 +134,8 @@ class PropertySearchResult(BaseModel):
     jv_per_sqft: float | None
     deal_score: float | None
     arv_source: str | None
+    latitude: float | None
+    longitude: float | None
     latest_listing: ListingEventSummary | None
 
     model_config = {"from_attributes": True}
@@ -690,9 +694,37 @@ async def search_properties(
                 jv_per_sqft=float(prop.jv_per_sqft) if prop.jv_per_sqft is not None else None,
                 deal_score=ds,
                 arv_source=arv_source,
+                latitude=float(prop.latitude) if prop.latitude is not None else None,
+                longitude=float(prop.longitude) if prop.longitude is not None else None,
                 latest_listing=latest,
             )
         )
+
+    # ── Upsert user_profile_prefs ────────────────────────────────────────
+    # Written on every successful saved-profile search execution.
+    # Authoritative source for dashboard profile ordering.
+    # Not written by search_properties_inline — no profile_id available.
+    # Not written by toggle_favorite — that route manages is_favorite only.
+    await db.execute(
+        pg_insert(UserProfilePrefs)
+        .values(
+            user_id=current_user.id,
+            profile_id=filter_profile_id,
+            last_searched_at=func.now(),
+            last_result_count=len(out),
+            run_count=1,
+        )
+        .on_conflict_do_update(
+            index_elements=["user_id", "profile_id"],
+            set_={
+                "last_searched_at": func.now(),
+                "last_result_count": len(out),
+                "run_count": UserProfilePrefs.run_count + 1,
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await db.commit()
 
     return out
 
@@ -856,6 +888,8 @@ async def search_properties_inline(
                 jv_per_sqft=float(prop.jv_per_sqft) if prop.jv_per_sqft is not None else None,
                 deal_score=ds,
                 arv_source=arv_source,
+                latitude=float(prop.latitude) if prop.latitude is not None else None,
+                longitude=float(prop.longitude) if prop.longitude is not None else None,
                 latest_listing=latest,
             )
         )

@@ -4,7 +4,7 @@
 
 ## Active Phase
 **Phase 2** (scraping/matching) — core complete, scheduler/output pending.
-**Phase 4** (UI) — active. End-to-end search working. Upsert + map pins next.
+**Phase 4** (UI) — active. Dashboard Run/Edit flow complete. Map pins live. Deployment next.
 Phase 2 and Phase 4 run in parallel. Santa Rosa CAMA runs in background.
 
 ## Phase Summary
@@ -14,7 +14,7 @@ Phase 2 and Phase 4 run in parallel. Santa Rosa CAMA runs in background.
 | 1 | Foundation and Full Inventory | SUBSTANTIALLY COMPLETE |
 | 2 | Scraping and Daily Matching | ACTIVE — core complete, scheduler/output pending |
 | 3 | Subscription Sources and CAMA Refresh | NOT STARTED |
-| 4 | UI — FastAPI + React + MapLibre | ACTIVE — end-to-end search verified |
+| 4 | UI — FastAPI + React + MapLibre | ACTIVE — dashboard flow complete, map pins live |
 
 **Phase 1 remaining:** CAMA enrichment (Santa Rosa in progress, Escambia site down).
 All other Phase 1 work complete.
@@ -54,12 +54,12 @@ HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
 mqi_qualified_at once Phase 4 query-time filter is live.
 
-## Database State (verified 2026-05-04)
+## Database State (verified 2026-05-15)
 
 | County | FIPS | NAL rows | GIS geometry | CAMA enriched | Notes |
 |---|---|---|---|---|---|
 | Escambia | 12033 | 170,561 | 160,264 | 0 | dor_uc backfilled; escpa.org down |
-| Santa Rosa | 12113 | 120,500 | 108,493 | 3,518 (running) | ~64,794 remaining |
+| Santa Rosa | 12113 | 120,500 | 111,036 | 3,518+ (running) | GIS ingest complete 2026-05-15 |
 | All others | — | staged only | staged only | 0 | NAL + GIS files in place |
 
 **Total properties in DB:** 291,061
@@ -89,7 +89,7 @@ Retained as reference for backfill completeness verification.
 | # | Status | Description | Next Action |
 |---|---|---|---|
 | 1 | PARTIAL | Beds/baths opportunistic population | Bulk source pending — not a blocker |
-| 13 | ACTIVE | Phase 4 UI — FastAPI + React + MapLibre | user_profile_prefs upsert → map pins → star wiring → deployment |
+| 13 | ACTIVE | Phase 4 UI — FastAPI + React + MapLibre | Map pin rendering → deployment |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running; Escambia blocked |
@@ -106,15 +106,12 @@ Retained as reference for backfill completeness verification.
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
 | 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py |
-| 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | Next after map pins |
+| 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | Next after map pin rendering |
 | 50 | ACTIVE | Server-side pagination — currently client-side | Phase 4 tail |
 | 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
-| 70 | ACTIVE | Map pins — lat/lng not on PropertySearchResult | Add lat/lng to PropertySearchResult schema + result construction loop |
-| 71 | ACTIVE | user_profile_prefs upsert in search_properties + search_properties_inline | Next — updates last_searched_at, last_result_count, run_count after successful fetch |
 | 72 | PENDING | price_reduced filter — accepted by frontend, stored in profile JSON, never applied | Decision required: what column or condition does it check |
 | 73 | PENDING | PropertyValueHistory ORM relationship on Property — model not in schema.md | Investigate — may be POC artifact |
-| 74 | PENDING | Star/favorite toggle not yet wired in DashboardPage.tsx | Wire toggleFavorite call to star click after item 71 |
-| 75 | PENDING | phase4_ui.md route table — profiles prefix still shows /{county_fips}/profiles | Documentation update only — profiles routes are flat /profiles |
+| 85 | ACTIVE | Map pin rendering — lat/lng now on PropertySearchResult, data live in DB | Wire Marker rendering in ResultsPage map panel |
 
 ## Deferred Items
 
@@ -125,7 +122,7 @@ Retained as reference for backfill completeness verification.
 | 31 | Full CAMA enrichment statewide | Phase 3 — each county needs own scraper |
 | 32 | NAV data ingest | Deferred |
 | 44 | Skip-trace live integration | BatchData API wrapper, credit/billing model, DNC compliance. Schema scaffold in place (v0.17). Unblock after Phase 4 outreach flow is live. |
-| 49 | Map pins — superseded by item 70 | Renumbered for clarity |
+| 49 | Map pins — superseded by item 85 | Renumbered for clarity |
 
 ## Completed Items (summary — detail in DECISIONS.md and context/ files)
 
@@ -139,7 +136,7 @@ Retained as reference for backfill completeness verification.
 | 7 | Statewide NAL staging — all 67 counties | 2026-05-02 |
 | 8 | Statewide GIS staging — all 67 counties | 2026-05-02 |
 | 9 | Santa Rosa NAL ingest — 120,500 rows | 2026-05-04 |
-| 10 | Santa Rosa GIS ingest — 108,493 rows | 2026-05-02 |
+| 10 | Santa Rosa GIS ingest — 111,036 rows (corrected; run completed 2026-05-15) | 2026-05-15 |
 | 11 | seed_superuser.py — superuser created, Escambia access granted | 2026-05-04 |
 | 12 | seed_bundles.py — pensacola_metro bundle seeded, Santa Rosa activated | 2026-05-04 |
 | 33 | parcel_sale_history table (v0.14, v0.15) | 2026-05-04 |
@@ -164,6 +161,10 @@ Retained as reference for backfill completeness verification.
 | 59 | Frontend multi-county refactor — types/api.ts, SearchPage.tsx, DashboardPage.tsx, ResultsPage.tsx, profiles.ts, api/properties.ts, App.tsx route updated to /results (profileId moved to nav state) | 2026-05-15 |
 | 60 | Seed script audit — seed_bundles.py, seed_demo_account.py clean, no changes needed | 2026-05-15 |
 | 69 | Backend multi-county route contract refactor — routes/profiles.py de-county-scoped (flat /profiles prefix); routes/properties.py search profile-driven via /properties?filter_profile_id= and POST /properties/search; routes/dashboard.py county_fips returns string[] | 2026-05-15 |
+| 70 | Map pins — lat/lng added to PropertySearchResult schema + both search route construction loops | 2026-05-15 |
+| 71 | user_profile_prefs upsert — last_result_count bug resolved; upsert placement confirmed correct | 2026-05-15 |
+| 74 | Star/favorite toggle wired in DashboardPage.tsx — toggleFavorite call on star click, optimistic update | 2026-05-15 |
+| 75 | phase4_ui.md route table — profiles prefix corrected to flat /profiles | 2026-05-15 |
 | 76 | ORM model gap — zoning, nav_total_assessment, jv_per_sqft, arv_estimate, arv_spread, list_price added to property.py | 2026-05-15 |
 | 77 | county_nos sub-filter removed — FilterState, filterStateToPayload, _apply_filters, SearchPage UI | 2026-05-15 |
 | 78 | StatementTooComplexError fix — tuple IN() replaced with county-scoped fetch + Python key filter in both search routes | 2026-05-15 |
@@ -172,3 +173,9 @@ Retained as reference for backfill completeness verification.
 | 81 | canSearch relaxed — selectedProfileId no longer required; 2 filters + county selection sufficient | 2026-05-15 |
 | 82 | profiles.ts — toggleFavorite added | 2026-05-15 |
 | 83 | End-to-end search verified — 23,087 Santa Rosa results, eff_yr_blt > 1945 + tot_lvg_area > 1,700 sqft | 2026-05-15 |
+| 84 | Missing await db.commit() in routes/profiles.py — create_profile, clone_profile, update_profile, delete_profile, toggle_favorite | 2026-05-15 |
+| 86 | Dashboard Run button navigates directly to /results — bypasses Search page | 2026-05-15 |
+| 87 | Dashboard Edit button added to ProfileRow — navigates to /search with profile pre-loaded | 2026-05-15 |
+| 88 | Edit Filter back-navigation fixed — navStateConsumed ref removed, useEffect dependency changed to location.state | 2026-05-15 |
+| 89 | ResultsPage TypeScript errors resolved — CSS module declaration, FilterState null assertion, unused Marker import removed | 2026-05-15 |
+| 90 | DashboardPage TypeScript errors resolved — handleToggleFavorite moved inside component body, prev typed explicitly | 2026-05-15 |

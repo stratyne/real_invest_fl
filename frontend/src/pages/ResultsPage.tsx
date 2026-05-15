@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import Map, { Marker, Popup } from 'react-map-gl/maplibre'
+import Map, { Popup } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { searchProperties, searchPropertiesInline, getProperty } from '../api/properties'
 import { createProfile } from '../api/profiles'
@@ -227,8 +227,7 @@ export default function ResultsPage() {
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
   useEffect(() => {
-    // Guard: if no filter state reached this page, nothing to search
-    if (!filterState || countyFips.length === 0) {
+    if (profileId == null && (!filterState || countyFips.length === 0)) {
       setError('No filter state available. Return to search and try again.')
       setLoading(false)
       return
@@ -239,7 +238,7 @@ export default function ResultsPage() {
     const run = profileId != null
       ? searchProperties(profileId)
       : searchPropertiesInline(
-          filterStateToPayload(filterState, '__inline__', countyFips)
+          filterStateToPayload(filterState!, '__inline__', countyFips)
         )
 
     run

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { getMe } from '../api/auth'
 import { listCounties } from '../api/counties'
@@ -429,7 +429,6 @@ export default function SearchPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const navState = (location.state as NavState)
-  const navStateConsumed = useRef(false)
 
   const [user, setUser] = useState<UserProfile | null>(null)
   const [counties, setCounties] = useState<CountyResponse[]>([])
@@ -463,7 +462,6 @@ export default function SearchPage() {
         setProfiles(ps)
 
         const useNav =
-          !navStateConsumed.current &&
           navState?.profileId != null
 
         if (useNav) {
@@ -486,11 +484,9 @@ export default function SearchPage() {
           setSelectedFips([])
           setFilterState(EMPTY_FILTER)
         }
-
-        navStateConsumed.current = true
       })
       .catch(() => setLoadError('Failed to load filter profiles.'))
-  }, [])
+  }, [location.state])
 
   function handleCountySelect(fips: string) {
     setSelectedFips((prev) =>
