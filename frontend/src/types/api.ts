@@ -35,28 +35,26 @@ export interface CountyResponse {
 
 // ── Dashboard ────────────────────────────────────────────────────────────
 
-export interface WorkflowCounts {
-  NEW: number
-  REVIEWED: number
-  APPROVE_SEND: number
-  SENT: number
-  RESPONDED: number
-  REJECTED: number
-  CLOSED: number
+export interface ProfileActivityEntry {
+  profile_id: number
+  profile_name: string
+  county_fips: string
+  is_system: boolean
+  is_favorite: boolean
+  last_searched_at: string | null
+  last_result_count: number | null
+  run_count: number
 }
 
-export interface CountySummary {
-  county_fips: string
-  county_name: string
-  active_listings: number
-  new_signals_last_7_days: number
-  workflow_counts: WorkflowCounts
+export interface OutreachPipelineStatus {
+  drafts_pending: number
+  sent_this_week: number
+  responses_received: number
 }
 
 export interface DashboardResponse {
-  counties: CountySummary[]
-  total_active_listings: number
-  total_new_signals_last_7_days: number
+  profile_activity: ProfileActivityEntry[]
+  outreach_pipeline: OutreachPipelineStatus
 }
 
 // ── Filter Profiles ──────────────────────────────────────────────────────

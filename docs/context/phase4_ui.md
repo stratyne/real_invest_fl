@@ -114,9 +114,8 @@ real_invest_fl/api/routes/
 - [x] seed_bundles.py run (item 12)
 - [x] require_county_access path-parameter pattern standardized
 - [x] Phase 4 route design documented before code is written
-- [x] v0.17 migration live — outreach_templates, skip_trace_cache,
-      outreach_log, users.calendar_link
-- [ ] v0.18 migration — user_profile_prefs
+- [x] v0.17 migration live — outreach_templates, skip_trace_cache, outreach_log, users.calendar_link
+- [x] v0.18 migration — user_profile_prefs
 
 ## Route Design (locked 2026-05-04, updated 2026-05-14)
 
@@ -215,13 +214,13 @@ Depends(county_access()) — never the explicit await pattern.
 
 ### Dashboard + Profile Prefs Implementation Order (locked 2026-05-14)
 
-1. [ ] DECISIONS.md + phase4_ui.md + schema.md updated (item 51) -- current step
-2. [ ] v0.18 migration — user_profile_prefs
-3. [ ] ORM model — UserProfilePrefs
-4. [ ] routes/dashboard.py — get_dashboard
+1. [x] DECISIONS.md + phase4_ui.md + schema.md updated (item 51)
+2. [x] v0.18 migration — user_profile_prefs
+3. [x] ORM model — UserProfilePrefs
+4. [x] routes/dashboard.py — get_dashboard
 5. [ ] routes/profiles.py — toggle_favorite added
 6. [ ] routes/properties.py — upsert added to search_properties
-7. [ ] DashboardPage.tsx — rewrite to profile activity + pipeline status
+7. [x] DashboardPage.tsx — rewrite to profile activity + pipeline status
 
 ### Outreach UI Requirements (locked 2026-05-05)
 
