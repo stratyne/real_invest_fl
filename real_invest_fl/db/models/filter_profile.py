@@ -121,3 +121,11 @@ class FilterProfile(Base):
         foreign_keys="[OutreachLog.filter_profile_id]",
     )
     
+    # v0.18
+    user_prefs: Mapped[list[UserProfilePrefs]] = relationship(
+        "UserProfilePrefs",
+        back_populates="profile",
+        foreign_keys="[UserProfilePrefs.profile_id]",
+        cascade="all, delete-orphan",
+    )
+        

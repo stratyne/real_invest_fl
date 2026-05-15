@@ -27,8 +27,7 @@ no shared scraper possible).
 development proceeds in parallel. Seed scripts (items 11–12) must clear first.
 
 ## Migration Chain
-HEAD = k2l3m4n5o6p7 (v0.18) — PENDING
-Previous: j1k2l3m4n5o6 (v0.17) — live and verified
+HEAD = k2l3m4n5o6p7 (v0.18) — live and verified
 
 | Rev | Version | Description |
 |---|---|---|
@@ -48,7 +47,7 @@ Previous: j1k2l3m4n5o6 (v0.17) — live and verified
 | h9i0j1k2l3m4 | v0.15 | parcel_sale_history grantor/grantee NOT NULL DEFAULT '' |
 | i0j1k2l3m4n5 | v0.16 | listing_scores table; strip scoring columns from listing_events |
 | j1k2l3m4n5o6 | v0.17 | Phase 4 outreach schema — outreach_templates, skip_trace_cache, outreach_log (stub → full), users.calendar_link |
-| k2l3m4n5o6p7 | v0.18 | user_profile_prefs — PENDING |
+| k2l3m4n5o6p7 | v0.18 | user_profile_prefs |
 
 **Note:** Ingest refactor (2026-05-02) produced NO migration — code only.
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
@@ -109,8 +108,6 @@ Retained as reference for backfill completeness verification.
 | 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | After dashboard rewrite |
 | 49 | ACTIVE | Map pins — PropertySearchResult does not carry lat/lng | After deployment |
 | 50 | ACTIVE | Server-side pagination — currently client-side | Phase 4 tail |
-| 52 | ACTIVE | v0.18 migration — user_profile_prefs table | Next session — start here |
-| 53 | ACTIVE | ORM model — UserProfilePrefs | After item 52 |
 | 54 | ACTIVE | routes/dashboard.py — get_dashboard | After item 53 |
 | 55 | ACTIVE | routes/profiles.py — toggle_favorite | After item 53 |
 | 56 | ACTIVE | routes/properties.py — upsert to search_properties | After item 53 |
@@ -153,3 +150,5 @@ Retained as reference for backfill completeness verification.
 | 46 | seed_demo_account.py — demo superuser, Escambia + Santa Rosa access, calendar_link set, idempotency verified | 2026-05-14 |
 | 47 | React frontend scaffold — Vite + TypeScript, axios client, API types, LoginPage, DashboardPage, ResultsPage | 2026-05-14 |
 | 51 | Documentation — remove filter-first bias; rewrite phase4_ui.md, DECISIONS.md, create context/schema.md, delete REFERENCE.md + CHECKPOINT.md | 2026-05-14 |
+| 52 | v0.18 migration — user_profile_prefs table | 2026-05-14 |
+| 53 | ORM model — UserProfilePrefs | 2026-05-14 |

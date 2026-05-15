@@ -63,3 +63,12 @@ class User(Base):
         foreign_keys="[OutreachLog.user_id]",
         cascade="all, delete-orphan",
     )
+
+    # v0.18
+    profile_prefs: Mapped[list[UserProfilePrefs]] = relationship(
+        "UserProfilePrefs",
+        back_populates="user",
+        foreign_keys="[UserProfilePrefs.user_id]",
+        cascade="all, delete-orphan",
+    )
+    

@@ -280,12 +280,18 @@ Pending: k2l3m4n5o6p7 (v0.18) — user_profile_prefs
                                                       -- NULL = system profile
     county_fips               VARCHAR(5)    NOT NULL  FK → counties.county_fips
     profile_name              VARCHAR(100)  NOT NULL
+    description               TEXT
+    is_active                 BOOLEAN       NOT NULL  DEFAULT true
+    version                   INTEGER       NOT NULL  DEFAULT 1
     filter_criteria           JSONB         NOT NULL
-    rehab_cost_per_sqft       FLOAT
-    min_comp_sales_for_arv    INTEGER
-    comp_radius_miles         FLOAT
-    comp_year_built_tolerance INTEGER
-    deal_score_weights        JSONB
+    rehab_cost_per_sqft       FLOAT         NOT NULL  DEFAULT 22.00
+    min_comp_sales_for_arv    INTEGER       NOT NULL  DEFAULT 3
+    comp_radius_miles         FLOAT         NOT NULL  DEFAULT 1.0
+    comp_year_built_tolerance INTEGER       NOT NULL  DEFAULT 15
+    listing_type_priority     JSONB         NOT NULL
+    deal_score_weights        JSONB         NOT NULL
+    allow_automated_outreach  BOOLEAN       NOT NULL  DEFAULT false
+    max_outreach_attempts     INTEGER       NOT NULL  DEFAULT 3
     created_at                TIMESTAMPTZ   NOT NULL  DEFAULT now()
     updated_at                TIMESTAMPTZ   NOT NULL  DEFAULT now()
 
