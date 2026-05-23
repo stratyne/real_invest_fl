@@ -123,6 +123,20 @@ export interface CloneProfileRequest {
   county_fips?: string[] | null
 }
 
+// ── Inline search request (mirrors InlineSearchRequest on backend) ────────
+
+export interface InlineSearchRequest {
+  county_fips: string[]
+  filter_criteria: FilterCriteria
+  rehab_cost_per_sqft?: number
+  min_comp_sales_for_arv?: number
+  comp_radius_miles?: number
+  comp_year_built_tolerance?: number
+  deal_score_weights?: Record<string, unknown>
+  page?: number
+  page_size?: number
+}
+
 // ── Properties ───────────────────────────────────────────────────────────
 
 export interface ListingEventSummary {
@@ -166,8 +180,16 @@ export interface PropertySearchResult {
   deal_score: number | null
   arv_source: string | null
   latitude: number | null
-  longitude: number | null  
+  longitude: number | null
   latest_listing: ListingEventSummary | null
+}
+
+export interface PaginatedPropertySearchResult {
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+  results: PropertySearchResult[]
 }
 
 export interface PropertyDetail {

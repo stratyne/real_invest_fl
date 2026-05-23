@@ -4,7 +4,7 @@
 
 ## Active Phase
 **Phase 2** (scraping/matching) — core complete, scheduler/output pending.
-**Phase 4** (UI) — active. Dashboard Run/Edit flow complete. Map pins live. Deployment next.
+**Phase 4** (UI) — active. Server-side pagination live. Deployment next (item 48).
 Phase 2 and Phase 4 run in parallel. Santa Rosa CAMA runs in background.
 
 ## Phase Summary
@@ -106,10 +106,8 @@ Retained as reference for backfill completeness verification.
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
 | 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py |
-| 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | Blocked on items 50 and 72. Address those first. |
-| 50 | ACTIVE | Server-side pagination — currently client-side | Phase 4 tail |
+| 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | Proceed — blockers resolved |
 | 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
-| 72 | PENDING | price_reduced filter — accepted by frontend, stored in profile JSON, never applied | Decision required: what column or condition does it check |
 | 73 | PENDING | PropertyValueHistory ORM relationship on Property — model not in schema.md | Investigate — may be POC artifact |
 
 ## Deferred Items
@@ -151,6 +149,7 @@ Retained as reference for backfill completeness verification.
 | 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |
 | 46 | seed_demo_account.py — demo superuser, Escambia + Santa Rosa access, calendar_link set | 2026-05-14 |
 | 47 | React frontend scaffold — Vite + TypeScript, axios client, API types, LoginPage, DashboardPage, ResultsPage | 2026-05-14 |
+| 50 | Server-side pagination — PaginatedPropertySearchResult envelope; page/page_size on both search routes; Python-side slice after scoring; last_result_count upsert uses total (pre-page) | 2026-05-23 |
 | 51 | Documentation — phase4_ui.md, DECISIONS.md, schema.md rewrite; REFERENCE.md + CHECKPOINT.md deleted | 2026-05-14 |
 | 52 | v0.18 migration — user_profile_prefs table | 2026-05-14 |
 | 53 | ORM model — UserProfilePrefs | 2026-05-14 |
@@ -163,6 +162,7 @@ Retained as reference for backfill completeness verification.
 | 69 | Backend multi-county route contract refactor — routes/profiles.py de-county-scoped (flat /profiles prefix); routes/properties.py search profile-driven via /properties?filter_profile_id= and POST /properties/search; routes/dashboard.py county_fips returns string[] | 2026-05-15 |
 | 70 | Map pins — lat/lng added to PropertySearchResult schema + both search route construction loops | 2026-05-15 |
 | 71 | user_profile_prefs upsert — last_result_count bug resolved; upsert placement confirmed correct | 2026-05-15 |
+| 72 | price_reduced filter — removed from FilterState, EMPTY_FILTER, profileToFilterState, filterStateToPayload, countActiveFilters, and Search UI. No backend handler existed. Deferred pending listing_events.price_reduced column + scraper wiring. | 2026-05-23 |
 | 74 | Star/favorite toggle wired in DashboardPage.tsx — toggleFavorite call on star click, optimistic update | 2026-05-15 |
 | 75 | phase4_ui.md route table — profiles prefix corrected to flat /profiles | 2026-05-15 |
 | 76 | ORM model gap — zoning, nav_total_assessment, jv_per_sqft, arv_estimate, arv_spread, list_price added to property.py | 2026-05-15 |

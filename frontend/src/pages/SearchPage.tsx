@@ -60,7 +60,6 @@ export interface FilterState {
   days_on_market_min: number | null
   days_on_market_max: number | null
   listing_types: string[]
-  price_reduced: boolean | null
   min_arv_spread: number | null
   min_deal_score: number | null
   rehab_cost_per_sqft: number
@@ -120,7 +119,6 @@ const EMPTY_FILTER: FilterState = {
   days_on_market_min: null,
   days_on_market_max: null,
   listing_types: [],
-  price_reduced: null,
   min_arv_spread: null,
   min_deal_score: null,
   rehab_cost_per_sqft: 22.0,
@@ -190,7 +188,6 @@ function profileToFilterState(p: FilterProfileResponse): FilterState {
     days_on_market_min: (range('days_on_market').min as number) ?? null,
     days_on_market_max: (range('days_on_market').max as number) ?? null,
     listing_types: (includeList('listing_types') as string[]) ?? [],
-    price_reduced: boolReq('price_reduced'),
     min_arv_spread: numVal('min_arv_spread'),
     min_deal_score: numVal('min_deal_score'),
     rehab_cost_per_sqft: p.rehab_cost_per_sqft,
@@ -249,7 +246,6 @@ export function filterStateToPayload(
         list_price: { min: fs.list_price_min, max: fs.list_price_max },
         days_on_market: { min: fs.days_on_market_min, max: fs.days_on_market_max },
         listing_types: { include: fs.listing_types.length ? fs.listing_types : null },
-        price_reduced: { required: fs.price_reduced },
         min_arv_spread: { value: fs.min_arv_spread },
         min_deal_score: { value: fs.min_deal_score },
         max_results: { value: fs.max_results },
@@ -302,7 +298,6 @@ function countActiveFilters(fs: FilterState): number {
   if (fs.list_price_min != null || fs.list_price_max != null) count++
   if (fs.days_on_market_min != null || fs.days_on_market_max != null) count++
   if (fs.listing_types.length) count++
-  if (fs.price_reduced != null) count++
   if (fs.min_arv_spread != null) count++
   if (fs.min_deal_score != null) count++
   return count
@@ -736,7 +731,6 @@ export default function SearchPage() {
                 <TextListInput label="Listing Types" value={filterState.listing_types}
                   onChange={(v) => setFs({ listing_types: v as string[] })}
                   placeholder="e.g. FOR_SALE, FORECLOSURE" />
-                <TriStateSelect label="Price Reduced" value={filterState.price_reduced} onChange={(v) => setFs({ price_reduced: v })} />
               </Section>
 
               <Section title="Deal Signals">

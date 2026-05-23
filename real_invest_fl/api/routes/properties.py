@@ -4,7 +4,8 @@ Properties routes — profile-driven multi-county search and single-parcel detai
 GET /properties
     Loads the specified filter profile, validates access to all counties
     in the profile, builds a query-time WHERE clause from filter_criteria,
-    computes deal score, returns results ranked by deal score descending.
+    computes deal score, returns a single page of results ranked by deal
+    score descending (or the configured sort field).
 
 GET /{county_fips}/properties/{parcel_id}
     Returns full property detail for a single parcel, including the most
@@ -30,6 +31,8 @@ from real_invest_fl.db.models.user_profile_prefs import UserProfilePrefs
 from real_invest_fl.db.models.user_county_access import UserCountyAccess
 
 router = APIRouter(tags=["properties"])
+
+# ── Access helpers ───────────────────────────────────────────────────────
 
 def _assert_county_access(
     requested_fips: list[str],
@@ -90,6 +93,7 @@ async def _get_visible_active_profile(
 
     return profile
 
+
 # ── Response schemas ─────────────────────────────────────────────────────
 
 class ListingEventSummary(BaseModel):
@@ -139,6 +143,14 @@ class PropertySearchResult(BaseModel):
     latest_listing: ListingEventSummary | None
 
     model_config = {"from_attributes": True}
+
+
+class PaginatedPropertySearchResult(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    results: list[PropertySearchResult]
 
 
 class PropertyDetail(BaseModel):
@@ -202,13 +214,14 @@ class PropertyDetail(BaseModel):
 
     model_config = {"from_attributes": True}
 
+
 class InlineSearchRequest(BaseModel):
-    """Inline search payload — same shape as FilterProfileCreateRequest.
+    """Inline search payload — no profile is written.
 
     county_fips: list of FIPS codes the search spans. User must have
-    access to all of them. No profile is written.
+    access to all of them.
     filter_criteria: same structure as filter_profile.filter_criteria.
-    All ARV engine params carried inline.
+    page / page_size: pagination. Defaults: page=1, page_size=25.
     """
     county_fips: list[str]
     filter_criteria: dict
@@ -217,7 +230,9 @@ class InlineSearchRequest(BaseModel):
     comp_radius_miles: float = 1.0
     comp_year_built_tolerance: int = 15
     deal_score_weights: dict = {}
-    # profile_name not required — no write occurs
+    page: int = 1
+    page_size: int = 25
+
 
 # ── Filter application ───────────────────────────────────────────────────
 
@@ -225,10 +240,10 @@ def _apply_filters(
     stmt,
     filters: dict[str, Any],
 ):
-    """Apply filter_criteria filter dimensions as WHERE clauses.
+    """Apply filter_criteria dimensions as WHERE clauses.
 
-    Only non-null filter values are applied. Null values in the criteria
-    document mean the dimension is unconstrained — no WHERE clause added.
+    Only non-null filter values are applied. Null values mean the
+    dimension is unconstrained — no WHERE clause added.
     Returns the augmented select statement.
     """
     f = filters
@@ -246,7 +261,7 @@ def _apply_filters(
         stmt = stmt.where(Property.list_price >= lp["min"])
     if lp.get("max") is not None:
         stmt = stmt.where(Property.list_price <= lp["max"])
-    
+
     # list_price_to_jv_ratio
     lpjr = f.get("list_price_to_jv_ratio", {})
     if lpjr.get("min") is not None:
@@ -262,7 +277,7 @@ def _apply_filters(
             Property.jv.isnot(None),
             Property.jv > 0,
             (Property.list_price / Property.jv) <= lpjr["max"],
-        )       
+        )
 
     # year_built (act_yr_blt)
     yb = f.get("year_built", {})
@@ -341,7 +356,7 @@ def _apply_filters(
     if lv.get("min") is not None:
         stmt = stmt.where(Property.lnd_val >= lv["min"])
     if lv.get("max") is not None:
-        stmt = stmt.where(Property.lnd_val <= lv["max"]) 
+        stmt = stmt.where(Property.lnd_val <= lv["max"])
 
     # nav_total_assessment
     nav = f.get("nav_total_assessment", {})
@@ -459,18 +474,13 @@ def _compute_deal_score(
 ) -> float | None:
     """Compute a normalised deal score in [0.0, 1.0] at query time.
 
-    Scoring dimensions and their weights are drawn from
-    filter_profile.deal_score_weights. Returns None if no weights are
-    configured or if required values are missing.
+    Returns None if no weights are configured or required values missing.
 
-    Current dimensions:
+    Dimensions:
         arv_spread_score  — arv_spread relative to jv
         signal_tier_score — inverted signal_tier (1=best)
         dom_score         — days_on_market (lower = more motivated)
         absentee_score    — absentee_owner boolean bonus
-
-    All dimensions are normalised to [0, 1] before weighting.
-    Total weight need not sum to 1 — output is normalised by total weight.
     """
     if not weights:
         return None
@@ -478,14 +488,12 @@ def _compute_deal_score(
     score = 0.0
     total_weight = 0.0
 
-    # arv_spread_score
     w = weights.get("arv_spread_score", 0.0)
     if w and prop.arv_spread is not None and prop.jv:
         normalised = min(prop.arv_spread / prop.jv, 1.0)
         score += w * max(normalised, 0.0)
         total_weight += w
 
-    # signal_tier_score — tier 1 = 1.0, tier 2 = 0.66, tier 3 = 0.33
     w = weights.get("signal_tier_score", 0.0)
     if w and latest_event and latest_event.signal_tier is not None:
         tier_map = {1: 1.0, 2: 0.66, 3: 0.33}
@@ -493,14 +501,12 @@ def _compute_deal_score(
         score += w * normalised
         total_weight += w
 
-    # dom_score — cap at 365 days, invert so 0 DOM = 1.0
     w = weights.get("dom_score", 0.0)
     if w and latest_event and latest_event.days_on_market is not None:
         normalised = 1.0 - min(latest_event.days_on_market / 365, 1.0)
         score += w * normalised
         total_weight += w
 
-    # absentee_score — binary bonus
     w = weights.get("absentee_score", 0.0)
     if w and prop.absentee_owner:
         score += w * 1.0
@@ -512,71 +518,22 @@ def _compute_deal_score(
     return round(score / total_weight, 4)
 
 
-# ── Routes ───────────────────────────────────────────────────────────────
+# ── Shared scoring + sorting + pagination helper ─────────────────────────
 
-@router.get("/properties", response_model=list[PropertySearchResult])
-async def search_properties(
-    filter_profile_id: int = Query(..., description="ID of the filter profile to execute"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> list[PropertySearchResult]:
-    """Execute a live multi-county property search using the specified filter profile.
+def _build_page(
+    properties: list[Property],
+    latest_events: dict[tuple[str, str], ListingEvent],
+    filters: dict[str, Any],
+    weights: dict[str, Any],
+    page: int,
+    page_size: int,
+) -> PaginatedPropertySearchResult:
+    """Score, filter, sort, and paginate a property list.
 
-    Loads the profile by ID, validates that the current user may access
-    all counties in profile.county_fips, applies filter_criteria at query
-    time, computes deal score, and returns results ranked according to
-    filter_criteria.filters.sort_by when supported, otherwise by deal score
-    descending with arv_spread as a tiebreaker.
-
-    max_results from filter_criteria is honoured if set.
+    Called by both search routes after DB fetch and event resolution.
+    Returns a PaginatedPropertySearchResult envelope.
     """
-    profile = await _get_visible_active_profile(filter_profile_id, current_user, db)
-
-    profile_counties = list(dict.fromkeys(profile.county_fips))
-    if not profile_counties:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Filter profile {filter_profile_id} has no counties configured",
-        )
-
-    filters: dict[str, Any] = profile.filter_criteria.get("filters", {})
-    weights: dict[str, Any] = profile.deal_score_weights or {}
-
-    sort_cfg = filters.get("sort_by", {})
-    sort_field = sort_cfg.get("field") if isinstance(sort_cfg, dict) else None
-    sort_direction = sort_cfg.get("direction", "DESC") if isinstance(sort_cfg, dict) else "DESC"
-    sort_direction = str(sort_direction).upper()
-
-    stmt = select(Property).where(Property.county_fips.in_(profile_counties))
-    stmt = _apply_filters(stmt, filters)
-
-    max_res = filters.get("max_results", {})
-    limit = max_res.get("value") if max_res else None
-
-    result = await db.execute(stmt)
-    properties = result.scalars().all()
-
-    property_keys = [(p.county_fips, p.parcel_id) for p in properties]
-    latest_events: dict[tuple[str, str], ListingEvent] = {}
-
-    if property_keys:
-        # Fetch all listing events for the county set, then resolve latest
-        # per parcel in Python. Avoids a large tuple IN(...) list that
-        # exceeds PostgreSQL's stack depth limit at scale.
-        property_key_set = set(property_keys)
-        ev_result = await db.execute(
-            select(ListingEvent)
-            .where(ListingEvent.county_fips.in_(profile_counties))
-            .order_by(ListingEvent.county_fips, ListingEvent.parcel_id, ListingEvent.id.desc())
-        )
-        for ev in ev_result.scalars().all():
-            key = (ev.county_fips, ev.parcel_id)
-            if key not in property_key_set:
-                continue
-            if key not in latest_events:
-                latest_events[key] = ev
-            # Already have the latest (highest id) for this key — skip
-
+    # ── Python-side listing_type filter
     lt = filters.get("listing_types", {})
     if lt.get("include"):
         allowed = set(lt["include"])
@@ -586,222 +543,7 @@ async def search_properties(
             and ev.listing_type in allowed
         ]
 
-    dom = filters.get("days_on_market", {})
-    if dom.get("min") is not None or dom.get("max") is not None:
-        filtered = []
-        for p in properties:
-            ev = latest_events.get((p.county_fips, p.parcel_id))
-            if ev is None:
-                continue
-            if dom.get("min") is not None and (ev.days_on_market is None or ev.days_on_market < dom["min"]):
-                continue
-            if dom.get("max") is not None and (ev.days_on_market is None or ev.days_on_market > dom["max"]):
-                continue
-            filtered.append(p)
-        properties = filtered
-
-    min_ds = filters.get("min_deal_score", {})
-    min_deal_score_val = min_ds.get("value") if min_ds else None
-
-    scored: list[tuple[Property, ListingEvent | None, float | None]] = []
-    for p in properties:
-        ev = latest_events.get((p.county_fips, p.parcel_id))
-        ds = _compute_deal_score(p, ev, weights)
-        if min_deal_score_val is not None and (ds is None or ds < min_deal_score_val):
-            continue
-        scored.append((p, ev, ds))
-
-    supported_sort_fields = {
-        "deal_score",
-        "arv_spread",
-        "list_price",
-        "jv",
-        "years_since_last_sale",
-    }
-
-    reverse = sort_direction != "ASC"
-
-    if sort_field not in supported_sort_fields:
-        sort_field = "deal_score"
-        reverse = True
-
-    def _sort_key(item: tuple[Property, ListingEvent | None, float | None]):
-        prop, ev, ds = item
-
-        if sort_field == "deal_score":
-            primary = ds if ds is not None else -1.0
-            secondary = prop.arv_spread if prop.arv_spread is not None else -1
-            return (primary, secondary)
-
-        if sort_field == "arv_spread":
-            primary = prop.arv_spread if prop.arv_spread is not None else -1
-            secondary = ds if ds is not None else -1.0
-            return (primary, secondary)
-
-        if sort_field == "list_price":
-            primary = prop.list_price if prop.list_price is not None else -1
-            secondary = ds if ds is not None else -1.0
-            return (primary, secondary)
-
-        if sort_field == "jv":
-            primary = prop.jv if prop.jv is not None else -1
-            secondary = ds if ds is not None else -1.0
-            return (primary, secondary)
-
-        if sort_field == "years_since_last_sale":
-            primary = prop.years_since_last_sale if prop.years_since_last_sale is not None else -1
-            secondary = ds if ds is not None else -1.0
-            return (primary, secondary)
-
-        return (
-            ds if ds is not None else -1.0,
-            prop.arv_spread if prop.arv_spread is not None else -1,
-        )
-
-    scored.sort(key=_sort_key, reverse=reverse)
-
-    if limit:
-        scored = scored[:limit]
-
-    out: list[PropertySearchResult] = []
-    for prop, ev, ds in scored:
-        latest = ListingEventSummary.model_validate(ev) if ev else None
-        arv_source = ev.arv_source if ev else None
-        arv_estimate = (ev.arv_estimate if ev else None) or prop.arv_estimate
-
-        out.append(
-            PropertySearchResult(
-                county_fips=prop.county_fips,
-                parcel_id=prop.parcel_id,
-                phy_addr1=prop.phy_addr1,
-                phy_city=prop.phy_city,
-                phy_zipcd=prop.phy_zipcd,
-                dor_uc=prop.dor_uc,
-                jv=prop.jv,
-                tot_lvg_area=prop.tot_lvg_area,
-                lnd_sqfoot=prop.lnd_sqfoot,
-                act_yr_blt=prop.act_yr_blt,
-                eff_yr_blt=prop.eff_yr_blt,
-                bedrooms=prop.bedrooms,
-                bathrooms=float(prop.bathrooms) if prop.bathrooms is not None else None,
-                absentee_owner=prop.absentee_owner,
-                imp_qual=prop.imp_qual,
-                years_since_last_sale=prop.years_since_last_sale,
-                improvement_to_land_ratio=float(prop.improvement_to_land_ratio) if prop.improvement_to_land_ratio is not None else None,
-                soh_compression_ratio=float(prop.soh_compression_ratio) if prop.soh_compression_ratio is not None else None,
-                arv_estimate=arv_estimate,
-                arv_spread=prop.arv_spread,
-                jv_per_sqft=float(prop.jv_per_sqft) if prop.jv_per_sqft is not None else None,
-                deal_score=ds,
-                arv_source=arv_source,
-                latitude=float(prop.latitude) if prop.latitude is not None else None,
-                longitude=float(prop.longitude) if prop.longitude is not None else None,
-                latest_listing=latest,
-            )
-        )
-
-    # ── Upsert user_profile_prefs ────────────────────────────────────────
-    # Written on every successful saved-profile search execution.
-    # Authoritative source for dashboard profile ordering.
-    # Not written by search_properties_inline — no profile_id available.
-    # Not written by toggle_favorite — that route manages is_favorite only.
-    await db.execute(
-        pg_insert(UserProfilePrefs)
-        .values(
-            user_id=current_user.id,
-            profile_id=filter_profile_id,
-            last_searched_at=func.now(),
-            last_result_count=len(out),
-            run_count=1,
-        )
-        .on_conflict_do_update(
-            index_elements=["user_id", "profile_id"],
-            set_={
-                "last_searched_at": func.now(),
-                "last_result_count": len(out),
-                "run_count": UserProfilePrefs.run_count + 1,
-                "updated_at": func.now(),
-            },
-        )
-    )
-    await db.commit()
-
-    return out
-
-
-@router.post("/properties/search", response_model=list[PropertySearchResult])
-async def search_properties_inline(
-    body: InlineSearchRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> list[PropertySearchResult]:
-    """Execute a live multi-county property search from inline filter criteria.
-
-    No filter profile is required and none is written. Access to all
-    counties in body.county_fips is validated against the current user's
-    county access grants. Superusers bypass county access checks.
-    Filter criteria, deal score weights, and ARV engine params are taken
-    directly from the request body. Behaviour is otherwise identical to
-    search_properties.
-    """
-    profile_counties = list(dict.fromkeys(body.county_fips))
-    if not profile_counties:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="county_fips must contain at least one county",
-        )
-
-    if not current_user.is_superuser:
-        accessible = await _get_accessible_fips(current_user, db)
-        _assert_county_access(profile_counties, accessible, is_superuser=False)
-
-    filters: dict[str, Any] = body.filter_criteria.get("filters", {})
-    weights: dict[str, Any] = body.deal_score_weights or {}
-
-    sort_cfg = filters.get("sort_by", {})
-    sort_field = sort_cfg.get("field") if isinstance(sort_cfg, dict) else None
-    sort_direction = sort_cfg.get("direction", "DESC") if isinstance(sort_cfg, dict) else "DESC"
-    sort_direction = str(sort_direction).upper()
-
-    stmt = select(Property).where(Property.county_fips.in_(profile_counties))
-    stmt = _apply_filters(stmt, filters)
-
-    max_res = filters.get("max_results", {})
-    limit = max_res.get("value") if max_res else None
-
-    result = await db.execute(stmt)
-    properties = result.scalars().all()
-
-    property_keys = [(p.county_fips, p.parcel_id) for p in properties]
-    latest_events: dict[tuple[str, str], ListingEvent] = {}
-
-    if property_keys:
-        # Fetch all listing events for the county set, then resolve latest
-        # per parcel in Python. Avoids a large tuple IN(...) list that
-        # exceeds PostgreSQL's stack depth limit at scale.
-        property_key_set = set(property_keys)
-        ev_result = await db.execute(
-            select(ListingEvent)
-            .where(ListingEvent.county_fips.in_(profile_counties))
-            .order_by(ListingEvent.county_fips, ListingEvent.parcel_id, ListingEvent.id.desc())
-        )
-        for ev in ev_result.scalars().all():
-            key = (ev.county_fips, ev.parcel_id)
-            if key not in property_key_set:
-                continue
-            if key not in latest_events:
-                latest_events[key] = ev
-            # Already have the latest (highest id) for this key — skip
-
-    lt = filters.get("listing_types", {})
-    if lt.get("include"):
-        allowed = set(lt["include"])
-        properties = [
-            p for p in properties
-            if (ev := latest_events.get((p.county_fips, p.parcel_id))) is not None
-            and ev.listing_type in allowed
-        ]
-
+    # ── Python-side days_on_market filter
     dom = filters.get("days_on_market", {})
     if dom.get("min") is not None or dom.get("max") is not None:
         filtered = []
@@ -820,6 +562,7 @@ async def search_properties_inline(
             filtered.append(p)
         properties = filtered
 
+    # ── Score and apply min_deal_score filter
     min_ds = filters.get("min_deal_score", {})
     min_deal_score_val = min_ds.get("value") if min_ds else None
 
@@ -830,6 +573,12 @@ async def search_properties_inline(
         if min_deal_score_val is not None and (ds is None or ds < min_deal_score_val):
             continue
         scored.append((p, ev, ds))
+
+    # ── Sort
+    sort_cfg = filters.get("sort_by", {})
+    sort_field = sort_cfg.get("field") if isinstance(sort_cfg, dict) else None
+    sort_direction = sort_cfg.get("direction", "DESC") if isinstance(sort_cfg, dict) else "DESC"
+    sort_direction = str(sort_direction).upper()
 
     supported_sort_fields = {
         "deal_score", "arv_spread", "list_price", "jv", "years_since_last_sale",
@@ -854,11 +603,24 @@ async def search_properties_inline(
         return (ds if ds is not None else -1.0, prop.arv_spread if prop.arv_spread is not None else -1)
 
     scored.sort(key=_sort_key, reverse=reverse)
+
+    # ── Apply max_results cap before pagination
+    max_res = filters.get("max_results", {})
+    limit = max_res.get("value") if max_res else None
     if limit:
         scored = scored[:limit]
 
+    total = len(scored)
+    total_pages = max(1, -(-total // page_size))  # ceiling division
+
+    # ── Slice for requested page
+    start = (page - 1) * page_size
+    end = start + page_size
+    page_slice = scored[start:end]
+
+    # ── Build result objects
     out: list[PropertySearchResult] = []
-    for prop, ev, ds in scored:
+    for prop, ev, ds in page_slice:
         latest = ListingEventSummary.model_validate(ev) if ev else None
         arv_source = ev.arv_source if ev else None
         arv_estimate = (ev.arv_estimate if ev else None) or prop.arv_estimate
@@ -894,7 +656,143 @@ async def search_properties_inline(
             )
         )
 
-    return out
+    return PaginatedPropertySearchResult(
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        results=out,
+    )
+
+
+# ── Routes ───────────────────────────────────────────────────────────────
+
+@router.get("/properties", response_model=PaginatedPropertySearchResult)
+async def search_properties(
+    filter_profile_id: int = Query(..., description="ID of the filter profile to execute"),
+    page: int = Query(1, ge=1, description="Page number (1-based)"),
+    page_size: int = Query(25, ge=1, le=500, description="Results per page"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedPropertySearchResult:
+    """Execute a live multi-county property search using the specified filter profile.
+
+    Loads the profile, validates county access, applies filter_criteria at
+    query time, scores, sorts, and returns one page of results.
+
+    max_results from filter_criteria is applied before pagination.
+    user_profile_prefs is upserted with the total result count (pre-page).
+    """
+    profile = await _get_visible_active_profile(filter_profile_id, current_user, db)
+
+    profile_counties = list(dict.fromkeys(profile.county_fips))
+    if not profile_counties:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Filter profile {filter_profile_id} has no counties configured",
+        )
+
+    filters: dict[str, Any] = profile.filter_criteria.get("filters", {})
+    weights: dict[str, Any] = profile.deal_score_weights or {}
+
+    stmt = select(Property).where(Property.county_fips.in_(profile_counties))
+    stmt = _apply_filters(stmt, filters)
+
+    result = await db.execute(stmt)
+    properties = list(result.scalars().all())
+
+    latest_events: dict[tuple[str, str], ListingEvent] = {}
+
+    if properties:
+        property_key_set = {(p.county_fips, p.parcel_id) for p in properties}
+        ev_result = await db.execute(
+            select(ListingEvent)
+            .where(ListingEvent.county_fips.in_(profile_counties))
+            .order_by(ListingEvent.county_fips, ListingEvent.parcel_id, ListingEvent.id.desc())
+        )
+        for ev in ev_result.scalars().all():
+            key = (ev.county_fips, ev.parcel_id)
+            if key not in property_key_set:
+                continue
+            if key not in latest_events:
+                latest_events[key] = ev
+
+    paginated = _build_page(properties, latest_events, filters, weights, page, page_size)
+
+    # ── Upsert user_profile_prefs — total count, not page count
+    await db.execute(
+        pg_insert(UserProfilePrefs)
+        .values(
+            user_id=current_user.id,
+            profile_id=filter_profile_id,
+            last_searched_at=func.now(),
+            last_result_count=paginated.total,
+            run_count=1,
+        )
+        .on_conflict_do_update(
+            index_elements=["user_id", "profile_id"],
+            set_={
+                "last_searched_at": func.now(),
+                "last_result_count": paginated.total,
+                "run_count": UserProfilePrefs.run_count + 1,
+                "updated_at": func.now(),
+            },
+        )
+    )
+    await db.commit()
+
+    return paginated
+
+
+@router.post("/properties/search", response_model=PaginatedPropertySearchResult)
+async def search_properties_inline(
+    body: InlineSearchRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PaginatedPropertySearchResult:
+    """Execute a live multi-county property search from inline filter criteria.
+
+    No filter profile is required and none is written. County access is
+    validated. Behaviour is otherwise identical to search_properties.
+    user_profile_prefs is not written — no profile_id is available.
+    """
+    profile_counties = list(dict.fromkeys(body.county_fips))
+    if not profile_counties:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="county_fips must contain at least one county",
+        )
+
+    if not current_user.is_superuser:
+        accessible = await _get_accessible_fips(current_user, db)
+        _assert_county_access(profile_counties, accessible, is_superuser=False)
+
+    filters: dict[str, Any] = body.filter_criteria.get("filters", {})
+    weights: dict[str, Any] = body.deal_score_weights or {}
+
+    stmt = select(Property).where(Property.county_fips.in_(profile_counties))
+    stmt = _apply_filters(stmt, filters)
+
+    result = await db.execute(stmt)
+    properties = list(result.scalars().all())
+
+    latest_events: dict[tuple[str, str], ListingEvent] = {}
+
+    if properties:
+        property_key_set = {(p.county_fips, p.parcel_id) for p in properties}
+        ev_result = await db.execute(
+            select(ListingEvent)
+            .where(ListingEvent.county_fips.in_(profile_counties))
+            .order_by(ListingEvent.county_fips, ListingEvent.parcel_id, ListingEvent.id.desc())
+        )
+        for ev in ev_result.scalars().all():
+            key = (ev.county_fips, ev.parcel_id)
+            if key not in property_key_set:
+                continue
+            if key not in latest_events:
+                latest_events[key] = ev
+
+    return _build_page(properties, latest_events, filters, weights, body.page, body.page_size)
 
 
 @router.get("/{county_fips}/properties/{parcel_id}", response_model=PropertyDetail)
@@ -921,7 +819,6 @@ async def get_property(
             detail=f"Property {parcel_id} not found in county {county_fips}",
         )
 
-    # Latest listing event
     ev_result = await db.execute(
         select(ListingEvent)
         .where(

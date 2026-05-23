@@ -4,9 +4,14 @@ import Map, { Popup, Marker, type MapRef } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { searchProperties, searchPropertiesInline, getProperty } from '../api/properties'
 import { createProfile } from '../api/profiles'
-import { filterStateToPayload } from './SearchPage'
-import type { PropertySearchResult, PropertyDetail } from '../types/api'
+import type {
+  PropertySearchResult,
+  PropertyDetail,
+  InlineSearchRequest,
+  FilterCriteria,
+} from '../types/api'
 import type { FilterState } from './SearchPage'
+import { filterStateToPayload } from './SearchPage'
 
 const PAGE_SIZE = 25
 
@@ -65,21 +70,14 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
 
   useEffect(() => {
     let active = true
-
     setDetail(null)
     setError(null)
 
     getProperty(countyFips, parcelId)
-      .then((data) => {
-        if (active) setDetail(data)
-      })
-      .catch(() => {
-        if (active) setError('Failed to load property detail.')
-      })
+      .then((data) => { if (active) setDetail(data) })
+      .catch(() => { if (active) setError('Failed to load property detail.') })
 
-    return () => {
-      active = false
-    }
+    return () => { active = false }
   }, [countyFips, parcelId])
 
   return (
@@ -215,6 +213,30 @@ function SaveModal({ onSave, onClose, saving, error }: SaveModalProps) {
   )
 }
 
+// ── Build inline search request from FilterState ──────────────────────────
+
+function buildInlineRequest(
+  filterState: FilterState,
+  countyFips: string[],
+  page: number,
+  pageSize: number,
+): InlineSearchRequest {
+  // filterStateToPayload produces a FilterProfileCreateRequest-shaped object.
+  // We extract only the fields InlineSearchRequest needs.
+  const payload = filterStateToPayload(filterState, '__inline__', countyFips)
+  return {
+    county_fips: countyFips,
+    filter_criteria: payload.filter_criteria as FilterCriteria,
+    rehab_cost_per_sqft: payload.rehab_cost_per_sqft,
+    min_comp_sales_for_arv: payload.min_comp_sales_for_arv,
+    comp_radius_miles: payload.comp_radius_miles,
+    comp_year_built_tolerance: payload.comp_year_built_tolerance,
+    deal_score_weights: payload.deal_score_weights,
+    page,
+    page_size: pageSize,
+  }
+}
+
 // ── Main ResultsPage ──────────────────────────────────────────────────────
 
 export default function ResultsPage() {
@@ -233,10 +255,14 @@ export default function ResultsPage() {
   const countyFips: string[] = locationState?.countyFips ?? []
   const profileId: number | undefined = locationState?.profileId
 
-  const [results, setResults] = useState<PropertySearchResult[]>([])
+  // ── Pagination state
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(1)
+  const [pageResults, setPageResults] = useState<PropertySearchResult[]>([])
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [page, setPage] = useState(1)
   const [selectedResult, setSelectedResult] = useState<PropertySearchResult | null>(null)
   const [popupResult, setPopupResult] = useState<PropertySearchResult | null>(null)
 
@@ -247,7 +273,6 @@ export default function ResultsPage() {
 
   function centerMapOnResult(r: PropertySearchResult) {
     if (r.latitude == null || r.longitude == null) return
-
     mapRef.current?.getMap().easeTo({
       center: [r.longitude, r.latitude],
       zoom: 15,
@@ -262,6 +287,7 @@ export default function ResultsPage() {
     setSelectedResult(null)
   }
 
+  // ── Fetch on mount and on every page change
   useEffect(() => {
     if (profileId == null && (!filterState || countyFips.length === 0)) {
       setError('No filter state available. Return to search and try again.')
@@ -270,26 +296,30 @@ export default function ResultsPage() {
     }
 
     setLoading(true)
+    setPopupResult(null)   // clear stale popup whenever results change
+    setSelectedResult(null)
 
     const run = profileId != null
-      ? searchProperties(profileId)
+      ? searchProperties(profileId, page, PAGE_SIZE)
       : searchPropertiesInline(
-          filterStateToPayload(filterState!, '__inline__', countyFips)
+          buildInlineRequest(filterState!, countyFips, page, PAGE_SIZE),
         )
 
     run
-      .then((data) => { setResults(data); setLoading(false) })
-      .catch(() => { setError('Search failed.'); setLoading(false) })
-  }, [])
-
-  // Clear popup when page changes — popup's marker no longer exists in pageResults
-  useEffect(() => {
-    setPopupResult(null)
-  }, [page])
-
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE))
-  const pageResults = results.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+      .then((data) => {
+        setPageResults(data.results)
+        setTotal(data.total)
+        setTotalPages(data.total_pages)
+        setLoading(false)
+      })
+      .catch(() => {
+        setError('Search failed.')
+        setLoading(false)
+      })
+  }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
+  // profileId / filterState / countyFips come from location.state and are
+  // stable for the lifetime of this page mount. Re-fetching on page change
+  // is the only intended trigger.
 
   function handleEditFilter() {
     navigate('/search', {
@@ -318,7 +348,6 @@ export default function ResultsPage() {
     }
   }
 
-  // Map centre — NW Florida default
   const MAP_CENTER = { longitude: -87.0, latitude: 30.65, zoom: 8 }
 
   return (
@@ -332,8 +361,8 @@ export default function ResultsPage() {
           <span style={pageStyles.brand}>Penstock</span>
           {!loading && (
             <span style={pageStyles.resultCount}>
-              {results.length.toLocaleString()} result{results.length !== 1 ? 's' : ''}
-              {results.length > PAGE_SIZE && ` — page ${page} of ${totalPages}`}
+              {total.toLocaleString()} result{total !== 1 ? 's' : ''}
+              {totalPages > 1 && ` — page ${page} of ${totalPages}`}
             </span>
           )}
         </div>
@@ -355,11 +384,11 @@ export default function ResultsPage() {
         <div style={pageStyles.tablePanel}>
           {loading && <p style={pageStyles.msg}>Searching…</p>}
           {error && <p style={{ ...pageStyles.msg, color: 'var(--color-danger)' }}>{error}</p>}
-          {!loading && !error && results.length === 0 && (
+          {!loading && !error && total === 0 && (
             <p style={pageStyles.msg}>No properties matched the filter criteria.</p>
           )}
 
-          {pageResults.length > 0 && (
+          {!loading && !error && pageResults.length > 0 && (
             <>
               <div style={pageStyles.tableWrapper}>
                 <table style={pageStyles.table}>
@@ -423,12 +452,12 @@ export default function ResultsPage() {
                 <button
                   style={pageStyles.pageBtn}
                   onClick={() => setPage(1)}
-                  disabled={page === 1}
+                  disabled={page === 1 || loading}
                 >«</button>
                 <button
                   style={pageStyles.pageBtn}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
+                  disabled={page === 1 || loading}
                 >‹ Prev</button>
 
                 {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
@@ -450,6 +479,7 @@ export default function ResultsPage() {
                         ...(pageNum === page ? pageStyles.pageBtnActive : {}),
                       }}
                       onClick={() => setPage(pageNum)}
+                      disabled={loading}
                     >
                       {pageNum}
                     </button>
@@ -459,16 +489,16 @@ export default function ResultsPage() {
                 <button
                   style={pageStyles.pageBtn}
                   onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
+                  disabled={page === totalPages || loading}
                 >Next ›</button>
                 <button
                   style={pageStyles.pageBtn}
                   onClick={() => setPage(totalPages)}
-                  disabled={page === totalPages}
+                  disabled={page === totalPages || loading}
                 >»</button>
 
                 <span style={pageStyles.pageInfo}>
-                  {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, results.length)} of {results.length.toLocaleString()}
+                  {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()}
                 </span>
               </div>
             </>
@@ -483,7 +513,6 @@ export default function ResultsPage() {
             style={{ width: '100%', height: '100%' }}
             mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
           >
-            {/* Render one Marker per result on the current page that has coordinates */}
             {pageResults
               .filter((r) => r.latitude != null && r.longitude != null)
               .map((r) => (
