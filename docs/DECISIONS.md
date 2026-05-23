@@ -359,6 +359,41 @@ saved screens and their last output, not the size of the market.
 
 ---
 
+## Map Interaction Model — ResultsPage (2026-05-23)
+
+Three interaction paths exist in ResultsPage and are intentionally kept
+distinct.
+
+- **Table row click:** opens the property detail drawer only. Does not
+  move the map camera. Does not open a popup.
+- **Map marker click:** recenters the map via `easeTo`, opens the popup,
+  highlights the corresponding table row, and scrolls it into view.
+- **"See on map" (drawer):** closes the drawer, recenters the map via
+  `easeTo`, and opens the popup. The drawer does not remain open because
+  mobile viewports cannot display both simultaneously.
+
+Map camera control is encapsulated in `centerMapOnResult` using
+`mapRef.current?.easeTo({ center: [longitude, latitude], zoom: 14,
+duration: 800 })`. `MapRef` is imported from `react-map-gl/maplibre`.
+`flyTo` was considered but `easeTo` was used by the implementing agent.
+
+The `onLocate` prop on `PropertyDrawer` is typed `(() => void) | null`
+rather than optional to force explicit passing at every call site. When
+`selectedResult.latitude` or `selectedResult.longitude` is null, `null`
+is passed and the "See on map" button does not render.
+
+The popup clears automatically when the page changes via a `useEffect`
+on the page state variable. Only `pageResults` pins are rendered at any
+time — never the full result set — to avoid DOM performance degradation
+at scale.
+
+`PropertyDrawer` `useEffect` includes a stale-async guard: an `active`
+boolean is set to `false` on cleanup, preventing state updates from
+in-flight fetches after unmount or selection change. `detail` and `error`
+reset to `null` on every selection change.
+
+---
+
 ## user_profile_prefs Table (v0.18)
 
 Stores per-user, per-profile activity and bookmark state. One row per

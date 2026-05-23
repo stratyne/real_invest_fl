@@ -67,7 +67,11 @@ ACTIVE — Phase 4 in progress. See STATE.md for item status.
   filter profile)
 - Filter profile management (create, clone system profile, edit, delete)
 - Map view (MapLibre GL JS, PostGIS geometry) — coordinate data live,
-  pin rendering pending (item 85)
+  pin rendering live (item 85 complete). Marker click recenters map,
+  opens popup, highlights and scrolls matching table row. "See on map"
+  in property drawer closes drawer, recenters map, opens popup.
+  Colored markers by signal tier deferred (item 91).
+  Auto-fit bounds on page change deferred (item 92).
 - Outreach template generation (triggered by user selection)
 - One-click email send with calendar booking link
 - Full outreach log with response tracking
@@ -254,6 +258,14 @@ Depends(county_access()) — never the explicit await pattern.
 - User management endpoints — registration, password reset, admin user CRUD
 - Approval workflow (approvals.py) — deferred until outreach flow is live
 - Skip-trace live integration (item 44) — schema scaffold in place
-- Map pin rendering (item 85) — coordinate data live, Marker wiring pending
+- Map pin colored markers by signal tier (item 91) — custom Marker
+  children required, post-deployment polish
+- Map auto-fit bounds to pageResults on page change (item 92) — low
+  value with single-region demo data, revisit when multi-region
+- Server-side pagination — currently client-side (item 50), required
+  before deployment (item 48)
+- price_reduced filter decision (item 72) — filter accepted by frontend,
+  stored in profile JSON, never applied; column/condition decision
+  required before deployment
 - Server-side pagination — currently client-side (item 50), Phase 4 tail
 - Cross-county profile search beyond user's granted counties — access gating enforced per county

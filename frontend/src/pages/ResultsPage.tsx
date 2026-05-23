@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import Map, { Popup } from 'react-map-gl/maplibre'
+import Map, { Popup, Marker, type MapRef } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { searchProperties, searchPropertiesInline, getProperty } from '../api/properties'
 import { createProfile } from '../api/profiles'
@@ -56,16 +56,30 @@ interface DrawerProps {
   countyFips: string
   parcelId: string
   onClose: () => void
+  onLocate: (() => void) | null
 }
 
-function PropertyDrawer({ countyFips, parcelId, onClose }: DrawerProps) {
+function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps) {
   const [detail, setDetail] = useState<PropertyDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let active = true
+
+    setDetail(null)
+    setError(null)
+
     getProperty(countyFips, parcelId)
-      .then(setDetail)
-      .catch(() => setError('Failed to load property detail.'))
+      .then((data) => {
+        if (active) setDetail(data)
+      })
+      .catch(() => {
+        if (active) setError('Failed to load property detail.')
+      })
+
+    return () => {
+      active = false
+    }
   }, [countyFips, parcelId])
 
   return (
@@ -79,6 +93,11 @@ function PropertyDrawer({ countyFips, parcelId, onClose }: DrawerProps) {
         {!detail && !error && <p style={{ padding: '20px', color: 'var(--color-text-muted)' }}>Loading…</p>}
         {detail && (
           <div style={drawerStyles.body}>
+            {onLocate && (
+              <button style={drawerStyles.locateBtn} onClick={onLocate}>
+                📍 See on map
+              </button>
+            )}
             <p style={drawerStyles.address}>
               {detail.phy_addr1 ?? '—'}<br />
               {detail.phy_city ?? '—'}, FL {detail.phy_zipcd ?? '—'}
@@ -199,7 +218,6 @@ function SaveModal({ onSave, onClose, saving, error }: SaveModalProps) {
 // ── Main ResultsPage ──────────────────────────────────────────────────────
 
 export default function ResultsPage() {
-  // REMOVED: useParams — profileId now comes from nav state only
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -209,7 +227,8 @@ export default function ResultsPage() {
     countyFips: string[]
   } | null
 
-  // If nav state is missing entirely the user landed here directly — send them back
+  const mapRef = useRef<MapRef | null>(null)
+
   const filterState: FilterState | null = locationState?.filterState ?? null
   const countyFips: string[] = locationState?.countyFips ?? []
   const profileId: number | undefined = locationState?.profileId
@@ -225,6 +244,23 @@ export default function ResultsPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
+
+  function centerMapOnResult(r: PropertySearchResult) {
+    if (r.latitude == null || r.longitude == null) return
+
+    mapRef.current?.getMap().easeTo({
+      center: [r.longitude, r.latitude],
+      zoom: 15,
+      duration: 800,
+      essential: true,
+    })
+  }
+
+  function handleLocateSelectedResult(r: PropertySearchResult) {
+    centerMapOnResult(r)
+    setPopupResult(r)
+    setSelectedResult(null)
+  }
 
   useEffect(() => {
     if (profileId == null && (!filterState || countyFips.length === 0)) {
@@ -245,6 +281,11 @@ export default function ResultsPage() {
       .then((data) => { setResults(data); setLoading(false) })
       .catch(() => { setError('Search failed.'); setLoading(false) })
   }, [])
+
+  // Clear popup when page changes — popup's marker no longer exists in pageResults
+  useEffect(() => {
+    setPopupResult(null)
+  }, [page])
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE))
@@ -391,7 +432,6 @@ export default function ResultsPage() {
                 >‹ Prev</button>
 
                 {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                  // Show pages around current page
                   let pageNum: number
                   if (totalPages <= 7) {
                     pageNum = i + 1
@@ -438,14 +478,38 @@ export default function ResultsPage() {
         {/* Map panel */}
         <div style={pageStyles.mapPanel}>
           <Map
+            ref={mapRef}
             initialViewState={MAP_CENTER}
             style={{ width: '100%', height: '100%' }}
             mapStyle="https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json"
           >
+            {/* Render one Marker per result on the current page that has coordinates */}
+            {pageResults
+              .filter((r) => r.latitude != null && r.longitude != null)
+              .map((r) => (
+                <Marker
+                  key={`${r.county_fips}:${r.parcel_id}`}
+                  longitude={r.longitude!}
+                  latitude={r.latitude!}
+                  onClick={() => {
+                    centerMapOnResult(r)
+                    setPopupResult(r)
+                    setSelectedResult(r)
+                    document.getElementById(`row-${r.county_fips}-${r.parcel_id}`)?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'nearest',
+                    })
+                  }}
+                  style={{ cursor: 'pointer' }}
+                />
+              ))
+            }
+
             {popupResult && (
               <Popup
-                longitude={-87.0}
-                latitude={30.65}
+                longitude={popupResult.longitude!}
+                latitude={popupResult.latitude!}
+                anchor="bottom"
                 onClose={() => setPopupResult(null)}
                 closeOnClick={false}
               >
@@ -457,9 +521,6 @@ export default function ResultsPage() {
               </Popup>
             )}
           </Map>
-          <div style={pageStyles.mapNote}>
-            Map pins require coordinate data. Click a row to view property detail.
-          </div>
         </div>
       </div>
 
@@ -469,6 +530,11 @@ export default function ResultsPage() {
           countyFips={selectedResult.county_fips}
           parcelId={selectedResult.parcel_id}
           onClose={() => setSelectedResult(null)}
+          onLocate={
+            selectedResult.latitude != null && selectedResult.longitude != null
+              ? () => handleLocateSelectedResult(selectedResult)
+              : null
+          }
         />
       )}
 
@@ -518,7 +584,7 @@ const pageStyles: Record<string, React.CSSProperties> = {
     background: 'var(--color-surface)', position: 'sticky', top: 0, zIndex: 1,
   },
   tr: { borderBottom: '1px solid var(--color-border)', cursor: 'pointer', transition: 'background 0.1s' },
-  trSelected: { background: 'rgba(59,130,246,0.10)' },
+  trSelected: { background: 'rgba(59,130,246,0.25)' },
   td: { padding: '10px 12px', verticalAlign: 'middle' },
   addrLine1: { fontWeight: 500 },
   addrLine2: { color: 'var(--color-text-muted)', fontSize: '11px' },
@@ -542,16 +608,11 @@ const pageStyles: Record<string, React.CSSProperties> = {
     width: '380px', flexShrink: 0, borderLeft: '1px solid var(--color-border)',
     position: 'relative',
   },
-  mapNote: {
-    position: 'absolute', bottom: '8px', left: '8px', right: '8px',
-    background: 'rgba(0,0,0,0.6)', borderRadius: '6px', padding: '6px 10px',
-    fontSize: '11px', color: 'rgba(255,255,255,0.7)', textAlign: 'center',
-  },
 }
 
 const drawerStyles: Record<string, React.CSSProperties> = {
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 100,
+    position: 'fixed', top: 0, right: 0, bottom: 0, background: 'transparent', zIndex: 100,
     display: 'flex', justifyContent: 'flex-end',
   },
   drawer: {
@@ -577,6 +638,12 @@ const drawerStyles: Record<string, React.CSSProperties> = {
   rowLabel: { color: 'var(--color-text-muted)', fontSize: '12px' },
   rowValue: { fontSize: '12px', fontWeight: 500, textAlign: 'right', maxWidth: '220px' },
   parcelId: { fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '8px' },
+  locateBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px',
+    background: 'transparent', border: '1px solid var(--color-border)',
+    borderRadius: '6px', color: 'var(--color-primary)', padding: '6px 12px',
+    fontSize: '12px', fontWeight: 600, marginBottom: '4px',
+  },
 }
 
 const saveModalStyles: Record<string, React.CSSProperties> = {

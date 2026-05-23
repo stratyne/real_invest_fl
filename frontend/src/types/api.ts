@@ -165,6 +165,8 @@ export interface PropertySearchResult {
   jv_per_sqft: number | null
   deal_score: number | null
   arv_source: string | null
+  latitude: number | null
+  longitude: number | null  
   latest_listing: ListingEventSummary | null
 }
 

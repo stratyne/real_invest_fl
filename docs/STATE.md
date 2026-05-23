@@ -106,12 +106,11 @@ Retained as reference for backfill completeness verification.
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
 | 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py |
-| 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | Next after map pin rendering |
+| 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | Blocked on items 50 and 72. Address those first. |
 | 50 | ACTIVE | Server-side pagination — currently client-side | Phase 4 tail |
 | 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
 | 72 | PENDING | price_reduced filter — accepted by frontend, stored in profile JSON, never applied | Decision required: what column or condition does it check |
 | 73 | PENDING | PropertyValueHistory ORM relationship on Property — model not in schema.md | Investigate — may be POC artifact |
-| 85 | ACTIVE | Map pin rendering — lat/lng now on PropertySearchResult, data live in DB | Wire Marker rendering in ResultsPage map panel |
 
 ## Deferred Items
 
@@ -122,7 +121,8 @@ Retained as reference for backfill completeness verification.
 | 31 | Full CAMA enrichment statewide | Phase 3 — each county needs own scraper |
 | 32 | NAV data ingest | Deferred |
 | 44 | Skip-trace live integration | BatchData API wrapper, credit/billing model, DNC compliance. Schema scaffold in place (v0.17). Unblock after Phase 4 outreach flow is live. |
-| 49 | Map pins — superseded by item 85 | Renumbered for clarity |
+| 91 | Map pins — colored markers by signal tier | Post-deployment polish. Custom Marker children required. |
+| 92 | Map pins — auto-fit bounds to pageResults on page change | Low demo value with single-region data. Revisit when multi-region. |
 
 ## Completed Items (summary — detail in DECISIONS.md and context/ files)
 
@@ -174,8 +174,11 @@ Retained as reference for backfill completeness verification.
 | 82 | profiles.ts — toggleFavorite added | 2026-05-15 |
 | 83 | End-to-end search verified — 23,087 Santa Rosa results, eff_yr_blt > 1945 + tot_lvg_area > 1,700 sqft | 2026-05-15 |
 | 84 | Missing await db.commit() in routes/profiles.py — create_profile, clone_profile, update_profile, delete_profile, toggle_favorite | 2026-05-15 |
+| 85 | Map pin rendering — Marker wired in ResultsPage, pageResults only, null coordinate guard, cursor pointer | 2026-05-23 |
 | 86 | Dashboard Run button navigates directly to /results — bypasses Search page | 2026-05-15 |
 | 87 | Dashboard Edit button added to ProfileRow — navigates to /search with profile pre-loaded | 2026-05-15 |
 | 88 | Edit Filter back-navigation fixed — navStateConsumed ref removed, useEffect dependency changed to location.state | 2026-05-15 |
 | 89 | ResultsPage TypeScript errors resolved — CSS module declaration, FilterState null assertion, unused Marker import removed | 2026-05-15 |
 | 90 | DashboardPage TypeScript errors resolved — handleToggleFavorite moved inside component body, prev typed explicitly | 2026-05-15 |
+| 93 | Marker click highlights corresponding table row, scrolls it into view, and recenters map via easeTo | 2026-05-23 |
+| 94 | "See on map" — drawer locate button, onLocate callback, easeTo via MapRef, closes drawer and opens popup | 2026-05-23 |
