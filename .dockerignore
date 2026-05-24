@@ -1,0 +1,52 @@
+# Data files — the largest offender, never needed in the image
+data/
+
+# Secrets — should never be baked into an image
+secrets/
+
+# Config files — mounted as volumes at runtime
+config/
+
+# Python artifacts
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Alembic — not needed in the image, migrations run separately
+alembic/
+
+# Frontend — the frontend has its own Dockerfile and build context
+frontend/
+
+# Tests
+tests/
+
+# Editor and OS artifacts
+.git/
+.gitignore
+.vscode/
+.vscodium/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Env files — never bake secrets into an image
+.env
+.env.*
+
+# Logs
+*.log
+logs/

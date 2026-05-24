@@ -106,7 +106,6 @@ Retained as reference for backfill completeness verification.
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
 | 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py |
-| 48 | ACTIVE | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | Proceed — blockers resolved |
 | 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
 | 73 | PENDING | PropertyValueHistory ORM relationship on Property — model not in schema.md | Investigate — may be POC artifact |
 
@@ -149,6 +148,7 @@ Retained as reference for backfill completeness verification.
 | 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |
 | 46 | seed_demo_account.py — demo superuser, Escambia + Santa Rosa access, calendar_link set | 2026-05-14 |
 | 47 | React frontend scaffold — Vite + TypeScript, axios client, API types, LoginPage, DashboardPage, ResultsPage | 2026-05-14 |
+| 48 | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | 2026-05-23 |
 | 50 | Server-side pagination — PaginatedPropertySearchResult envelope; page/page_size on both search routes; Python-side slice after scoring; last_result_count upsert uses total (pre-page) | 2026-05-23 |
 | 51 | Documentation — phase4_ui.md, DECISIONS.md, schema.md rewrite; REFERENCE.md + CHECKPOINT.md deleted | 2026-05-14 |
 | 52 | v0.18 migration — user_profile_prefs table | 2026-05-14 |
