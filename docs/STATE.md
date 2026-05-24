@@ -186,3 +186,4 @@ Retained as reference for backfill completeness verification.
 | 96 | SearchPage unsaved filter state lost on Edit Filter — useNav condition broadened to trigger on filterState presence, not profileId only | 2026-05-24 |
 | 97 | ResultsPage profile-based search ignores edited filterState — inline path now used whenever filterState is present in nav state, regardless of profileId | 2026-05-24 |
 | 98 | Deployment workflow — frontend build consolidated into nginx multi-stage image; frontend service and frontend_dist named volume eliminated; frontend/Dockerfile deleted | 2026-05-24 |
+| 99 | Root .dockerignore — removed frontend/ exclusion to allow nginx multi-stage build to access frontend source from repo root build context | 2026-05-24 |

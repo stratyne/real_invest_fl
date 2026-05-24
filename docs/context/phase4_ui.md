@@ -129,7 +129,9 @@ real_invest_fl/api/routes/
 - Frontend static files are built directly into the Nginx image via a 
   multi-stage Dockerfile (nginx/Dockerfile). Deployment after any frontend 
   or backend change is: git pull → docker compose build nginx app → docker compose up -d.
-  No volume management required.
+  No volume management required. The root .dockerignore must not exclude 
+  frontend/ — the nginx multi-stage build requires access to the frontend 
+  source from the repo root build context.
 
 ## Pre-flight Checklist
 

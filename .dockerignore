@@ -27,9 +27,6 @@ env/
 # Alembic — not needed in the image, migrations run separately
 alembic/
 
-# Frontend — the frontend has its own Dockerfile and build context
-frontend/
-
 # Tests
 tests/
 
