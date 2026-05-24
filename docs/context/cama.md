@@ -1,6 +1,6 @@
 # Project Penstock — context/cama.md
 # Paste this alongside AGENTS.md when working on CAMA ingest.
-# Last updated: 2026-05-04
+# Last updated: 2026-05-24
 
 ## File Paths
 
@@ -16,13 +16,14 @@ real_invest_fl/ingest/cama_ingest.py  -- retained; do not delete until Escambia 
 # Santa Rosa
 python -m real_invest_fl.ingest.cama.santa_rosa [options]
 
-# Escambia (DO NOT RUN — escpa.org is DOWN as of 2026-05-04)
+# Escambia
 python -m real_invest_fl.ingest.cama.escambia [options]
-# When site returns: verify with --limit 5 --dry-run before any live run.
+# Always verify with --limit 5 --dry-run before any live run.
 
 ## Escambia CAMA Detail
 
-- Source: escpa.org (DOWN as of 2026-05-04)
+- Source: https://www.escpa.org/CAMA/Detail_a.aspx?s={parcel_id}
+- Site was DOWN 2026-05-04 through approximately 2026-05-24. Now confirmed UP.
 - Target: dor_uc = '001', ~106,372 parcels
 - Beds/baths NOT available from ECPA CAMA detail page
 - Sale history NOT available from ECPA CAMA detail page
@@ -30,37 +31,64 @@ python -m real_invest_fl.ingest.cama.escambia [options]
 - Previous run wrote zoning to 1,399 parcels (dor_uc = '001') but
   cama_enriched_at was never set — confirmed via DB inspection 2026-05-02.
   All remaining CAMA fields are NULL for those 1,399 parcels.
-  Full re-scrape of all 106,372 dor_uc = '001' parcels required when site returns.
+  Full re-scrape of all 106,372 dor_uc = '001' parcels required.
+- Parcel ID format: 16-character no-hyphen string (e.g. 182S303000004001)
+  confirmed from DB. URL format matches directly — no transformation needed.
 - Rate limits: DEFAULT_DELAY=1.5, DEFAULT_DELAY_MAX=4.0,
   REST_EVERY=100, REST_SECONDS=270.0
+- Soft-block signature: 302 redirect to escpa.org root, or response
+  body missing "Parcel ID:" marker. Scraper stops cleanly on detection.
 
 ## Santa Rosa CAMA Detail
 
-- Source: https://parcelview.srcpa.gov/?parcel={parcel_id}&baseUrl=http://srcpa.gov/
+- Source: https://parcelcard.srcpa.gov/?parcel={parcel_id}&baseUrl=http://srcpa.gov/
+- Previous source (parcelview.srcpa.gov) was replaced — site rebuilt as
+  Remix/React SSR application. Confirmed 2026-05-24.
 - Server-rendered HTML. No JavaScript, auth, or cookies required.
-- No robots.txt on srcpa.gov or parcelview.srcpa.gov.
-- Target: dor_uc = '001', 68,312 parcels
-- Status: 3,518 / 68,312 enriched as of 2026-05-04. Run in progress.
-- Estimated remaining: ~42 hours at current settings.
+  Plain httpx GET is sufficient.
+- No robots.txt on srcpa.gov or parcelcard.srcpa.gov.
+- TARGET: dor_uc = '001', 68,312 parcels
+- Status: 7,361 enriched (via old parcelview scraper, data quality verified good).
+  60,951 remaining. Run restarted 2026-05-24.
 - Rate limits: DEFAULT_DELAY=1.0, DEFAULT_DELAY_MAX=3.0,
   REST_EVERY=500, REST_SECONDS=300.0
 - Soft-block confirmed at ~2,859 requests over ~1h54m at 1.0–3.0s delay
-  with no rest pauses — those were the exact conditions under which it
-  triggered. REST_EVERY=500/REST_SECONDS=300.0 added as mitigation.
+  with no rest pauses under old endpoint. REST_EVERY=500/REST_SECONDS=300.0
+  retained as mitigation.
+- SOURCE_NAME: srcpa_parcelcard (updated from srcpa_parcelview)
 
-### Santa Rosa Page Structure
-- Valid page marker: presence of 'residentialBuildingsContainer' in response body
-- Soft-block signature: HTTP 200 with disclaimer-only body
-  (residentialBuildingsContainer absent). Scraper stops cleanly on detection.
-- Building data: parsed from data-cell attribute pattern — no regex, no sibling traversal
-- Sales data: salesContainer div, same data-cell pattern
-- Zoning: zoningContainer div, Code cell
-- Sale history captured from same parcelview page per request
-- parcel_sale_history populated with full ownership chain per parcel
+### Santa Rosa Page Structure (parcelcard.srcpa.gov)
+- Valid response: window.__remixContext present in body with full parcel data
+- Soft-block signature: window.__remixContext absent entirely — stop run
+- Not-found signature: window.__remixContext present, routes/_index loader
+  data has "empty":true — skip parcel cleanly, continue run
+- Building fields: two-column <td> bold-label/value grid using Tailwind classes.
+  Abbreviated labels: extw, RCVR, fndn, Bath, BED, qual
+- Heated area (tot_lvg_area): sourced from remixContext JSON
+  path: buildings.units[0].squareFeet.heated
+  HTML summary table (code/actual/heated/effect/rcnld) is unreliable — shows 0
+  even for completed buildings. Do not use HTML table for this field.
+- AYB / EYB: sourced from remixContext JSON
+  path: buildings.units[0].yearBuilt.{actual,effective}
+- Zoning: sourced from remixContext JSON, path: zonings[0].code
+  Not present in HTML card.
+- Sales data: <h6>Sales</h6> section, standard table with interleaved
+  Grantor/Grantee rows. Book, Page, Date, Q/U (qualification_code),
+  V/I (sale_type), Price columns.
+- Sale history captured from same parcelcard page per request.
+- parcel_sale_history populated with full ownership chain per parcel.
+- instrument_type not surfaced on parcelcard — always None.
+- multi_parcel not surfaced on parcelcard — always False.
 
 ### Santa Rosa Run Resumability
 - cama_enriched_at IS NULL filter skips already-processed parcels automatically.
-- Run is fully resumable after any stop (soft-block or manual).
+- Run is fully resumable after any stop (soft-block, empty:true skip, or manual).
+
+### Santa Rosa Data Quality (verified 2026-05-24)
+- 7,361 parcels enriched via old parcelview scraper retained — not re-scraped.
+- Quality check: 7,330 / 7,361 have tot_lvg_area (99.6%), 7,300 have zoning,
+  7,300 have bedrooms, 7,310 have bathrooms. Gaps are genuine vacant/non-standard
+  parcels, not scraper failures.
 
 ## base.py Design Rules (never override)
 
@@ -77,6 +105,9 @@ python -m real_invest_fl.ingest.cama.escambia [options]
 - Soft-block sentinel: base.SOFT_BLOCK = "__SOFT_BLOCK__"
   - County fetch_page() returns this string to stop the run cleanly
   - Returning None skips the parcel and continues the run
+- base.py uses settings.host_database_url (async) for DB connection.
+  Do not change to settings.database_url — that URL uses the Docker
+  service name 'db' and is unreachable from the Windows host.
 
 ## County Module Contract
 

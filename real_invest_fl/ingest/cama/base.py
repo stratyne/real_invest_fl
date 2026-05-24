@@ -432,7 +432,7 @@ async def run(
         6. Write sale rows to parcel_sale_history
         7. Rate-limit before next request
     """
-    engine = create_async_engine(settings.database_url, echo=False)
+    engine = create_async_engine(settings.host_database_url, echo=False)
     AsyncSessionLocal = sessionmaker(
         engine, class_=AsyncSession, expire_on_commit=False
     )

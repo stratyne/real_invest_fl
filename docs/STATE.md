@@ -4,8 +4,9 @@
 
 ## Active Phase
 **Phase 2** (scraping/matching) — core complete, scheduler/output pending.
-**Phase 4** (UI) — active. Server-side pagination live. Deployment next (item 48).
+**Phase 4** (UI) — active. Deployment complete. Tail items pending.
 Phase 2 and Phase 4 run in parallel. Santa Rosa CAMA runs in background.
+Escambia CAMA unblocked 2026-05-24 — dry-run pending before live run.
 
 ## Phase Summary
 
@@ -54,12 +55,12 @@ HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
 mqi_qualified_at once Phase 4 query-time filter is live.
 
-## Database State (verified 2026-05-15)
+## Database State (verified 2026-05-24)
 
 | County | FIPS | NAL rows | GIS geometry | CAMA enriched | Notes |
 |---|---|---|---|---|---|
-| Escambia | 12033 | 170,561 | 160,264 | 0 | dor_uc backfilled; escpa.org down |
-| Santa Rosa | 12113 | 120,500 | 111,036 | 3,518+ (running) | GIS ingest complete 2026-05-15 |
+| Escambia | 12033 | 170,561 | 160,264 | 0 | dor_uc backfilled; escpa.org confirmed UP 2026-05-24; dry-run required before live run |
+| Santa Rosa | 12113 | 120,500 | 111,036 | 7,361 (60,951 remaining) | Run restarted 2026-05-24 against parcelcard.srcpa.gov |
 | All others | — | staged only | staged only | 0 | NAL + GIS files in place |
 
 **Total properties in DB:** 291,061
@@ -77,12 +78,16 @@ Retained as reference for backfill completeness verification.
 | Auction.com listings | 11 records | 2026-04-28 initial load |
 | Zillow listings | 218 records | 13 foreclosures + 205 for-sale, 2026-04-28 |
 
-## CAMA Run Status (2026-05-04)
-- **Santa Rosa:** 3,518 / 68,312 enriched. Run in progress. ~42h remaining.
+## CAMA Run Status (updated 2026-05-24)
+- **Santa Rosa:** 7,361 / 68,312 enriched. Run restarted 2026-05-24.
+  60,951 parcels remaining. Scraper migrated from parcelview.srcpa.gov
+  (Remix app, JS-only) to parcelcard.srcpa.gov (SSR, plain httpx).
+  Building data now sourced from window.__remixContext JSON.
   Settings: delay 1.0–3.0s, REST_EVERY=500, REST_SECONDS=300.0
   Run is resumable — cama_enriched_at IS NULL filter skips processed parcels.
-- **Escambia:** 0 enriched. escpa.org is DOWN. Do not attempt until confirmed up.
-  When up: verify with `--limit 5 --dry-run` before any live run.
+- **Escambia:** 0 enriched. escpa.org confirmed UP as of 2026-05-24.
+  Parcel ID format confirmed: 16-character no-hyphen (e.g. 182S303000004001).
+  Must run `--limit 5 --dry-run` before any live run.
 
 ## Active Items
 
@@ -91,7 +96,7 @@ Retained as reference for backfill completeness verification.
 | 1 | PARTIAL | Beds/baths opportunistic population | Bulk source pending — not a blocker |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
-| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running; Escambia blocked |
+| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running (parcelcard); Escambia dry-run next |
 | 17 | PENDING | arv_calculator.py refactor | Comp-based ARV engine using parcel_sale_history + NAL qual codes |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
 | 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job |
@@ -187,3 +192,4 @@ Retained as reference for backfill completeness verification.
 | 97 | ResultsPage profile-based search ignores edited filterState — inline path now used whenever filterState is present in nav state, regardless of profileId | 2026-05-24 |
 | 98 | Deployment workflow — frontend build consolidated into nginx multi-stage image; frontend service and frontend_dist named volume eliminated; frontend/Dockerfile deleted | 2026-05-24 |
 | 99 | Root .dockerignore — removed frontend/ exclusion to allow nginx multi-stage build to access frontend source from repo root build context | 2026-05-24 |
+| 100 | Santa Rosa CAMA scraper — migrate parcelview → parcelcard endpoint; host_database_url fix for host-side scripts | 2026-05-24 |

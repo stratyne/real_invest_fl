@@ -4,20 +4,32 @@ real_invest_fl/ingest/cama/santa_rosa.py
 CAMA + sale history scraper for Santa Rosa County, FL.
 
 Data source:
-    https://parcelview.srcpa.gov/?parcel={parcel_id}&baseUrl=http://srcpa.gov/
+    https://parcelcard.srcpa.gov/?parcel={parcel_id}&baseUrl=http://srcpa.gov/
 
-The parcelview endpoint is fully server-rendered. No JavaScript
+The parcelcard endpoint is fully server-rendered. No JavaScript
 execution, session management, auth, or cookies required.
 A plain httpx GET is sufficient.
 
+The parcelcard page is a React/Remix application rendered server-side.
+HTML structure uses Tailwind CSS classes. Building fields are in a
+two-column <td> grid where bold <td> cells contain abbreviated labels
+and adjacent <td> cells contain values. There are no data-cell
+attributes or named container divs.
+
 County-specific implementations:
     fetch_page()      — plain GET with soft-block detection
-    parse_building()  — data-cell attribute pattern
-    parse_sales()     — data-cell attribute pattern, all transactions
+    parse_building()  — two-column <td> label/value grid pattern
+    parse_sales()     — Sales section table, interleaved grantor/grantee rows
 
 Soft-block detection:
-    Valid pages contain "residentialBuildingsContainer".
-    Absence of this string indicates a disclaimer-only response.
+    Valid pages contain window.__remixContext with full parcel data.
+    remixContext absent entirely → soft block, stop run.
+    remixContext present but empty:true → parcel not in SRCPA system,
+    skip cleanly and continue. Do not stop on not-found parcels.
+
+Previous data source (parcelview.srcpa.gov) was replaced by
+parcelcard.srcpa.gov. SOURCE_NAME updated to srcpa_parcelcard.
+data_source_status rows with source = srcpa_parcelview are superseded.
 
 Usage:
     python -m real_invest_fl.ingest.cama.santa_rosa [options]
@@ -33,7 +45,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import sys
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -49,11 +63,11 @@ logger = logging.getLogger("cama.santa_rosa")
 
 # ── county identity ───────────────────────────────────────────────────────────
 COUNTY_FIPS = "12113"
-SOURCE_NAME = "srcpa_parcelview"
+SOURCE_NAME = "srcpa_parcelcard"
 
 # ── HTTP ──────────────────────────────────────────────────────────────────────
-PARCELVIEW_URL = (
-    "https://parcelview.srcpa.gov/"
+PARCELCARD_URL = (
+    "https://parcelcard.srcpa.gov/"
     "?parcel={parcel_id}&baseUrl=http://srcpa.gov/"
 )
 
@@ -70,8 +84,20 @@ HEADERS = {
     "Referer": "https://srcpa.gov/",
 }
 
-# Text that must appear in a valid parcelview response
-VALID_PAGE_MARKER = "residentialBuildingsContainer"
+
+# Mapping: card abbreviation → canonical key for coerce_building()
+# All abbreviations confirmed from live parcelcard HTML 2026-05-24.
+_ABBREV_MAP: dict[str, str] = {
+    "extw": "exterior_wall",
+    "RCVR": "roof_type",
+    "fndn": "foundation",
+    "Bath": "bathrooms",
+    "BED":  "bedrooms",
+    "qual": "quality_code",
+}
+
+# AYB and EYB are sourced from remixContext JSON, not the field grid.
+# See _parse_ayb_eyb_from_context().
 
 
 # ── fetch ─────────────────────────────────────────────────────────────────────
@@ -81,18 +107,20 @@ async def fetch_page(
     parcel_id: str,
 ) -> Optional[str]:
     """
-    Fetch the parcelview page for a single Santa Rosa parcel.
+    Fetch the parcelcard page for a single Santa Rosa parcel.
 
     Soft-block detection:
-        Valid pages contain "residentialBuildingsContainer".
-        Pages that only contain the disclaimer text do not.
+        remixContext absent entirely → soft block, stop run.
+        remixContext present but empty:true → parcel not in SRCPA system,
+        skip cleanly and continue run. Do not stop on not-found parcels.
 
     Returns:
         HTML string on success.
-        base.SOFT_BLOCK sentinel on soft-block.
-        None on transient failure.
+        base.SOFT_BLOCK sentinel when remixContext is absent.
+        None when parcel not found in SRCPA system, or on transient
+        failure (timeout, HTTP error, retries exhausted).
     """
-    url = PARCELVIEW_URL.format(parcel_id=parcel_id)
+    url = PARCELCARD_URL.format(parcel_id=parcel_id)
 
     for attempt in range(3):
         try:
@@ -110,13 +138,22 @@ async def fetch_page(
                 await asyncio.sleep(3.0)
                 continue
 
-            if VALID_PAGE_MARKER not in resp.text:
+            # Soft block: remixContext absent — unexpected server response
+            if "window.__remixContext" not in resp.text:
                 logger.error(
-                    "Parcel %s — soft block detected "
-                    "(no parcel data in response). Stopping run.",
+                    "Parcel %s — soft block or unexpected response "
+                    "(remixContext absent). Stopping run.",
                     parcel_id,
                 )
                 return base.SOFT_BLOCK
+
+            # Parcel not found in SRCPA system — skip cleanly, do not stop run
+            if '"empty":true' in resp.text or '"empty": true' in resp.text:
+                logger.warning(
+                    "Parcel %s — not found in SRCPA system (empty:true). Skipping.",
+                    parcel_id,
+                )
+                return None
 
             return resp.text
 
@@ -137,86 +174,197 @@ async def fetch_page(
 
 # ── parsers ───────────────────────────────────────────────────────────────────
 
-def _cell(container, label: str) -> str:
+def _strip_code(val: str) -> str:
     """
-    Extract text from the first <td data-cell="{label}"> within container.
-
-    This is the universal parse pattern for parcelview — every data
-    value on the page uses this structure. The data-cell attribute value
-    exactly matches the visible column header text.
-
-    Returns empty string if the cell is not found.
+    Strip trailing parenthetical code from parcelcard field values.
+    e.g. 'BRICK (20)'              → 'BRICK'
+         'BRICK(20)'               → 'BRICK'
+         'CLASS 4(04'              → 'CLASS 4'  (malformed, no closing paren)
+         'TIMBERLINE SHINGLE (06)' → 'TIMBERLINE SHINGLE'
     """
-    td = container.find("td", attrs={"data-cell": label})
-    if td is None:
-        return ""
-    return td.get_text(strip=True)
+    return re.sub(r"\s*\([^)]*\)?$", "", val).strip()
+
+def _parse_field_grid(soup: BeautifulSoup) -> dict[str, str]:
+    """
+    Extract building fields from the two-column <td> label/value grid.
+
+    The parcelcard HTML uses a repeating pattern within <tbody> rows:
+        <tr>
+            <td class="font-bold">LABEL</td>
+            <td>VALUE</td>
+            <td class="font-bold">LABEL</td>  ← optional second pair
+            <td>VALUE</td>
+        </tr>
+
+    Bold <td> cells contain abbreviated field labels. The immediately
+    following sibling <td> contains the value. Percentage rows (e.g.
+    "40%", "70%") appear as non-bold <td> cells and are skipped.
+
+    Returns dict of {abbreviation: value_text} for all non-empty pairs.
+    # Searches entire document — scoped to known abbreviations via _ABBREV_MAP
+    # in the caller. AYB/EYB intentionally excluded from _ABBREV_MAP since
+    # they are sourced from remixContext JSON in _parse_ayb_eyb_from_context().
+    """
+    fields: dict[str, str] = {}
+
+    for td in soup.find_all("td", class_=lambda c: c and "font-bold" in c):
+        label = td.get_text(strip=True)
+        if not label:
+            continue
+        # Value is the next sibling <td>
+        next_td = td.find_next_sibling("td")
+        if next_td is None:
+            continue
+        value = next_td.get_text(strip=True)
+        if value:
+            fields[label] = value
+
+    return fields
+
+
+def _parse_remix_context(html: str) -> dict:
+    """
+    Extract parcel data from the window.__remixContext JSON embedded in
+    the parcelcard server-rendered HTML.
+
+    Uses string split rather than regex to handle large JSON payloads
+    safely. The remixContext JSON is terminated by ';</script>' which
+    is a reliable boundary on this page.
+
+    Returns the routes/_index loader data dict, or empty dict if not found.
+    """
+    marker = "window.__remixContext = "
+    start = html.find(marker)
+    if start == -1:
+        return {}
+    start += len(marker)
+    end = html.find(";</script>", start)
+    if end == -1:
+        return {}
+    try:
+        ctx = json.loads(html[start:end])
+        return (
+            ctx
+            .get("state", {})
+            .get("loaderData", {})
+            .get("routes/_index", {})
+        )
+    except (json.JSONDecodeError, AttributeError):
+        return {}
+
+
+def _parse_heated_area(loader_data: dict) -> Optional[str]:
+    """
+    Extract heated square footage from the remixContext loader data.
+
+    Path: buildings.units[0].squareFeet.heated
+    Returns string representation of heated area, or None if absent or zero.
+    """
+    try:
+        heated = (
+            loader_data
+            .get("buildings", {})
+            .get("units", [{}])[0]
+            .get("squareFeet", {})
+            .get("heated")
+        )
+        if heated and int(heated) > 0:
+            return str(int(heated))
+    except (IndexError, TypeError, ValueError):
+        pass
+    return None
+
+
+def _parse_ayb_eyb_from_context(loader_data: dict) -> tuple[Optional[str], Optional[str]]:
+    """
+    Extract Actual Year Built and Effective Year Built from remixContext.
+
+    Path: buildings.units[0].yearBuilt.{actual,effective}
+    Returns (ayb, eyb) as strings, either may be None.
+    """
+    try:
+        year_built = (
+            loader_data
+            .get("buildings", {})
+            .get("units", [{}])[0]
+            .get("yearBuilt", {})
+        )
+        ayb = year_built.get("actual")
+        eyb = year_built.get("effective")
+        return (
+            str(int(ayb)) if ayb else None,
+            str(int(eyb)) if eyb else None,
+        )
+    except (IndexError, TypeError, ValueError):
+        return None, None
+
+
+def _parse_zoning_from_context(loader_data: dict) -> Optional[str]:
+    """
+    Extract zoning code from remixContext.
+
+    Path: zonings[0].code
+    The parcelcard HTML has no zoning field — it is only in the JSON.
+    Returns zoning code string, or None if absent.
+    """
+    try:
+        zonings = loader_data.get("zonings", [])
+        if zonings:
+            code = zonings[0].get("code", "").strip()
+            return code if code else None
+    except (IndexError, TypeError):
+        pass
+    return None
 
 
 def parse_building(html: str, parcel_id: str) -> dict:
     """
-    Parse building characteristics from the Santa Rosa parcelview page.
+    Parse building characteristics from the Santa Rosa parcelcard page.
 
-    Targets the first building table within residentialBuildingsContainer.
-    Each field is a <tr> with <th> label and <td data-cell="LABEL"> value.
-    Uses _cell() for all extractions — no regex, no sibling traversal.
-
-    Zoning is in a separate zoningContainer div using the same pattern.
+    Parcelcard HTML structure (confirmed 2026-05-24):
+        - Building fields in two-column <td> bold-label/value grid
+        - Abbreviated labels: extw, RCVR, fndn, Bath, BED, qual
+        - Heated area, AYB, EYB, and zoning sourced from
+          window.__remixContext JSON (HTML summary table unreliable)
+        - remixContext is present in server-rendered HTML — no JS required
 
     Returns dict with canonical keys matching base.coerce_building()
-    input expectations. Returns empty dict if no building table found.
+    input expectations. Returns empty dict if no building fields found.
     """
     soup = BeautifulSoup(html, "html.parser")
     fields: dict[str, str] = {}
 
-    container = soup.find(id="residentialBuildingsContainer")
-    if not container:
-        logger.warning(
-            "Parcel %s — no buildings container found", parcel_id
-        )
-        return fields
+    # ── remixContext JSON ─────────────────────────────────────────────── #
+    loader_data = _parse_remix_context(html)
 
-    # First building table — identified by <caption> containing "Building"
-    building_table = None
-    for tbl in container.find_all("table"):
-        caption = tbl.find("caption")
-        if caption and "Building" in caption.get_text():
-            building_table = tbl
-            break
+    # ── Field grid (extw, RCVR, fndn, Bath, BED, qual) ───────────────── #
+    raw_grid = _parse_field_grid(soup)
 
-    if not building_table:
-        logger.warning(
-            "Parcel %s — no building table found in container", parcel_id
-        )
-        return fields
-
-    # Field map: parcelview label → canonical key for coerce_building()
-    field_map = {
-        "Exterior Walls":      "exterior_wall",
-        "Roof Cover":          "roof_type",
-        "Foundation":          "foundation",
-        "Heated Area":         "living_area",
-        "Bathrooms":           "bathrooms",
-        "Bedrooms":            "bedrooms",
-        "Actual Year Built":   "act_yr_blt",
-        "Effective Year Built": "eff_yr_blt",
-    }
-
-    for label, canonical in field_map.items():
-        val = _cell(building_table, label)
+    for abbrev, canonical in _ABBREV_MAP.items():
+        val = raw_grid.get(abbrev, "")
         if val:
-            fields[canonical] = val
+            fields[canonical] = _strip_code(val)
 
-    # Zoning
-    zoning_container = soup.find(id="zoningContainer")
-    if zoning_container:
-        code = _cell(zoning_container, "Code")
-        if code:
-            fields["zoning"] = code
+    # ── Heated area — from remixContext, not HTML table ───────────────── #
+    heated = _parse_heated_area(loader_data)
+    if heated:
+        fields["living_area"] = heated
+
+    # ── AYB / EYB — from remixContext ─────────────────────────────────── #
+    ayb, eyb = _parse_ayb_eyb_from_context(loader_data)
+    if ayb:
+        fields["act_yr_blt"] = ayb
+    if eyb:
+        fields["eff_yr_blt"] = eyb
+
+    # ── Zoning — from remixContext (not in HTML card) ─────────────────── #
+    zoning = _parse_zoning_from_context(loader_data)
+    if zoning:
+        fields["zoning"] = zoning
 
     if not fields:
         logger.warning(
-            "Parcel %s — no building fields parsed", parcel_id
+            "Parcel %s — no building fields parsed from parcelcard", parcel_id
         )
 
     return fields
@@ -224,44 +372,89 @@ def parse_building(html: str, parcel_id: str) -> dict:
 
 def parse_sales(html: str, parcel_id: str) -> list[dict]:
     """
-    Parse all sale transactions from the Santa Rosa parcelview page.
+    Parse all sale transactions from the Santa Rosa parcelcard page.
 
-    Targets salesContainer div. Each data <tr> contains <td data-cell>
-    cells for all transaction fields. Header rows (containing only <th>)
-    are skipped automatically — they yield no data-cell td matches.
+    Parcelcard sales section structure (confirmed 2026-05-24):
+        Header row: Book | Page | Date | Q/U | V/I | Price
+        Data rows alternate between:
+            - Transaction row: Book, Page, Date, Q/U, V/I, Price values
+            - Grantor row:  <td>Grantor:</td> <td colspan=5>NAME</td>
+            - Grantee row:  <td>Grantee:</td> <td colspan=5>NAME</td>
 
-    Returns list of raw dicts, one per sale. Returns empty list if
-    no sales section found or no rows present.
+    Q/U maps to qualification_code.
+    V/I maps to sale_type.
+    multi_parcel is not surfaced on the parcelcard — always False.
+
+    The sales section is located by finding the <h6> containing "Sales"
+    and traversing to the following <table>.
+
+    Returns list of raw dicts, one per sale.
+    Returns empty list if no sales section or no rows found.
     """
     soup = BeautifulSoup(html, "html.parser")
     sales: list[dict] = []
 
-    container = soup.find(id="salesContainer")
-    if not container:
-        logger.warning(
-            "Parcel %s — no sales container found", parcel_id
-        )
+    # Find the Sales header — <h6> containing "Sales"
+    sales_header = None
+    for h6 in soup.find_all("h6"):
+        if "Sales" in h6.get_text():
+            sales_header = h6
+            break
+
+    if not sales_header:
+        logger.debug("Parcel %s — no Sales section found", parcel_id)
         return sales
 
-    for row in container.find_all("tr"):
-        # Skip header rows — no data-cell td present
-        if not row.find("td", attrs={"data-cell": True}):
+    # The sales table immediately follows the header
+    sales_table = sales_header.find_next("table")
+    if not sales_table:
+        logger.debug("Parcel %s — no sales table found", parcel_id)
+        return sales
+
+    current_sale: Optional[dict] = None
+
+    for row in sales_table.find_all("tr"):
+        cells = row.find_all("td")
+        if not cells:
+            continue  # Header row — all <th>
+
+        first_cell_text = cells[0].get_text(strip=True)
+
+        # Grantor row
+        if first_cell_text.lower().startswith("grantor"):
+            if current_sale is not None:
+                current_sale["grantor"] = (
+                    cells[1].get_text(strip=True) if len(cells) > 1 else ""
+                )
             continue
 
-        sale = {
-            "multi_parcel":       _cell(row, "Multi-Parcel"),
-            "sale_date":          _cell(row, "Sale Date"),
-            "sale_price":         _cell(row, "Sale Price"),
-            "instrument_type":    _cell(row, "Instrument"),
-            "qualification_code": _cell(row, "Qualification"),
-            "sale_type":          _cell(row, "Sale Type"),
-            "grantor":            _cell(row, "Grantor"),
-            "grantee":            _cell(row, "Grantee"),
-        }
+        # Grantee row — finalizes the current sale
+        if first_cell_text.lower().startswith("grantee"):
+            if current_sale is not None:
+                current_sale["grantee"] = (
+                    cells[1].get_text(strip=True) if len(cells) > 1 else ""
+                )
+                if current_sale.get("sale_date"):
+                    sales.append(current_sale)
+                current_sale = None
+            continue
 
-        # Only include rows that have at least a sale date
-        if sale["sale_date"]:
-            sales.append(sale)
+        # Transaction row — 6 cells: Book, Page, Date, Q/U, V/I, Price
+        if len(cells) >= 6:
+            current_sale = {
+                "multi_parcel":       "",   # not on parcelcard
+                "sale_date":          cells[2].get_text(strip=True),
+                "sale_price":         cells[5].get_text(strip=True),
+                "instrument_type":    "",   # not on parcelcard
+                "qualification_code": cells[3].get_text(strip=True),
+                "sale_type":          cells[4].get_text(strip=True),
+                "grantor":            "",
+                "grantee":            "",
+            }
+
+    # Flush any dangling sale (no grantee row at end of table)
+    if current_sale is not None and current_sale.get("sale_date"):
+        sales.append(current_sale)
 
     return sales
 
@@ -277,8 +470,8 @@ if __name__ == "__main__":
         parse_sales_fn=parse_sales,
         headers=HEADERS,
         target_dor_ucs=["001"],   # Single-family residential
-        default_delay=1.0,        # No robots.txt, modern nginx server
-        default_delay_max=3.0,    # No documented rate limit
-        rest_every=500,          # No rest pauses — no rate limit evidence
+        default_delay=1.0,
+        default_delay_max=3.0,
+        rest_every=500,
         rest_seconds=300.0,
     )

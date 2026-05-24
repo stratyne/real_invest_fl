@@ -15,8 +15,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Database
-    database_url: str = Field(..., description="Async SQLAlchemy URL (asyncpg)")
-    sync_database_url: str = Field(..., description="Sync URL for Alembic")
+    database_url: str = Field(..., description="Async SQLAlchemy URL (asyncpg) — container")
+    sync_database_url: str = Field(..., description="Sync URL for Alembic — container")
+    host_database_url: str = Field(..., description="Async asyncpg URL for host-side scripts")
+    host_sync_database_url: str = Field(..., description="Sync URL for host-side batch scripts")
 
     # Redis / Celery
     redis_url: str = "redis://localhost:6379/0"
