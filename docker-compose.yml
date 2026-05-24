@@ -68,27 +68,14 @@ services:
       - ./config:/app/config
     command: celery -A real_invest_fl.tasks.celery_app worker --loglevel=info --concurrency=4
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: real_invest_frontend
-    volumes:
-      - frontend_dist:/dist
-    # This container exits immediately after the build stage copies files.
-    # That is correct and expected — it is a one-shot build artifact exporter.
-    restart: "no"
-
   nginx:
-    image: nginx:1.27-alpine
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
     container_name: real_invest_nginx
     restart: unless-stopped
     depends_on:
       - app
-      - frontend
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - frontend_dist:/usr/share/nginx/html:ro
     ports:
       - "80:80"
 
@@ -105,4 +92,3 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  frontend_dist:

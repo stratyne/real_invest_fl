@@ -126,6 +126,10 @@ real_invest_fl/api/routes/
   uses searchPropertiesInline whenever filterState is present in nav state; 
   searchProperties(profileId) is only used when profileId is set and 
   filterState is absent (dashboard Run button path).
+- Frontend static files are built directly into the Nginx image via a 
+  multi-stage Dockerfile (nginx/Dockerfile). Deployment after any frontend 
+  or backend change is: git pull → docker compose build nginx app → docker compose up -d.
+  No volume management required.
 
 ## Pre-flight Checklist
 
