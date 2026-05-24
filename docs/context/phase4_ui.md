@@ -120,7 +120,12 @@ real_invest_fl/api/routes/
   Dashboard Edit navigates to /search with profileId + countyFips in nav
   state. Edit Filter from ResultsPage navigates to /search with the same
   state. SearchPage useEffect depends on location.state — re-runs on every
-  navigation into the page regardless of remount.
+  navigation into the page regardless of remount. filterState in nav state 
+  always takes precedence over profile hydration — if present, it is applied 
+  directly without re-deriving from the saved profile record. ResultsPage 
+  uses searchPropertiesInline whenever filterState is present in nav state; 
+  searchProperties(profileId) is only used when profileId is set and 
+  filterState is absent (dashboard Run button path).
 
 ## Pre-flight Checklist
 

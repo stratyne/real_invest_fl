@@ -299,7 +299,7 @@ export default function ResultsPage() {
     setPopupResult(null)   // clear stale popup whenever results change
     setSelectedResult(null)
 
-    const run = profileId != null
+    const run = (profileId != null && filterState == null)
       ? searchProperties(profileId, page, PAGE_SIZE)
       : searchPropertiesInline(
           buildInlineRequest(filterState!, countyFips, page, PAGE_SIZE),

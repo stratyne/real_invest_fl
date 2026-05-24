@@ -456,25 +456,36 @@ export default function SearchPage() {
       .then((ps) => {
         setProfiles(ps)
 
-        const useNav =
-          navState?.profileId != null
+        const hasNavProfileId = navState?.profileId != null
+        const hasNavFilterState = navState?.filterState != null
+        const useNav = hasNavProfileId || hasNavFilterState
 
         if (useNav) {
-          setSelectedProfileId(navState.profileId!)
-
-          if (navState?.countyFips) {
+          // Restore county selection from nav state if present
+          if (navState?.countyFips?.length) {
             setSelectedFips(navState.countyFips)
           } else {
             setSelectedFips([])
           }
 
-          if (navState?.filterState) {
-            setFilterState(navState.filterState)
-          } else {
-            const target = ps.find((p) => p.id === navState.profileId) ?? null
+          // Restore profile ID from nav state if present
+          setSelectedProfileId(navState?.profileId ?? null)
+
+          // Prefer explicit filterState from nav state (covers both the unsaved
+          // inline case and the saved-profile edit case). Only fall back to
+          // hydrating from the profile record if nav state has a profileId but
+          // no filterState — which should not happen in normal flow but is
+          // handled defensively.
+          if (hasNavFilterState) {
+            setFilterState(navState!.filterState!)
+          } else if (hasNavProfileId) {
+            const target = ps.find((p) => p.id === navState!.profileId) ?? null
             setFilterState(target ? profileToFilterState(target) : EMPTY_FILTER)
+          } else {
+            setFilterState(EMPTY_FILTER)
           }
         } else {
+          // Fresh arrival with no nav state — start clean
           setSelectedProfileId(null)
           setSelectedFips([])
           setFilterState(EMPTY_FILTER)

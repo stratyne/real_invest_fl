@@ -1,6 +1,6 @@
 # Project Penstock — STATE.md
 # Current project status only. No rationale. No design decisions.
-# Updated: 2026-05-15
+# Updated: 2026-05-24
 
 ## Active Phase
 **Phase 2** (scraping/matching) — core complete, scheduler/output pending.
@@ -89,7 +89,6 @@ Retained as reference for backfill completeness verification.
 | # | Status | Description | Next Action |
 |---|---|---|---|
 | 1 | PARTIAL | Beds/baths opportunistic population | Bulk source pending — not a blocker |
-| 13 | ACTIVE | Phase 4 UI — FastAPI + React + MapLibre | Map pin rendering → deployment |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running; Escambia blocked |
@@ -108,6 +107,7 @@ Retained as reference for backfill completeness verification.
 | 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py |
 | 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
 | 73 | PENDING | PropertyValueHistory ORM relationship on Property — model not in schema.md | Investigate — may be POC artifact |
+| 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
 
 ## Deferred Items
 
@@ -136,6 +136,7 @@ Retained as reference for backfill completeness verification.
 | 10 | Santa Rosa GIS ingest — 111,036 rows (corrected; run completed 2026-05-15) | 2026-05-15 |
 | 11 | seed_superuser.py — superuser created, Escambia access granted | 2026-05-04 |
 | 12 | seed_bundles.py — pensacola_metro bundle seeded, Santa Rosa activated | 2026-05-04 |
+| 13 | Phase 4 UI — dashboard flow complete, map pins live, deployment complete | 2026-05-23 |
 | 33 | parcel_sale_history table (v0.14, v0.15) | 2026-05-04 |
 | 34 | Multi-county CAMA framework | 2026-05-04 |
 | 35 | Phase 4 API scaffold — deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |
@@ -182,3 +183,5 @@ Retained as reference for backfill completeness verification.
 | 90 | DashboardPage TypeScript errors resolved — handleToggleFavorite moved inside component body, prev typed explicitly | 2026-05-15 |
 | 93 | Marker click highlights corresponding table row, scrolls it into view, and recenters map via easeTo | 2026-05-23 |
 | 94 | "See on map" — drawer locate button, onLocate callback, easeTo via MapRef, closes drawer and opens popup | 2026-05-23 |
+| 96 | SearchPage unsaved filter state lost on Edit Filter — useNav condition broadened to trigger on filterState presence, not profileId only | 2026-05-24 |
+| 97 | ResultsPage profile-based search ignores edited filterState — inline path now used whenever filterState is present in nav state, regardless of profileId | 2026-05-24 |
