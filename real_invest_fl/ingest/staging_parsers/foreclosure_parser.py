@@ -22,10 +22,11 @@ Ethical notice:
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import re
 import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -131,8 +132,6 @@ def _extract_record(block: list[list[str]]) -> Optional[dict]:
         val = _clean(row[1])
 
         if _is_block_separator(key):
-            # The value cell contains date/time, but sometimes it is
-            # in the key cell itself when the paste has only one column.
             kv["auction_dt_raw"] = val if val else key
             continue
 
@@ -151,7 +150,6 @@ def _extract_record(block: list[list[str]]) -> Optional[dict]:
         elif key_norm in ("address", "property_address"):
             address_lines.append(val)
         elif not key and val:
-            # Continuation row — likely city/state/ZIP line of the address
             address_lines.append(val)
         elif key_norm == "auction_starts":
             kv["auction_dt_raw"] = val
@@ -169,17 +167,6 @@ def _extract_record(block: list[list[str]]) -> Optional[dict]:
 # DB helpers
 # ---------------------------------------------------------------------------
 
-def _get_filter_profile_id(conn) -> Optional[int]:
-    row = conn.execute(
-        text(
-            "SELECT id FROM filter_profiles "
-            "WHERE county_fips = :fips AND is_active = true LIMIT 1"
-        ),
-        {"fips": COUNTY_FIPS},
-    ).fetchone()
-    return row[0] if row else None
-
-
 def _get_existing_case_numbers(conn) -> set[str]:
     rows = conn.execute(
         text(
@@ -191,17 +178,27 @@ def _get_existing_case_numbers(conn) -> set[str]:
     return {r[0] for r in rows}
 
 
-def _lookup_parcel(conn, raw_parcel_id: str) -> Optional[str]:
-    """Normalize parcel ID and verify it exists in properties."""
+def _lookup_parcel(conn, raw_parcel_id: str) -> Optional[dict]:
+    """
+    Normalize parcel ID and return parcel dict if it exists in properties.
+
+    Returns dict with keys {parcel_id, jv, arv_estimate} or None.
+    """
     normalized = re.sub(r"[^A-Z0-9]", "", raw_parcel_id.upper())
     row = conn.execute(
         text(
-            "SELECT parcel_id FROM properties "
+            "SELECT parcel_id, jv, arv_estimate FROM properties "
             "WHERE parcel_id = :pid AND county_fips = :fips LIMIT 1"
         ),
         {"pid": normalized, "fips": COUNTY_FIPS},
     ).fetchone()
-    return row[0] if row else None
+    if row is None:
+        return None
+    return {
+        "parcel_id":    row.parcel_id,
+        "jv":           row.jv,
+        "arv_estimate": row.arv_estimate,
+    }
 
 
 def _extract_zip(csz: Optional[str]) -> Optional[str]:
@@ -226,7 +223,7 @@ def run_foreclosure_import(
     Returns a summary dict with read/matched/inserted/skipped/unmatched counts.
     """
     from config.settings import settings
-    engine = create_engine(settings.sync_database_url)    
+    engine = create_engine(settings.sync_database_url)
     files = (
         [specific_file]
         if specific_file
@@ -249,7 +246,6 @@ def run_foreclosure_import(
 
         with engine.begin() as conn:
             existing_cases = _get_existing_case_numbers(conn)
-            filter_profile_id = _get_filter_profile_id(conn)
 
             for block in blocks:
                 totals["read"] += 1
@@ -266,10 +262,10 @@ def run_foreclosure_import(
                     totals["skipped"] += 1
                     continue
 
-                parcel_id = _lookup_parcel(conn, record["parcel_id_raw"])
-                if parcel_id is None:
+                parcel = _lookup_parcel(conn, record["parcel_id_raw"])
+                if parcel is None:
                     log.debug(
-                        "  Case %s — parcel %s not in MQI — skipping",
+                        "  Case %s — parcel %s not found — skipping",
                         case_number,
                         record["parcel_id_raw"],
                     )
@@ -278,32 +274,41 @@ def run_foreclosure_import(
 
                 totals["matched"] += 1
 
-                final_judgment = _parse_money(record.get("final_judgment_raw", ""))
+                final_judgment   = _parse_money(record.get("final_judgment_raw", ""))
                 plaintiff_max_bid = _parse_money(record.get("plaintiff_max_bid_raw", ""))
-                assessed_value = _parse_money(record.get("assessed_value_raw", ""))
-                auction_date = _parse_auction_dt(record.get("auction_dt_raw", ""))
-                zip_code = _extract_zip(record.get("address_csz"))
+                assessed_value   = _parse_money(record.get("assessed_value_raw", ""))
+                auction_date     = _parse_auction_dt(record.get("auction_dt_raw", ""))
+                zip_code         = _extract_zip(record.get("address_csz"))
 
-                # Use plaintiff max bid as list price if final judgment not available
-                list_price = final_judgment or plaintiff_max_bid
+                list_price   = final_judgment or plaintiff_max_bid
+                arv_estimate = parcel.get("arv_estimate") or parcel.get("jv")
 
-                street = record.get("address_street") or ""
-                csz = record.get("address_csz") or ""
+                street       = record.get("address_street") or ""
+                csz          = record.get("address_csz") or ""
                 full_address = f"{street}, {csz}".strip(", ")
 
-                now = datetime.utcnow()
+                now = datetime.now(tz=timezone.utc)
 
                 if dry_run:
                     log.info(
                         "  [DRY-RUN] Would insert | case=%s | parcel=%s | "
                         "judgment=$%s | date=%s",
                         case_number,
-                        parcel_id,
+                        parcel["parcel_id"],
                         final_judgment,
                         auction_date,
                     )
                     totals["inserted"] += 1
                     continue
+
+                raw_json = {
+                    "case_number":      case_number,
+                    "final_judgment":   final_judgment,
+                    "plaintiff_max_bid": plaintiff_max_bid,
+                    "assessed_value":   assessed_value,
+                    "address":          full_address,
+                    "zip":              zip_code or "",
+                }
 
                 conn.execute(
                     text(
@@ -313,50 +318,44 @@ def run_foreclosure_import(
                             list_date, source, listing_url,
                             mls_number,
                             signal_tier, signal_type,
+                            arv_estimate, arv_source,
                             workflow_status, notes,
-                            raw_listing_json, scraped_at, created_at, updated_at,
-                            filter_profile_id
+                            raw_listing_json, scraped_at, created_at, updated_at
                         ) VALUES (
                             :county_fips, :parcel_id, :listing_type, :list_price,
                             :list_date, :source, :listing_url,
                             :mls_number,
                             :signal_tier, :signal_type,
+                            :arv_estimate, :arv_source,
                             :workflow_status, :notes,
-                            CAST(:raw_listing_json AS jsonb), :scraped_at, :created_at, :updated_at,
-                            :filter_profile_id
+                            CAST(:raw_listing_json AS jsonb), :scraped_at, :created_at, :updated_at
                         )
                         """
                     ),
                     {
-                        "county_fips": COUNTY_FIPS,
-                        "parcel_id": parcel_id,
-                        "listing_type": "foreclosure_auction",
-                        "list_price": list_price,
-                        "list_date": auction_date,
-                        "source": SOURCE_NAME,
-                        "listing_url": "https://escambia.realforeclose.com/",
-                        "mls_number": case_number,
-                        "signal_tier": SIGNAL_TIER,
-                        "signal_type": SIGNAL_TYPE,
-                        "workflow_status": "new",
+                        "county_fips":     COUNTY_FIPS,
+                        "parcel_id":       parcel["parcel_id"],
+                        "listing_type":    "foreclosure_auction",
+                        "list_price":      list_price,
+                        "list_date":       auction_date,
+                        "source":          SOURCE_NAME,
+                        "listing_url":     "https://escambia.realforeclose.com/",
+                        "mls_number":      case_number,
+                        "signal_tier":     SIGNAL_TIER,
+                        "signal_type":     SIGNAL_TYPE,
+                        "arv_estimate":    arv_estimate,
+                        "arv_source":      "JV_FALLBACK",
+                        "workflow_status": "NEW",
                         "notes": (
                             f"Final judgment: ${final_judgment or 'N/A'} | "
                             f"Plaintiff max bid: ${plaintiff_max_bid or 'N/A'} | "
                             f"Assessed: ${assessed_value or 'N/A'} | "
                             f"Address: {full_address}"
                         ),
-                        "raw_listing_json": (
-                            f'{{"case_number": "{case_number}", '
-                            f'"final_judgment": {final_judgment or "null"}, '
-                            f'"plaintiff_max_bid": {plaintiff_max_bid or "null"}, '
-                            f'"assessed_value": {assessed_value or "null"}, '
-                            f'"address": "{full_address}", '
-                            f'"zip": "{zip_code or ""}"}}'
-                        ),
-                        "scraped_at": now,
-                        "created_at": now,
-                        "updated_at": now,
-                        "filter_profile_id": filter_profile_id,
+                        "raw_listing_json": json.dumps(raw_json),
+                        "scraped_at":       now,
+                        "created_at":       now,
+                        "updated_at":       now,
                     },
                 )
                 existing_cases.add(case_number)

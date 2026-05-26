@@ -31,7 +31,9 @@ real_invest_fl/utils/
   robots.py
   text.py                      -- normalize_street_address()
   
-- Parser-layer bed/bath confidence hierarchy: deferred, not yet implemented.
+- Parser-layer bed/bath confidence hierarchy: defined in DECISIONS.md and
+  context/arv.md. Not yet implemented in code — implementation is part of
+  item 17 scope.
 
 ## Scraper Source Tiers
 
@@ -92,6 +94,38 @@ Windows / Python 3.13 strptime: use %b (abbreviated month) not %B (full month).
 Escambia Clerk pages deliver abbreviated month names. %B fails silently.
 Applies to escambia_taxdeed_clerk.py and any future scraper parsing month
 names from Escambia Clerk pages.
+
+## bed_bath_source Confidence Hierarchy
+
+Never overwrite an existing beds/baths value with a lower-confidence source.
+Logic lives in the parser layer — not in listing_matcher, not in base_scraper.
+
+Confidence order (highest to lowest):
+
+1. cama        — scraped directly from county PA parcelcard. Most authoritative
+                 by definition — same source the PA uses for assessed value.
+2. county_clerk — direct county government source. Reserved for future county
+                  sources that surface building characteristics (e.g. permit
+                  records, county assessor supplemental data). Current county
+                  clerk sources (lis pendens, foreclosure, tax deed) are legal
+                  event records and do NOT carry beds/baths — they will never
+                  write to bed_bath_source.
+3. zillow_staging — Zillow file-drop CSV. MLS-sourced, agent-entered, good
+                    quality but secondhand.
+3. auction_com  — GraphQL API. Asset manager-entered. Equal confidence to
+                  zillow_staging. total_bedrooms=0 / total_bathrooms=0 are
+                  missing-data sentinels and must be treated as None — never
+                  written to the DB.
+4. manual       — Human-entered. Lowest confidence. No current write workflow
+                  — reserved for future use.
+
+If incoming source confidence equals existing source, overwrite
+(fresher data from same source is acceptable).
+If incoming source is lower confidence than existing, skip entirely.
+
+Phase 3 commercial sources (Landvoice, REDX, PropStream) will be slotted
+into this hierarchy when their data quality is evaluated. Treat as
+equivalent to zillow_staging/auction_com until verified otherwise.
 
 ## Per-Scraper Notes
 

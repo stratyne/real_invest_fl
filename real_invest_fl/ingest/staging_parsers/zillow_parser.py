@@ -1,14 +1,14 @@
 """
 real_invest_fl/ingest/staging_parsers/zillow_parser.py
 -------------------------------------------------------------------
-Parses manually copied Zillow foreclosure listing data and writes
-matching records to listing_events.
+Parses manually copied Zillow listing data and writes matching
+records to listing_events.
 
 Input:
     CSV files dropped into data/staging/zillow/
-    Created by: copy/paste from Zillow foreclosure search results
-    into a spreadsheet with comma-separation disabled, saved as .csv
-    Recommended cycle: Weekly — copy current results, drop file, run parser
+    Created by: copy/paste from Zillow search results into a
+    spreadsheet with comma-separation disabled, saved as .csv.
+    Recommended cycle: Weekly — copy current results, drop file, run parser.
 
 File format (one value per line, no header):
     $NNN,NNN.NN          <- price line — marks start of new listing block
@@ -25,7 +25,7 @@ File format (one value per line, no header):
 
 Parcel matching strategy:
     Normalize address from listing, match against phy_addr1 + phy_zipcd
-    in properties table. Exact normalized match only at this stage.
+    in properties table. Three-level fallback via lookup_parcel_by_address().
 
 Deduplication:
     address + list_price is the unique key.
@@ -35,7 +35,8 @@ Deduplication:
 Bed/bath enrichment:
     If matched parcel has NULL bedrooms/bathrooms in properties,
     update properties with values parsed from the listing.
-    bed_bath_source = 'zillow_foreclosure'
+    bed_bath_source = 'zillow_staging'
+    Confidence hierarchy enforcement deferred to item 17.
 
 Usage:
     python scripts/run_staging_import.py --source zillow [--dry-run]
@@ -87,7 +88,7 @@ STAGING_DIR  = ROOT / "data" / "staging" / "zillow"
 SIGNAL_TIER  = 3
 SIGNAL_TYPE  = "foreclosure"
 LISTING_TYPE = "foreclosure"
-SOURCE_NAME  = "zillow_foreclosure"
+SOURCE_NAME  = "zillow_staging"
 
 # Lines that are always structural noise — discard unconditionally
 _NOISE_PATTERNS = re.compile(
@@ -128,18 +129,16 @@ def _parse_specs(line: str) -> dict:
     All values are None if line does not match expected format.
     """
     result = {
-        "bedrooms":    None,
-        "bathrooms":   None,
-        "sqft":        None,
+        "bedrooms":     None,
+        "bathrooms":    None,
+        "sqft":         None,
         "listing_type": None,
     }
 
-    # Bedrooms
     bd_match = re.search(r"(\d+)\s*bds?", line, re.IGNORECASE)
     if bd_match:
         result["bedrooms"] = int(bd_match.group(1))
 
-    # Bathrooms — handle half baths e.g. "1.5 ba"
     ba_match = re.search(r"([\d.]+)\s*ba", line, re.IGNORECASE)
     if ba_match:
         try:
@@ -147,12 +146,10 @@ def _parse_specs(line: str) -> dict:
         except ValueError:
             pass
 
-    # Sqft — digits with optional comma before "sqft"
     sqft_match = re.search(r"([\d,]+)\s*sqft", line, re.IGNORECASE)
     if sqft_match:
         result["sqft"] = int(sqft_match.group(1).replace(",", ""))
 
-    # Listing type — word(s) after sqft
     type_match = re.search(r"sqft\s*([A-Za-z\s\-]+)$", line, re.IGNORECASE)
     if type_match:
         result["listing_type"] = type_match.group(1).strip()
@@ -161,10 +158,7 @@ def _parse_specs(line: str) -> dict:
 
 
 def _is_address_line(line: str) -> bool:
-    """
-    Return True if line looks like a property address.
-    Pattern: anything ending in FL NNNNN
-    """
+    """Return True if line looks like a property address ending in FL NNNNN."""
     return bool(re.search(r",\s*FL\s+\d{5}$", line, re.IGNORECASE))
 
 
@@ -195,19 +189,15 @@ def _extract_street(address: str) -> str:
     Does NOT strip units or apply digit-letter injection here —
     those steps are delegated to lookup_parcel_by_address().
     """
-    import re
     from real_invest_fl.utils.text import (
         _SUFFIX_RE, _STREET_SUFFIX_MAP,
         _DIRECTIONAL_MAP, _DIRECTIONAL_FULL_WORDS,
     )
     parts = address.split(",")
     street = parts[0].strip().upper() if parts else address.upper()
-    # Collapse whitespace
     street = re.sub(r"\s+", " ", street.strip())
-    # Suffix abbreviation
     street = _SUFFIX_RE.sub(lambda m: _STREET_SUFFIX_MAP[m.group(1)], street)
     street = re.sub(r"\s+", " ", street.strip())
-    # Directional contraction
     for full, abbr in _DIRECTIONAL_MAP.items():
         not_another_dir = "(?!" + "|".join(
             re.escape(d) + r"\b" for d in _DIRECTIONAL_FULL_WORDS
@@ -236,7 +226,7 @@ def _split_into_blocks(lines: list[str]) -> list[list[str]]:
                 blocks.append(current)
             current = [line]
         else:
-            if current:  # Only accumulate once we've seen a price line
+            if current:
                 current.append(line)
 
     if current:
@@ -258,7 +248,7 @@ def _extract_record(block: list[str]) -> Optional[dict]:
         line 3: brokerage      e.g. 'ASSIST 2 SELL REAL ESTATE'
         line 4+: address repeat and any remaining noise (already filtered)
 
-    Returns None if required fields cannot be parsed, with [REVIEW] output.
+    Returns None if required fields cannot be parsed.
     """
     if not block:
         return None
@@ -270,7 +260,6 @@ def _extract_record(block: list[str]) -> Optional[dict]:
         print(f"[REVIEW] Cannot parse price from block starting: {price_line!r}")
         return None
 
-    # Find specs line — first non-price line containing 'bds' or 'ba'
     specs = None
     specs_idx = None
     for i, line in enumerate(block[1:], start=1):
@@ -284,7 +273,6 @@ def _extract_record(block: list[str]) -> Optional[dict]:
               f"block lines: {block}")
         return None
 
-    # Find first address line after specs
     address = None
     address_idx = None
     for i, line in enumerate(block[specs_idx + 1:], start=specs_idx + 1):
@@ -298,7 +286,6 @@ def _extract_record(block: list[str]) -> Optional[dict]:
               f"block lines: {block}")
         return None
 
-    # Brokerage — first non-empty, non-address, non-noise line after address
     brokerage = None
     if address_idx is not None:
         for line in block[address_idx + 1:]:
@@ -320,17 +307,6 @@ def _extract_record(block: list[str]) -> Optional[dict]:
 
 
 # ── DB helpers ─────────────────────────────────────────────────────────────
-
-def _get_filter_profile_id(conn) -> Optional[int]:
-    row = conn.execute(
-        text(
-            "SELECT id FROM filter_profiles "
-            "WHERE county_fips = :fips AND is_active = true LIMIT 1"
-        ),
-        {"fips": COUNTY_FIPS},
-    ).fetchone()
-    return row[0] if row else None
-
 
 def _get_existing_keys(conn) -> set[tuple[str, int]]:
     """
@@ -358,18 +334,16 @@ def parse_zillow_file(
     dry_run: bool,
 ) -> dict:
     """
-    Parse a single Zillow foreclosure CSV file and write listing_events.
+    Parse a single Zillow CSV file and write listing_events.
     Returns summary dict with counts.
     """
     logger.info("Parsing file: %s", filepath.name)
 
-    # ── Read and clean lines ────────────────────────────────────────── #
     try:
         raw_lines = filepath.read_text(encoding="utf-8-sig").splitlines()
     except UnicodeDecodeError:
         raw_lines = filepath.read_text(encoding="latin-1").splitlines()
 
-    # Strip quotes, discard blank lines and noise
     cleaned: list[str] = []
     for raw in raw_lines:
         line = _strip_quotes(raw)
@@ -379,7 +353,6 @@ def parse_zillow_file(
             continue
         cleaned.append(line)
 
-    # ── Split into blocks ───────────────────────────────────────────── #
     blocks = _split_into_blocks(cleaned)
     logger.info("Found %d listing blocks in file", len(blocks))
 
@@ -399,7 +372,6 @@ def parse_zillow_file(
 
     with engine.begin() as conn:
         existing_keys = _get_existing_keys(conn)
-        filter_profile_id = _get_filter_profile_id(conn)
 
         for block in blocks:
             stats["read"] += 1
@@ -409,7 +381,6 @@ def parse_zillow_file(
                 stats["unmatched"] += 1
                 continue
 
-            # ── Dedup check ───────────────────────────────────────── #
             norm_address = _normalize_address(record["address"])
             dedup_key = (norm_address, record["list_price"])
 
@@ -421,10 +392,6 @@ def parse_zillow_file(
                 stats["skipped"] += 1
                 continue
 
-            # ── Parcel match ──────────────────────────────────────── #
-            # street_for_match: strip trailing whitespace defensively.
-            # _extract_street() output is accepted by lookup_parcel_by_address()
-            # which owns canonical normalization. _extract_street() is unchanged.
             street_for_match = record["street"].strip()
             parcel = lookup_parcel_by_address(
                 conn, street_for_match, record["zip_code"]
@@ -441,7 +408,10 @@ def parse_zillow_file(
 
             stats["matched"] += 1
 
-            # ── Bed/bath enrichment ───────────────────────────────── #
+            # Bed/bath enrichment — null-only guard enforced inside enrich_bed_bath.
+            # TODO: confidence hierarchy enforcement (item 17) — enrich_bed_bath
+            # will be extended to accept source_confidence and compare against
+            # the existing bed_bath_source before overwriting.
             if parcel["bedrooms"] is None or parcel["bathrooms"] is None:
                 enriched = enrich_bed_bath(
                     conn,
@@ -455,7 +425,8 @@ def parse_zillow_file(
                 if enriched:
                     stats["enriched"] += 1
 
-            # ── Build raw_listing_json ────────────────────────────── #
+            arv_estimate = parcel.get("arv_estimate") or parcel.get("jv")
+
             raw_json = {
                 "normalized_address": norm_address,
                 "address":            record["address"],
@@ -468,7 +439,6 @@ def parse_zillow_file(
                 "parsed_at":          datetime.now(tz=timezone.utc).isoformat(),
             }
 
-            # ── Price per sqft ────────────────────────────────────── #
             price_per_sqft = None
             if record["sqft"] and record["sqft"] > 0:
                 price_per_sqft = round(
@@ -489,7 +459,6 @@ def parse_zillow_file(
                 existing_keys.add(dedup_key)
                 continue
 
-            # ── Insert listing_event ──────────────────────────────── #
             conn.execute(
                 text("""
                     INSERT INTO listing_events (
@@ -500,7 +469,6 @@ def parse_zillow_file(
                         source, signal_tier, signal_type,
                         listing_agent_name,
                         workflow_status,
-                        filter_profile_id,
                         raw_listing_json,
                         scraped_at, created_at, updated_at
                     ) VALUES (
@@ -511,7 +479,6 @@ def parse_zillow_file(
                         :source, :signal_tier, :signal_type,
                         :listing_agent_name,
                         :workflow_status,
-                        :filter_profile_id,
                         CAST(:raw_listing_json AS jsonb),
                         :scraped_at, NOW(), NOW()
                     )
@@ -523,14 +490,13 @@ def parse_zillow_file(
                     "list_price":         record["list_price"],
                     "list_date":          today,
                     "price_per_sqft":     price_per_sqft,
-                    "arv_estimate":       parcel["arv_estimate"],
-                    "arv_source":         "JV",
+                    "arv_estimate":       arv_estimate,
+                    "arv_source":         "JV_FALLBACK",
                     "source":             SOURCE_NAME,
                     "signal_tier":        SIGNAL_TIER,
                     "signal_type":        record["listing_type"] or SIGNAL_TYPE,
                     "listing_agent_name": record["brokerage"],
-                    "workflow_status":    "new",
-                    "filter_profile_id":  filter_profile_id,
+                    "workflow_status":    "NEW",
                     "raw_listing_json":   json.dumps(raw_json),
                     "scraped_at":         datetime.now(tz=timezone.utc),
                 },
@@ -606,7 +572,7 @@ def run_zillow_import(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Parse Zillow foreclosure CSV exports into listing_events."
+        description="Parse Zillow CSV exports into listing_events."
     )
     parser.add_argument(
         "--dry-run", action="store_true",

@@ -28,7 +28,7 @@ no shared scraper possible).
 UI development proceeds in parallel.
 
 ## Migration Chain
-HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
+HEAD = m4n5o6p7q8r9 (v0.20) — live and verified
 
 | Rev | Version | Description |
 |---|---|---|
@@ -50,8 +50,10 @@ HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
 | j1k2l3m4n5o6 | v0.17 | Phase 4 outreach schema — outreach_templates, skip_trace_cache, outreach_log (stub → full), users.calendar_link |
 | k2l3m4n5o6p7 | v0.18 | user_profile_prefs |
 | l3m4n5o6p7q8 | v0.19 | multi-county filter profiles — county_fips VARCHAR(5)[] |
+| m4n5o6p7q8r9 | v0.20 | listing_events workflow_status CHECK constraint |
 
 **Note:** Ingest refactor (2026-05-02) produced NO migration — code only.
+**Note:** alembic/env.py updated 2026-05-26 to use HOST_SYNC_DATABASE_URL — required for host-side migration runs.
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
 mqi_qualified_at once Phase 4 query-time filter is live.
 
@@ -93,7 +95,7 @@ Retained as reference for backfill completeness verification.
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running (parcelcard); Escambia live run started 2026-05-26 |
-| 17 | PENDING | arv_calculator.py refactor | Comp-based ARV engine using parcel_sale_history + NAL qual codes |
+| 17 | PENDING | arv_calculator.py refactor | Design complete in arv.md. Ready to implement. |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
 | 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job |
 | 20 | PENDING | Daily scheduler | Windows Task Scheduler → master runner script |
@@ -196,3 +198,8 @@ Retained as reference for backfill completeness verification.
 | 102 | Pagination stability fix — added ORDER BY county_fips, parcel_id to both search route DB fetches; added parcel_id tiebreaker to _build_page sort key. Resolves Escambia pagination returning identical records on every page change. | 2026-05-25 |
 | 104 | Search architecture — Option C hybrid. Lightweight scoring fetch (5 columns) replaces full ORM load for all filtered rows. Full ORM hydration scoped to page slice only (25 rows). Both search routes unified through _execute_search. _build_page eliminated. County-scoped page hydration preserves item 78 fix. | 2026-05-25 |
 | 107 | Column sort — sortable headers in ResultsPage, backend _sort_key for 9 fields, scored.sort() call, max_results cap moved post-sort | 2026-05-26 |
+| 108 | Documentation overhaul — arv.md rewritten (qualification systems reconciled, C code resolved, bed_bath_source hierarchy defined); DECISIONS.md updated (ingest user-agnostic rule, ARV systems, search architecture debt, SalesComp/PropertyValueHistory notes); scrapers.md updated | 2026-05-26 |
+| 109 | Parser overhaul — listing_matcher.py, lis_pendens_parser.py, foreclosure_parser.py, tax_deed_parser.py, zillow_parser.py: mqi_qualified removed, filter_profile_id removed, arv_source corrected to JV_FALLBACK, workflow_status corrected to NEW, datetime.utcnow() fixed, f-string JSON replaced with json.dumps(), _lookup_parcel() extended to return arv_estimate | 2026-05-26 |
+| 110 | listing_events data fix — 6,011 lowercase workflow_status 'new' rows corrected to 'NEW' | 2026-05-26 |
+| 111 | v0.20 migration — listing_events workflow_status CHECK constraint live and verified | 2026-05-26 |
+| 112 | qualification_code 'C' resolved — confirmed "Qualified and Confirmed" by Santa Rosa County PA (Richard Brosnaham, 2026-05-26). arv.md and DECISIONS.md updated. | 2026-05-26 |

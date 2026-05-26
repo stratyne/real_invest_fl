@@ -21,10 +21,11 @@ Ethical notice:
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import re
 import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -117,7 +118,6 @@ def _extract_record(block: list[list[str]]) -> Optional[dict]:
 
     for row in block:
         if len(row) < 2:
-            # Might be a bare label row (e.g. 'TAXDEED' with no value)
             if len(row) == 1:
                 val = _clean(row[0])
                 if val:
@@ -142,19 +142,15 @@ def _extract_record(block: list[list[str]]) -> Optional[dict]:
         elif key_lower == "assessed_value":
             kv["assessed_value_raw"] = val
         elif key_lower in ("address", "property_address"):
-            # First address row = street, second = city/state/ZIP
             address_lines.append(val)
         elif not key and val:
-            # Continuation row — likely second address line
             address_lines.append(val)
         elif key_lower == "auction_starts":
             kv["auction_dt_raw"] = val
 
-    # Reconstruct address
     kv["address_street"] = address_lines[0] if len(address_lines) > 0 else None
     kv["address_csz"] = address_lines[1] if len(address_lines) > 1 else None
 
-    # Validate required fields
     if not kv.get("parcel_id_raw") or not kv.get("case_number"):
         return None
 
@@ -164,17 +160,6 @@ def _extract_record(block: list[list[str]]) -> Optional[dict]:
 # ---------------------------------------------------------------------------
 # DB helpers
 # ---------------------------------------------------------------------------
-
-def _get_filter_profile_id(conn) -> Optional[int]:
-    row = conn.execute(
-        text(
-            "SELECT id FROM filter_profiles "
-            "WHERE county_fips = :fips AND is_active = true LIMIT 1"
-        ),
-        {"fips": COUNTY_FIPS},
-    ).fetchone()
-    return row[0] if row else None
-
 
 def _get_existing_case_numbers(conn) -> set[str]:
     rows = conn.execute(
@@ -187,18 +172,27 @@ def _get_existing_case_numbers(conn) -> set[str]:
     return {r[0] for r in rows}
 
 
-def _lookup_parcel(conn, raw_parcel_id: str) -> Optional[str]:
-    """Normalize parcel ID and confirm it exists in properties."""
-    # Escambia parcel IDs from the portal may have dashes or spaces; strip them.
+def _lookup_parcel(conn, raw_parcel_id: str) -> Optional[dict]:
+    """
+    Normalize parcel ID and return parcel dict if it exists in properties.
+
+    Returns dict with keys {parcel_id, jv, arv_estimate} or None.
+    """
     normalized = re.sub(r"[^A-Z0-9]", "", raw_parcel_id.upper())
     row = conn.execute(
         text(
-            "SELECT parcel_id FROM properties "
+            "SELECT parcel_id, jv, arv_estimate FROM properties "
             "WHERE parcel_id = :pid AND county_fips = :fips LIMIT 1"
         ),
         {"pid": normalized, "fips": COUNTY_FIPS},
     ).fetchone()
-    return row[0] if row else None
+    if row is None:
+        return None
+    return {
+        "parcel_id":    row.parcel_id,
+        "jv":           row.jv,
+        "arv_estimate": row.arv_estimate,
+    }
 
 
 def _extract_zip(csz: Optional[str]) -> Optional[str]:
@@ -247,7 +241,6 @@ def run_tax_deed_import(
 
         with engine.begin() as conn:
             existing_cases = _get_existing_case_numbers(conn)
-            filter_profile_id = _get_filter_profile_id(conn)
 
             for block in blocks:
                 totals["read"] += 1
@@ -264,10 +257,10 @@ def run_tax_deed_import(
                     totals["skipped"] += 1
                     continue
 
-                parcel_id = _lookup_parcel(conn, record["parcel_id_raw"])
-                if parcel_id is None:
+                parcel = _lookup_parcel(conn, record["parcel_id_raw"])
+                if parcel is None:
                     log.debug(
-                        "  Case %s — parcel %s not in MQI — skipping",
+                        "  Case %s — parcel %s not found — skipping",
                         case_number,
                         record["parcel_id_raw"],
                     )
@@ -276,28 +269,38 @@ def run_tax_deed_import(
 
                 totals["matched"] += 1
 
-                opening_bid = _parse_money(record.get("opening_bid_raw", ""))
+                opening_bid    = _parse_money(record.get("opening_bid_raw", ""))
                 assessed_value = _parse_money(record.get("assessed_value_raw", ""))
-                auction_date = _parse_auction_dt(record.get("auction_dt_raw", ""))
-                zip_code = _extract_zip(record.get("address_csz"))
+                auction_date   = _parse_auction_dt(record.get("auction_dt_raw", ""))
+                zip_code       = _extract_zip(record.get("address_csz"))
+                arv_estimate   = parcel.get("arv_estimate") or parcel.get("jv")
 
-                street = record.get("address_street") or ""
-                csz = record.get("address_csz") or ""
+                street       = record.get("address_street") or ""
+                csz          = record.get("address_csz") or ""
                 full_address = f"{street}, {csz}".strip(", ")
 
-                now = datetime.utcnow()
+                now = datetime.now(tz=timezone.utc)
 
                 if dry_run:
                     log.info(
                         "  [DRY-RUN] Would insert | case=%s | parcel=%s | "
                         "bid=$%s | date=%s",
                         case_number,
-                        parcel_id,
+                        parcel["parcel_id"],
                         opening_bid,
                         auction_date,
                     )
                     totals["inserted"] += 1
                     continue
+
+                raw_json = {
+                    "case_number":       case_number,
+                    "certificate_number": record.get("certificate_number", ""),
+                    "opening_bid":       opening_bid,
+                    "assessed_value":    assessed_value,
+                    "address":           full_address,
+                    "zip":               zip_code or "",
+                }
 
                 conn.execute(
                     text(
@@ -307,49 +310,43 @@ def run_tax_deed_import(
                             list_date, source, listing_url,
                             mls_number,
                             signal_tier, signal_type,
+                            arv_estimate, arv_source,
                             workflow_status, notes,
-                            raw_listing_json, scraped_at, created_at, updated_at,
-                            filter_profile_id
+                            raw_listing_json, scraped_at, created_at, updated_at
                         ) VALUES (
                             :county_fips, :parcel_id, :listing_type, :list_price,
                             :list_date, :source, :listing_url,
                             :mls_number,
                             :signal_tier, :signal_type,
+                            :arv_estimate, :arv_source,
                             :workflow_status, :notes,
-                            CAST(:raw_listing_json AS jsonb), :scraped_at, :created_at, :updated_at,
-                            :filter_profile_id
+                            CAST(:raw_listing_json AS jsonb), :scraped_at, :created_at, :updated_at
                         )
                         """
                     ),
                     {
-                        "county_fips": COUNTY_FIPS,
-                        "parcel_id": parcel_id,
-                        "listing_type": "tax_deed_auction",
-                        "list_price": opening_bid,
-                        "list_date": auction_date,
-                        "source": SOURCE_NAME,
-                        "listing_url": "https://escambia.realtaxdeed.com/",
-                        "mls_number": case_number,
-                        "signal_tier": SIGNAL_TIER,
-                        "signal_type": SIGNAL_TYPE,
-                        "workflow_status": "new",
+                        "county_fips":     COUNTY_FIPS,
+                        "parcel_id":       parcel["parcel_id"],
+                        "listing_type":    "tax_deed_auction",
+                        "list_price":      opening_bid,
+                        "list_date":       auction_date,
+                        "source":          SOURCE_NAME,
+                        "listing_url":     "https://escambia.realtaxdeed.com/",
+                        "mls_number":      case_number,
+                        "signal_tier":     SIGNAL_TIER,
+                        "signal_type":     SIGNAL_TYPE,
+                        "arv_estimate":    arv_estimate,
+                        "arv_source":      "JV_FALLBACK",
+                        "workflow_status": "NEW",
                         "notes": (
                             f"Certificate: {record.get('certificate_number', 'N/A')} | "
                             f"Assessed: ${assessed_value or 'N/A'} | "
                             f"Address: {full_address}"
                         ),
-                        "raw_listing_json": (
-                            f'{{"case_number": "{case_number}", '
-                            f'"certificate_number": "{record.get("certificate_number", "")}", '
-                            f'"opening_bid": {opening_bid or "null"}, '
-                            f'"assessed_value": {assessed_value or "null"}, '
-                            f'"address": "{full_address}", '
-                            f'"zip": "{zip_code or ""}"}}'
-                        ),
-                        "scraped_at": now,
-                        "created_at": now,
-                        "updated_at": now,
-                        "filter_profile_id": filter_profile_id,
+                        "raw_listing_json": json.dumps(raw_json),
+                        "scraped_at":       now,
+                        "created_at":       now,
+                        "updated_at":       now,
                     },
                 )
                 existing_cases.add(case_number)

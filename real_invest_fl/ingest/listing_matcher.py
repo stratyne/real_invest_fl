@@ -9,10 +9,9 @@ Orchestrates the full daily scrape-and-match cycle:
     2. Run each scraper — collect ScrapedListing records
     3. Normalize each scraped address via address_to_parcel()
     4. Look up the matched parcel in the properties table
-    5. Verify the parcel is MQI-qualified
-    6. Compute derived financial fields (price_per_sqft, arv_spread)
-    7. Insert a ListingEvent record for each matched, qualified parcel
-    8. Log run summary via IngestRunContext
+    5. Compute derived financial fields (price_per_sqft, arv_spread)
+    6. Insert a ListingEvent record for each matched parcel
+    7. Log run summary via IngestRunContext
 
 Address matching strategy:
     Primary:   Exact match on normalized phy_addr1 + phy_zipcd
@@ -52,8 +51,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT))
 
-from config.settings import settings                          # noqa: E402
-from real_invest_fl.db.session import AsyncSessionLocal       # noqa: E402
+from config.settings import settings                              # noqa: E402
+from real_invest_fl.db.session import AsyncSessionLocal           # noqa: E402
 from real_invest_fl.db.models.listing_event import ListingEvent  # noqa: E402
 from real_invest_fl.scrapers.base_scraper import BaseScraper, ScrapedListing  # noqa: E402
 # NOTE: normalize_parcel_id zero-pads to 18 chars. properties.parcel_id is
@@ -77,8 +76,8 @@ logging.basicConfig(
 logger = logging.getLogger("listing_matcher")
 
 # ── constants ─────────────────────────────────────────────────────────────────
-COUNTY_FIPS   = "12033"   # Escambia County — Phase 1 POC
-FUZZY_MATCH_THRESHOLD = 88  # rapidfuzz score threshold (0-100)
+COUNTY_FIPS           = "12033"   # Escambia County — Phase 1 POC
+FUZZY_MATCH_THRESHOLD = 88        # rapidfuzz score threshold (0-100)
 
 # Unit designator pattern — used inside lookup_parcel_by_address() to
 # extract the unit value from the unit-preserved normalized form for
@@ -205,10 +204,6 @@ def lookup_parcel_by_address(
             "bathrooms":    row.bathrooms,
         }
 
-    # Produce the two normalized forms used across all three levels.
-    # street_norm  — units stripped, used for Level 1 exact match and
-    #                Level 3 prefix extraction.
-    # street_with_unit — units preserved, used for Level 2 unit extraction.
     street_norm      = normalize_street_address(street_input, strip_unit=True)
     street_with_unit = normalize_street_address(street_input, strip_unit=False)
 
@@ -231,9 +226,6 @@ def lookup_parcel_by_address(
         return _row_to_dict(row)
 
     # ── Level 2 — Unit suffix normalization ───────────────────────────── #
-    # Only attempted if a unit designator is present in street_with_unit.
-    # We extract base and unit from the unit-preserved form, then
-    # recombine as "{base} {unit}" to match NAL phy_addr1 storage format.
     unit_match = _UNIT_EXTRACT_RE.search(street_with_unit)
     if unit_match:
         base = unit_match.group(1).strip()
@@ -255,15 +247,11 @@ def lookup_parcel_by_address(
         if row:
             return _row_to_dict(row)
 
-        # Use the base (no unit) for Level 3 prefix — keeps the LIKE
-        # anchor clean even when a unit was present.
         base_street = base
     else:
         base_street = street_norm
 
     # ── Level 3 — Street prefix LIKE ─────────────────────────────────── #
-    # Prefix is extracted from street_norm (unit-stripped) via base_street.
-    # Pattern: house number + first two street tokens.
     prefix_match = re.match(r"^(\d+\s+\S+(?:\s+\S+)?)", base_street)
     if prefix_match:
         prefix = prefix_match.group(1).strip()
@@ -308,8 +296,13 @@ def enrich_bed_bath(
     Update properties.bedrooms / bathrooms / bed_bath_source if currently NULL.
 
     Enforces null-only population via COALESCE and a WHERE guard.
-    Never overwrites an existing non-NULL value.
-    bed_bath_source is set only when currently NULL.
+    Never overwrites an existing non-NULL value regardless of source.
+
+    TODO: confidence hierarchy enforcement — item 17.
+    When implemented, this function will accept a source_confidence
+    parameter and only overwrite existing values if the incoming source
+    ranks higher in the bed_bath_source confidence hierarchy defined in
+    context/arv.md and context/scrapers.md.
 
     Args:
         conn:        Synchronous SQLAlchemy connection.
@@ -360,17 +353,16 @@ def enrich_bed_bath(
 
 async def _build_address_index(session: AsyncSession) -> dict[str, dict]:
     """
-    Load all MQI-qualified parcels into an in-memory address index.
+    Load all parcels for the county into an in-memory address index.
     Key: normalized "ADDRESS|ZIPCD" string
-    Value: dict with parcel_id, county_fips, jv, arv_estimate,
-           tot_lvg_area, filter_profile_id
+    Value: dict with parcel_id, county_fips, jv, arv_estimate, tot_lvg_area
 
     Loading the full index once per run is faster than per-listing
     DB lookups for the expected volume of scraped listings.
     For large multi-county deployments this should be replaced with
-    a DB lookup per listing — see TODO below.
+    a DB lookup per listing.
     """
-    logger.info("Building address index from MQI-qualified parcels...")
+    logger.info("Building address index for county_fips=%s...", COUNTY_FIPS)
     result = await session.execute(text("""
         SELECT
             parcel_id,
@@ -381,8 +373,7 @@ async def _build_address_index(session: AsyncSession) -> dict[str, dict]:
             arv_estimate,
             tot_lvg_area
         FROM properties
-        WHERE mqi_qualified = true
-        AND county_fips = :county_fips
+        WHERE county_fips = :county_fips
     """), {"county_fips": COUNTY_FIPS})
 
     rows = result.fetchall()
@@ -423,17 +414,14 @@ def _lookup_parcel_from_index(
     zip_cd    = (listing.raw_zip or "").strip()
     exact_key = f"{norm_addr}|{zip_cd}"
 
-    # Exact match
     if exact_key in index:
         return index[exact_key]
 
-    # Fuzzy match — requires rapidfuzz
     try:
         from rapidfuzz import process as fuzz_process, fuzz
-        # Search only on the address portion of the key
         choices = {k: v for k, v in index.items() if k.endswith(f"|{zip_cd}") or not zip_cd}
         if not choices:
-            choices = index  # Fall back to all parcels if zip yields nothing
+            choices = index
 
         match_result = fuzz_process.extractOne(
             norm_addr,
@@ -442,7 +430,7 @@ def _lookup_parcel_from_index(
             score_cutoff=FUZZY_MATCH_THRESHOLD,
         )
         if match_result:
-            matched_key = match_result[2]   # extractOne returns (match, score, key)
+            matched_key = match_result[2]
             return choices.get(matched_key)
 
     except ImportError:
@@ -460,6 +448,9 @@ def _derive_financials(
     """
     Compute derived financial fields for the listing_events record.
     Returns a dict of fields to merge into the insert payload.
+
+    arv_source is 'JV_FALLBACK' — jv is used as ARV proxy until the
+    comp-based ARV engine (item 17) is complete.
     """
     arv_estimate  = parcel.get("arv_estimate") or parcel.get("jv")
     list_price    = listing.list_price
@@ -474,28 +465,11 @@ def _derive_financials(
         arv_spread = arv_estimate - list_price
 
     return {
-        "arv_estimate":  arv_estimate,
-        "arv_source":    "JV",       # Phase 1 proxy — updated to SDF_COMPS in Phase 3
+        "arv_estimate":   arv_estimate,
+        "arv_source":     "JV_FALLBACK",
         "price_per_sqft": price_per_sqft,
-        "arv_spread":    arv_spread,
+        "arv_spread":     arv_spread,
     }
-
-
-# ── active filter profile lookup ─────────────────────────────────────────────
-
-async def _get_active_filter_profile(session: AsyncSession) -> dict | None:
-    """Load the active filter profile for Escambia County."""
-    result = await session.execute(text("""
-        SELECT id, filter_criteria
-        FROM filter_profiles
-        WHERE county_fips = :county_fips
-        AND active = true
-        LIMIT 1
-    """), {"county_fips": COUNTY_FIPS})
-    row = result.fetchone()
-    if row:
-        return {"id": row.id, "criteria": row.filter_criteria}
-    return None
 
 
 # ── core matching pipeline ────────────────────────────────────────────────────
@@ -510,10 +484,9 @@ async def run_matching_cycle(
     Steps:
         1. Discover and instantiate enabled scrapers
         2. Run each scraper, collect ScrapedListing records
-        3. Build MQI address index from DB
-        4. Load active filter profile
-        5. For each listing: lookup parcel, derive financials, insert event
-        6. Log summary
+        3. Build address index from DB
+        4. For each listing: lookup parcel, derive financials, insert event
+        5. Log summary
     """
     t_start = time.time()
 
@@ -559,25 +532,16 @@ async def run_matching_cycle(
         logger.info("No listings to match — exiting.")
         return
 
-    # ── Steps 3-7 — Match and insert ──────────────────────────────────── #
+    # ── Steps 3-5 — Match and insert ──────────────────────────────────── #
     async with AsyncSessionLocal() as session:
-        address_index   = await _build_address_index(session)
-        filter_profile  = await _get_active_filter_profile(session)
+        address_index = await _build_address_index(session)
 
-        if not filter_profile:
-            logger.warning(
-                "No active filter profile found for county_fips=%s — "
-                "filter_profile_id will be NULL on inserted records",
-                COUNTY_FIPS,
-            )
-
-        matched      = 0
-        unmatched    = 0
-        inserted     = 0
+        matched              = 0
+        unmatched            = 0
+        inserted             = 0
         dry_run_would_insert = 0
 
         for listing in all_listings:
-            # Step 4 — Parcel lookup
             parcel = _lookup_parcel_from_index(listing, address_index)
             if parcel is None:
                 unmatched += 1
@@ -589,10 +553,8 @@ async def run_matching_cycle(
 
             matched += 1
 
-            # Step 5 — Derive financials
             financials = _derive_financials(listing, parcel)
 
-            # Step 6 — Build ListingEvent payload
             event_data = {
                 "county_fips":          parcel["county_fips"],
                 "parcel_id":            parcel["parcel_id"],
@@ -613,7 +575,6 @@ async def run_matching_cycle(
                 "arv_estimate":         financials["arv_estimate"],
                 "arv_source":           financials["arv_source"],
                 "arv_spread":           financials["arv_spread"],
-                "filter_profile_id":    filter_profile["id"] if filter_profile else None,
                 "workflow_status":      "NEW",
                 "raw_listing_json":     listing.raw_listing_json,
                 "scraped_at":           listing.scraped_at,
@@ -632,7 +593,6 @@ async def run_matching_cycle(
                 )
                 continue
 
-            # Step 7 — Insert ListingEvent
             event = ListingEvent(**event_data)
             session.add(event)
             inserted += 1

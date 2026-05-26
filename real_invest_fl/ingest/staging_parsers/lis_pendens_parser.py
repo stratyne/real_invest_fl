@@ -103,15 +103,12 @@ def _parse_legal(legal_raw: str) -> dict:
     if not legal_raw:
         return result
 
-    # Normalize — replace newlines with spaces, collapse whitespace
     legal = re.sub(r"\s+", " ", str(legal_raw).replace("\n", " ")).strip()
 
-    # Case number
     cn_match = re.search(r"CN:([\d\w\s]+CA[\s\d]+)", legal)
     if cn_match:
         result["case_number"] = cn_match.group(1).strip()
 
-    # LOT / BLK / SUB
     lot_match = re.search(r"LOT:([\w\s/&,]+?)(?:\s+BLK:|$)", legal)
     blk_match = re.search(r"BLK:([\w\s/&,]+?)(?:\s+SUB:|$)", legal)
     sub_match = re.search(r"SUB:([\w\s/&,]+?)(?:\s+CN:|$)", legal)
@@ -123,7 +120,6 @@ def _parse_legal(legal_raw: str) -> dict:
     if sub_match:
         result["subdivision"] = sub_match.group(1).strip()
 
-    # SEC / TWP / RGE
     sec_match = re.search(r"SEC:([\w/]+)", legal)
     twp_match = re.search(r"TWP:([\w]+)", legal)
     rge_match = re.search(r"RGE:([\w]+)", legal)
@@ -161,7 +157,6 @@ def _extract_owner_name(reverse_name_raw: str) -> str:
         if not words.intersection(institutional_keywords):
             return name
 
-    # All names appear institutional — return first one
     return names[0] if names else ""
 
 
@@ -192,8 +187,7 @@ def _build_legal_index(engine) -> tuple[dict, dict]:
                 jv, arv_estimate, tot_lvg_area,
                 phy_addr1, phy_zipcd
             FROM properties
-            WHERE mqi_qualified = true
-            AND county_fips = :fips
+            WHERE county_fips = :fips
         """), {"fips": COUNTY_FIPS})
         rows = result.fetchall()
 
@@ -211,12 +205,10 @@ def _build_legal_index(engine) -> tuple[dict, dict]:
             "phy_zipcd":    row.phy_zipcd,
         }
 
-        # s_legal index — normalize for fuzzy matching
         if row.s_legal:
             norm = re.sub(r"\s+", " ", row.s_legal.upper().strip())
             legal_index[norm] = parcel_data
 
-        # SEC/TWN/RNG index — for parcels without subdivision data
         if row.sec and row.twn and row.rng:
             str_key = f"{row.sec.strip()}|{row.twn.strip()}|{row.rng.strip()}"
             if str_key not in str_index:
@@ -258,15 +250,10 @@ def _match_parcel(
 
     # ── Strategy 1 — Subdivision fuzzy match ────────────────────────── #
     if sub:
-        # Build a query string resembling NAL s_legal format
-        # NAL format: "LT 22 BLK 39 MONTCLAIR UN 7" (truncated to 30 chars)
-        # LandmarkWeb: "LOT:22 BLK:39 SUB:MONTCLAIR UN 7"
-        # Normalize to: "LT 22 BLK 39 MONTCLAIR UN 7"
         lot_norm = lot.replace("/", " ").strip() if lot else ""
         blk_norm = blk.strip() if blk else ""
         sub_norm  = sub.strip()
 
-        # Try multiple query formats — NAL uses abbreviated forms
         queries = []
         if lot_norm and blk_norm:
             queries.append(f"LT {lot_norm} BLK {blk_norm} {sub_norm}")
@@ -280,8 +267,6 @@ def _match_parcel(
 
             for query in queries:
                 query_norm = re.sub(r"\s+", " ", query.upper().strip())
-                # Build string-only choices dict for rapidfuzz
-                # legal_index keys ARE the normalized s_legal strings
                 legal_choices = {k: k for k in legal_index}
                 match_result = fuzz_process.extractOne(
                     query_norm,
@@ -298,12 +283,9 @@ def _match_parcel(
 
     # ── Strategy 2 — Section/Township/Range match ────────────────────── #
     if sec and twp and rge:
-        # Normalize TWP/RGE — LandmarkWeb uses "3N"/"31W", NAL uses "3N"/"31W"
-        # Strip direction suffix for matching if needed
         twp_norm = re.sub(r"[NS]$", "", twp.strip())
         rge_norm = re.sub(r"[EW]$", "", rge.strip())
 
-        # Try exact match first
         str_key = f"{sec.strip()}|{twp.strip()}|{rge.strip()}"
         if str_key in str_index:
             parcels = str_index[str_key]
@@ -316,7 +298,6 @@ def _match_parcel(
                 )
                 return None, "str_ambiguous"
 
-        # Try without direction suffix
         str_key_bare = f"{sec.strip()}|{twp_norm}|{rge_norm}"
         for key in str_index:
             key_parts = key.split("|")
@@ -355,22 +336,18 @@ def parse_lis_pendens_file(
 ) -> dict:
     """
     Parse a single LandmarkWeb Excel export file and write listing_events.
-
     Returns summary dict with counts.
     """
     logger.info("Parsing file: %s", filepath.name)
 
-    # ── Load Excel ──────────────────────────────────────────────────── #
     try:
         df = pd.read_excel(filepath, dtype=str)
     except Exception as exc:
         logger.error("Failed to read Excel file %s: %s", filepath, exc)
         return {"error": str(exc)}
 
-    # Normalize column names — strip whitespace
     df.columns = [c.strip() for c in df.columns]
 
-    # Keep only LIS PENDENS rows — file may contain other doc types
     if "Doc Type" in df.columns:
         df = df[df["Doc Type"].str.strip().str.upper() == "LIS PENDENS"].copy()
 
@@ -380,22 +357,10 @@ def parse_lis_pendens_file(
         logger.warning("No lis pendens rows found in %s", filepath.name)
         return {"read": 0, "matched": 0, "inserted": 0, "skipped": 0, "unmatched": 0}
 
-    # ── Load indexes and existing CFNs ──────────────────────────────── #
     legal_index, str_index = _build_legal_index(engine)
     existing_cfns = _get_existing_cfns(engine)
     logger.info("Existing CFNs in DB: %d", len(existing_cfns))
 
-    # ── Get active filter profile id ───────────────────────────────── #
-    with engine.connect() as conn:
-        fp_result = conn.execute(text("""
-            SELECT id FROM filter_profiles
-            WHERE county_fips = :fips AND is_active = true
-            LIMIT 1
-        """), {"fips": COUNTY_FIPS})
-        fp_row = fp_result.fetchone()
-        filter_profile_id = fp_row.id if fp_row else None
-
-    # ── Process rows ────────────────────────────────────────────────── #
     stats = {
         "read": 0, "matched": 0, "inserted": 0,
         "skipped_duplicate": 0, "unmatched": 0,
@@ -407,26 +372,22 @@ def parse_lis_pendens_file(
             county_fips, parcel_id, signal_tier, signal_type,
             listing_type, list_date, source, listing_agent_name,
             arv_estimate, arv_source,
-            filter_profile_id, workflow_status,
+            workflow_status,
             raw_listing_json, scraped_at, created_at, updated_at
         ) VALUES (
             :county_fips, :parcel_id, :signal_tier, :signal_type,
             :listing_type, :list_date, :source, :listing_agent_name,
             :arv_estimate, :arv_source,
-            :filter_profile_id, :workflow_status,
+            :workflow_status,
             :raw_listing_json, :scraped_at, NOW(), NOW()
         )
     """)
 
-    # Group rows — LandmarkWeb repeats the primary row data across
-    # multiple rows for multi-defendant records. Group by CFN.
-    # The first row with a non-null Status is the primary record.
     primary_rows = df[df["Status"].notna() & (df["Status"].str.strip() != "")].copy()
 
     for _, row in primary_rows.iterrows():
         stats["read"] += 1
 
-        # ── CFN deduplication ────────────────────────────────────── #
         try:
             cfn = int(str(row.get("CFN", "")).strip())
         except (ValueError, TypeError):
@@ -438,7 +399,6 @@ def parse_lis_pendens_file(
             logger.debug("CFN %d already in DB — skipping", cfn)
             continue
 
-        # ── Parse fields ─────────────────────────────────────────── #
         legal_raw   = str(row.get("Legal", "") or "")
         parsed      = _parse_legal(legal_raw)
         owner_name  = _extract_owner_name(str(row.get("Reverse Name", "") or ""))
@@ -460,7 +420,6 @@ def parse_lis_pendens_file(
             if cfn else None
         )
 
-        # ── Parcel match ─────────────────────────────────────────── #
         parcel, match_method = _match_parcel(parsed, legal_index, str_index)
         stats["match_methods"][match_method] = (
             stats["match_methods"].get(match_method, 0) + 1
@@ -478,7 +437,6 @@ def parse_lis_pendens_file(
 
         stats["matched"] += 1
 
-        # ── Build raw_listing_json ────────────────────────────────── #
         raw_json = {
             "cfn":          cfn,
             "case_number":  parsed.get("case_number"),
@@ -492,21 +450,22 @@ def parse_lis_pendens_file(
             "source_file":  filepath.name,
         }
 
+        arv_estimate = parcel.get("arv_estimate") or parcel.get("jv")
+
         payload = {
-            "county_fips":       parcel["county_fips"],
-            "parcel_id":         parcel["parcel_id"],
-            "signal_tier":       SIGNAL_TIER,
-            "signal_type":       SIGNAL_TYPE,
-            "listing_type":      None,
-            "list_date":         record_date,
-            "source":            SOURCE_NAME,
+            "county_fips":        parcel["county_fips"],
+            "parcel_id":          parcel["parcel_id"],
+            "signal_tier":        SIGNAL_TIER,
+            "signal_type":        SIGNAL_TYPE,
+            "listing_type":       None,
+            "list_date":          record_date,
+            "source":             SOURCE_NAME,
             "listing_agent_name": lender_name[:200] if lender_name else None,
-            "arv_estimate":      parcel.get("arv_estimate"),
-            "arv_source":        "JV",
-            "filter_profile_id": filter_profile_id,
-            "workflow_status":   "NEW",
-            "raw_listing_json":  json.dumps(raw_json),
-            "scraped_at":        datetime.now(tz=timezone.utc),
+            "arv_estimate":       arv_estimate,
+            "arv_source":         "JV_FALLBACK",
+            "workflow_status":    "NEW",
+            "raw_listing_json":   json.dumps(raw_json),
+            "scraped_at":         datetime.now(tz=timezone.utc),
         }
 
         if dry_run:
@@ -519,11 +478,10 @@ def parse_lis_pendens_file(
             stats["inserted"] += 1
             continue
 
-        # ── Insert ───────────────────────────────────────────────── #
         try:
             with engine.begin() as conn:
                 conn.execute(insert_sql, payload)
-            existing_cfns.add(cfn)  # Prevent re-insert within same run
+            existing_cfns.add(cfn)
             stats["inserted"] += 1
         except Exception as exc:
             logger.error("Insert failed for CFN=%d: %s", cfn, exc)
@@ -537,10 +495,6 @@ def run_lis_pendens_import(
     dry_run: bool,
     specific_file: Path | None,
 ) -> None:
-    """
-    Process all unprocessed Excel files in the lis_pendens staging directory,
-    or a single specified file.
-    """
     t_start = time.time()
     engine = create_engine(settings.sync_database_url, echo=False)
 

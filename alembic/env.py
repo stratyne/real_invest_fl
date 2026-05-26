@@ -21,9 +21,9 @@ import real_invest_fl.db.models  # noqa: E402, F401
 config = context.config
 
 # Inject the real database URL from environment — overrides the dummy in alembic.ini
-sync_url = os.environ.get("SYNC_DATABASE_URL")
+sync_url = os.environ.get("HOST_SYNC_DATABASE_URL")
 if not sync_url:
-    raise RuntimeError("SYNC_DATABASE_URL is not set in .env")
+    raise RuntimeError("HOST_SYNC_DATABASE_URL is not set in .env")
 config.set_main_option("sqlalchemy.url", sync_url)
 
 if config.config_file_name is not None:

@@ -2,7 +2,7 @@
 # Authoritative record of current architectural decisions.
 # Always current — edit in place when a decision changes.
 # The git commit message is the audit trail, not this file.
-# Last updated: 2026-05-14
+# Last updated: 2026-05-26
 
 ---
 
@@ -27,7 +27,7 @@ produces. It is not the architecture. It is a test case.
 ## Data Architecture
 
 - ARV uses a comp-based model drawing from parcel_sale_history filtered by
-  Florida DOR qual codes. jv is retained as fallback ARV proxy when
+  PA-level qualification codes. jv is retained as fallback ARV proxy when
   insufficient comps exist. Full detail in context/arv.md.
 - Signal model is primary. Traditional listing model is a parallel track.
 - listing_events is the unified output table for all signal and listing sources.
@@ -42,6 +42,15 @@ produces. It is not the architecture. It is a test case.
 - Filters are query-time only. The ingest pipeline NEVER applies filter
   criteria. Every parcel from every county NAL goes into properties
   regardless of use code, size, value, or any other criterion.
+- Ingest is user-agnostic. No parser, scraper, or ingest script ever
+  references a user, a filter profile, or any user-owned construct.
+  Events are recorded as they exist in the real world. Whether an event
+  is relevant to a specific user is answered exclusively at query time.
+  Practically: filter_profile_id is never written by any parser or
+  scraper. _get_filter_profile_id() does not belong in any parser or
+  scraper. mqi_qualified is never referenced by any parser or scraper.
+  Any future user_id, tenant_id, or similar user-owned construct is
+  subject to the same rule without exception.
 - All ingest scripts resolve file paths programmatically from the county
   registry using the canonical folder pattern. File discovery uses globs,
   never hardcoded filenames. Full detail in context/ingest.md.
@@ -49,7 +58,7 @@ produces. It is not the architecture. It is a test case.
   nal_mapper.py _dor_uc() helper.
 - mqi_qualified, mqi_rejection_reasons, mqi_qualified_at are POC artifacts.
   All rows carry mqi_qualified = false as a neutral placeholder. These
-  columns will be removed in a future migration once the Phase 4
+  columns will be removed in a pending migration once the Phase 4
   query-time filter is live.
 
 ---
@@ -100,6 +109,15 @@ context/cama.md.
 - grantor/grantee NOT NULL DEFAULT '' — empty string used in place of NULL
   to ensure the unique constraint fires correctly on missing names.
 
+### Known Limitation — Unique Constraint Edge Case
+
+The unique constraint includes grantor and grantee. If a parcel has two
+distinct sales on the same date with no grantor/grantee available (both
+stored as empty string), the constraint will incorrectly deduplicate them
+into one row. This is an accepted edge case. It will silently swallow
+the second row on re-scrape. Documented here as a known limitation —
+no action required unless duplicate suppression becomes a reported problem.
+
 ### Column Design (three distinct fields — do not conflate)
 
 - instrument_type VARCHAR(10): deed instrument type. Values: WD (Warranty
@@ -107,43 +125,79 @@ context/cama.md.
   Warrant), TD (Tax Deed), PR (Personal Representative), PB (Probate),
   LD (Lady Bird Deed), DD (Dissolution Deed), FJ (Final Judgment), and
   others. Source-dependent — not all counties surface this field.
+  NULL where unavailable — do not substitute a default value.
 - qualification_code VARCHAR(5): PA-level arms-length qualification flag.
   Confirmed values: Q = Qualified (arms-length), U = Unqualified,
-  V = Vacant land. C observed in Santa Rosa data — meaning unconfirmed,
-  treat as non-qualified until verified.
+  V = Vacant land. C observed in Santa Rosa data — meaning unconfirmed
+  as of 2026-05-26, treat as non-qualified until verified (see arv.md).
 - sale_type VARCHAR(5): improved/vacant classification of the parcel at
   time of sale. Values: I = Improved, V = Vacant. Sourced from Santa Rosa
   parcelcard. Escambia parcelcard does not surface this field.
 
 ### County-Specific Scraper Mapping (verified 2026-05-26)
 
-| County | instrument_type | qualification_code | sale_type |
-|---|---|---|---|
-| Escambia (12033) | BUG — scraper writes WD/QC/etc here instead of instrument_type | NULL | NULL |
-| Santa Rosa (12113) | WD/QD/CT/SW/TD etc where available; NULL when parcelcard omits it | Q/U/C/V | I/V |
+| County          | instrument_type                      | qualification_code | sale_type |
+|-----------------|--------------------------------------|--------------------|-----------|
+| Escambia (12033)| NULL — parcelcard does not surface   | Q/U where present  | NULL      |
+| Santa Rosa (12113)| NULL — parcelcard does not surface | Q/U/C/V            | I/V       |
 
-Escambia scraper bug confirmed 2026-05-26: instrument type (WD/QC/etc)
-is being written to sale_type instead of instrument_type, and
-qualification_code is never populated. The 3,941 existing Escambia rows
-in parcel_sale_history must be deleted and re-scraped once the scraper
-is corrected. Delete-and-re-scrape is the confirmed path — Escambia CAMA
-is only 847 parcels enriched so data loss is negligible. (item 101)
+Note: The Escambia column mapping bug (item 101, completed 2026-05-26)
+wrote instrument type values into sale_type and never populated
+qualification_code. All affected rows were deleted. The run was restarted
+with the corrected scraper. All current Escambia rows are clean.
 
 ### Arms-Length Filter Logic for ARV Engine (item 17)
 
+Because neither Escambia nor Santa Rosa surfaces instrument_type on their
+parcelcard, the practical arms-length filter for both counties is:
+
 Primary comp pool (highest confidence):
-  instrument_type = 'WD' AND qualification_code = 'Q'
+  qualification_code IN ('Q', 'C') AND sale_price >= 10000
+
+Note: 'C' means "Qualified and Confirmed" per Santa Rosa County PA
+(confirmed 2026-05-26, Richard Brosnaham, Administrative Coordinator,
+850.983.1880). Equal or higher confidence than 'Q'. Escambia does not
+produce 'C' values — the filter is harmless for Escambia and correct
+for Santa Rosa.
 
 Wider comp pool (acceptable when primary is insufficient):
-  instrument_type = 'WD' AND qualification_code IN ('Q', 'U')
+  qualification_code IN ('Q', 'C', 'U') AND sale_price >= 10000
+
+When instrument_type IS NOT NULL (future counties that surface it):
+  (instrument_type = 'WD' OR instrument_type IS NULL)
+  AND qualification_code IN ('Q', 'C')
+  AND sale_price >= 10000
+
+Do not apply county-specific branching in the ARV engine — the filter
+is identical across counties. The instrument_type IS NULL condition
+handles counties that do not surface the field without special-casing.
 
 Minimum price filter: sale_price >= 10000 (excludes nominal consideration
-  deeds — 555 WD sales between $1–$499 confirmed in Escambia data as
-  non-arms-length transfers).
+deeds — 555 WD sales between $1-$499 confirmed in Escambia data as
+non-arms-length transfers).
 
-County logic is identical once Escambia scraper is corrected. Do not
-apply county-specific branching in the ARV engine — fix the data, not
-the query.
+---
+
+## ARV Qualification Systems — Two Independent Systems
+
+This is a frequent source of confusion. There are two entirely separate
+qualification systems in use. They must never be conflated or cross-applied.
+
+### System 1 — parcel_sale_history fields
+instrument_type, qualification_code, sale_type on parcel_sale_history.
+PA-level fields. Used when parcel_sale_history is the comp source.
+Full detail in context/arv.md System 1 section.
+
+### System 2 — NAL embedded fields
+qual_cd1, qual_cd2 on properties. Florida DOR numeric codes.
+Used only as last-resort fallback when parcel_sale_history yields zero
+qualifying comp candidates within the search radius.
+Full detail in context/arv.md System 2 section.
+
+The qual_cd1/qual_cd2 fields on properties have no meaning in the context
+of parcel_sale_history rows. The instrument_type/qualification_code fields
+on parcel_sale_history have no relationship to Florida DOR qual codes.
+Do not join or compare values across these two systems.
 
 ---
 
@@ -160,22 +214,58 @@ per-source detail in context/scrapers.md.
 
 - Populated opportunistically on parcel match from any listing source.
 - bed_bath_source tracks provenance.
+- Confidence hierarchy (highest to lowest):
+    1. cama — PA parcelcard, most authoritative
+    2. county_clerk — direct county government. Current clerk sources carry
+       no beds/baths (legal event records only). Reserved for future county
+       sources that surface building characteristics.
+    3. zillow_staging / auction_com — equal confidence, third-party sourced
+    4. manual — lowest, human-entered, no current write workflow
 - Never overwrite an existing value with a lower-confidence source.
-  Logic lives in the parser layer.
+- If incoming source confidence equals existing, overwrite (fresher data
+  from same source is acceptable).
+- auction_com sentinel: total_bedrooms=0 / total_bathrooms=0 are
+  missing-data sentinels — treat as None, never write to DB.
+- Phase 3 sources (Landvoice, REDX, PropStream): slot at
+  zillow_staging/auction_com level until data quality is evaluated.
+- Logic lives in the parser layer. Not yet implemented in code.
+  Implementation is part of item 17 scope.
+- Full detail in context/arv.md and context/scrapers.md.
 
 ---
 
 ## ARV Comp Engine
 
 Primary source is parcel_sale_history joined to properties, filtered by
-Florida DOR qual codes. Median price per sqft of qualifying comps applied
-to subject parcel tot_lvg_area. jv fallback when comp count is below
-min_comp_sales_for_arv. arv_source values: COMP, JV_FALLBACK, ZESTIMATE,
-MANUAL. Full detail including qual code table and filter profile parameters
-in context/arv.md.
+PA-level qualification codes. Median price per sqft of qualifying comps
+applied to subject parcel tot_lvg_area. NAL embedded sale fields used as
+last-resort fallback when parcel_sale_history yields zero qualifying
+candidates. jv is the floor fallback when both paths yield nothing.
+arv_source values: COMP, JV_FALLBACK, ZESTIMATE, MANUAL.
+COMP and JV_FALLBACK are not equivalent — surface distinction in all UI views.
+Full detail including qualification systems, filter logic, and per-county
+data state in context/arv.md.
 
 arv_calculator.py requires refactor before use — mqi_qualified drift
 present. Do not run current version (item 17).
+
+---
+
+## SalesComp ORM Model and sales_comps Table
+
+Created in v0.2 as a forward placeholder for FL DOR SDF data (item 25).
+Has no ingest pipeline and no ORM relationship on Property.
+Contains no data. Do not use for ARV calculations — parcel_sale_history
+is the comp source. Will remain as a placeholder until item 25 is
+prioritized. Do not confuse with parcel_sale_history.
+
+---
+
+## PropertyValueHistory ORM Model
+
+Real model, real table (created v0.2). Append-only annual value log.
+Populated by the annual NAL refresh pipeline (item 28, Phase 3).
+Contains no data until Phase 3 begins. Not a POC artifact.
 
 ---
 
@@ -228,12 +318,37 @@ is Tier 1.
   (selects a property and initiates outreach). It is an audit record of
   the score at the moment of user action — not a search cache and not a
   pre-computed index.
+- The score visible in search results and the score recorded in
+  listing_scores at outreach-initiation time may differ if
+  parcel_sale_history has grown between the two events. This is
+  intentional — listing_scores is a point-in-time snapshot at the moment
+  of user action, not a replay of the search result.
 - Filter profile save and execute are two distinct operations:
   - Save: writes filter_criteria to filter_profiles. No query, no scoring.
   - Execute: runs the live query against inventory. Results are not
     persisted unless the user acts on them.
 - mqi_qualified, mqi_rejection_reasons, mqi_qualified_at are POC artifacts
   and will be removed once the Phase 4 query-time filter is live.
+
+---
+
+## Search Architecture
+
+- Current state: Option C hybrid (item 104). Lightweight scoring fetch
+  (5 columns) for all filtered rows. Full ORM hydration scoped to page
+  slice only (25 rows). Both search routes unified through _execute_search.
+- All filtered rows loaded into Python for scoring and sorting before
+  pagination is applied. max_results cap is a known limitation — users
+  with broad filters receive a silently truncated result set.
+- Target state: Option A — full SQL ORDER BY / LIMIT / OFFSET, migrating
+  to keyset/cursor pagination at scale. Prerequisite: deal scoring engine
+  (item 19) must be expressible as a SQL expression.
+- The ORDER BY county_fips, parcel_id tiebreaker (item 102) must be
+  preserved through any search architecture migration — it is the
+  foundation for keyset pagination.
+- 65 remaining counties are staged. Python-side sort-then-slice will
+  become untenable at multi-million row scale. Option A migration is
+  a pre-statewide-launch requirement, not optional polish.
 
 ---
 
@@ -248,7 +363,7 @@ CLOSED is terminal. A new scrape event for the same parcel produces
 a new listing_events row.
 
 | From         | Permitted transitions                 |
-|---|---|
+|--------------|---------------------------------------|
 | NEW          | REVIEWED, REJECTED                    |
 | REVIEWED     | APPROVE_SEND, REJECTED                |
 | APPROVE_SEND | SENT, REVIEWED                        |
@@ -409,33 +524,33 @@ saved screens and their last output, not the size of the market.
 Three interaction paths exist in ResultsPage and are intentionally kept
 distinct.
 
-- **Table row click:** opens the property detail drawer only. Does not
+- Table row click: opens the property detail drawer only. Does not
   move the map camera. Does not open a popup.
-- **Map marker click:** recenters the map via `easeTo`, opens the popup,
+- Map marker click: recenters the map via easeTo, opens the popup,
   highlights the corresponding table row, and scrolls it into view.
-- **"See on map" (drawer):** closes the drawer, recenters the map via
-  `easeTo`, and opens the popup. The drawer does not remain open because
+- "See on map" (drawer): closes the drawer, recenters the map via
+  easeTo, and opens the popup. The drawer does not remain open because
   mobile viewports cannot display both simultaneously.
 
-Map camera control is encapsulated in `centerMapOnResult` using
-`mapRef.current?.easeTo({ center: [longitude, latitude], zoom: 14,
-duration: 800 })`. `MapRef` is imported from `react-map-gl/maplibre`.
-`flyTo` was considered but `easeTo` was used by the implementing agent.
+Map camera control is encapsulated in centerMapOnResult using
+mapRef.current?.easeTo({ center: [longitude, latitude], zoom: 14,
+duration: 800 }). MapRef is imported from react-map-gl/maplibre.
+flyTo was considered but easeTo was used by the implementing agent.
 
-The `onLocate` prop on `PropertyDrawer` is typed `(() => void) | null`
+The onLocate prop on PropertyDrawer is typed (() => void) | null
 rather than optional to force explicit passing at every call site. When
-`selectedResult.latitude` or `selectedResult.longitude` is null, `null`
+selectedResult.latitude or selectedResult.longitude is null, null
 is passed and the "See on map" button does not render.
 
-The popup clears automatically when the page changes via a `useEffect`
-on the page state variable. Only `pageResults` pins are rendered at any
+The popup clears automatically when the page changes via a useEffect
+on the page state variable. Only pageResults pins are rendered at any
 time — never the full result set — to avoid DOM performance degradation
 at scale.
 
-`PropertyDrawer` `useEffect` includes a stale-async guard: an `active`
-boolean is set to `false` on cleanup, preventing state updates from
-in-flight fetches after unmount or selection change. `detail` and `error`
-reset to `null` on every selection change.
+PropertyDrawer useEffect includes a stale-async guard: an active
+boolean is set to false on cleanup, preventing state updates from
+in-flight fetches after unmount or selection change. detail and error
+reset to null on every selection change.
 
 ---
 
@@ -454,11 +569,11 @@ Stores per-user, per-profile activity and bookmark state. One row per
 - Cascade rules: user deleted → row deleted. Profile deleted → row deleted.
 
 ### Write pattern
-GET /{county_fips}/properties upserts after every successful result fetch:
+GET /properties upserts after every successful result fetch:
 increment run_count, set last_searched_at = now(),
 set last_result_count = len(results).
 
-PATCH /{county_fips}/profiles/{profile_id}/favorite toggles is_favorite.
+PATCH /profiles/{profile_id}/favorite toggles is_favorite.
 Creates the row if it does not exist (run_count = 0,
 last_searched_at = NULL). No request body. Returns { "is_favorite": bool }.
 
