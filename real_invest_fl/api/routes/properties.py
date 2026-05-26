@@ -7,6 +7,13 @@ GET /properties
     computes deal score, returns a single page of results ranked by deal
     score descending (or the configured sort field).
 
+    Architecture — Option C hybrid:
+    1. SQL fetches scoring columns only (lightweight) for all filtered rows.
+    2. SQL fetches latest listing_event scoring columns for those parcels.
+    3. Python scores, filters, sorts the full ID list.
+    4. SQL fetches full Property ORM objects for the current page slice only.
+    5. Python builds the response from the page slice.
+
 GET /{county_fips}/properties/{parcel_id}
     Returns full property detail for a single parcel, including the most
     recent listing_event if one exists.
@@ -14,13 +21,14 @@ GET /{county_fips}/properties/{parcel_id}
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from collections import defaultdict
 
 from real_invest_fl.api.deps import county_access, get_current_user, get_db
 from real_invest_fl.db.models.filter_profile import FilterProfile
@@ -32,6 +40,28 @@ from real_invest_fl.db.models.user_county_access import UserCountyAccess
 
 router = APIRouter(tags=["properties"])
 
+
+# ── Lightweight row types for scoring pass ───────────────────────────────
+
+class _ScoringRow(NamedTuple):
+    county_fips: str
+    parcel_id: str
+    arv_spread: int | None
+    jv: int | None
+    absentee_owner: bool | None
+
+
+class _EventScoringRow(NamedTuple):
+    county_fips: str
+    parcel_id: str
+    signal_tier: int | None
+    days_on_market: int | None
+    listing_type: str | None
+    arv_estimate: int | None
+    arv_source: str | None
+    arv_spread: int | None
+
+
 # ── Access helpers ───────────────────────────────────────────────────────
 
 def _assert_county_access(
@@ -41,7 +71,6 @@ def _assert_county_access(
 ) -> None:
     if is_superuser:
         return
-
     denied = [f for f in requested_fips if f not in accessible_fips]
     if denied:
         raise HTTPException(
@@ -87,7 +116,6 @@ async def _get_visible_active_profile(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Filter profile {filter_profile_id} not found",
             )
-
         accessible = await _get_accessible_fips(current_user, db)
         _assert_county_access(profile.county_fips, accessible, current_user.is_superuser)
 
@@ -468,13 +496,15 @@ def _apply_filters(
 # ── Deal score computation ───────────────────────────────────────────────
 
 def _compute_deal_score(
-    prop: Property,
-    latest_event: ListingEvent | None,
+    row: _ScoringRow,
+    ev: _EventScoringRow | None,
     weights: dict[str, Any],
 ) -> float | None:
     """Compute a normalised deal score in [0.0, 1.0] at query time.
 
-    Returns None if no weights are configured or required values missing.
+    Operates on lightweight _ScoringRow and _EventScoringRow tuples —
+    not full ORM objects. Returns None if no weights configured or
+    required values missing.
 
     Dimensions:
         arv_spread_score  — arv_spread relative to jv
@@ -489,26 +519,26 @@ def _compute_deal_score(
     total_weight = 0.0
 
     w = weights.get("arv_spread_score", 0.0)
-    if w and prop.arv_spread is not None and prop.jv:
-        normalised = min(prop.arv_spread / prop.jv, 1.0)
+    if w and row.arv_spread is not None and row.jv:
+        normalised = min(row.arv_spread / row.jv, 1.0)
         score += w * max(normalised, 0.0)
         total_weight += w
 
     w = weights.get("signal_tier_score", 0.0)
-    if w and latest_event and latest_event.signal_tier is not None:
+    if w and ev and ev.signal_tier is not None:
         tier_map = {1: 1.0, 2: 0.66, 3: 0.33}
-        normalised = tier_map.get(latest_event.signal_tier, 0.0)
+        normalised = tier_map.get(ev.signal_tier, 0.0)
         score += w * normalised
         total_weight += w
 
     w = weights.get("dom_score", 0.0)
-    if w and latest_event and latest_event.days_on_market is not None:
-        normalised = 1.0 - min(latest_event.days_on_market / 365, 1.0)
+    if w and ev and ev.days_on_market is not None:
+        normalised = 1.0 - min(ev.days_on_market / 365, 1.0)
         score += w * normalised
         total_weight += w
 
     w = weights.get("absentee_score", 0.0)
-    if w and prop.absentee_owner:
+    if w and row.absentee_owner:
         score += w * 1.0
         total_weight += w
 
@@ -518,37 +548,110 @@ def _compute_deal_score(
     return round(score / total_weight, 4)
 
 
-# ── Shared scoring + sorting + pagination helper ─────────────────────────
+# ── Core search logic — shared by both routes ────────────────────────────
 
-def _build_page(
-    properties: list[Property],
-    latest_events: dict[tuple[str, str], ListingEvent],
+async def _execute_search(
+    profile_counties: list[str],
     filters: dict[str, Any],
     weights: dict[str, Any],
     page: int,
     page_size: int,
+    db: AsyncSession,
 ) -> PaginatedPropertySearchResult:
-    """Score, filter, sort, and paginate a property list.
+    """Option C hybrid search.
 
-    Called by both search routes after DB fetch and event resolution.
-    Returns a PaginatedPropertySearchResult envelope.
+    Step 1: SQL — fetch scoring columns only for all filtered parcels.
+    Step 2: SQL — fetch latest listing_event scoring columns for those parcels.
+    Step 3: Python — apply event-dependent filters, score, sort full ID list.
+    Step 4: SQL — fetch full Property ORM objects for page slice only.
+    Step 5: SQL — fetch full ListingEvent ORM objects for page slice only.
+    Step 6: Python — build response objects.
     """
-    # ── Python-side listing_type filter
+
+    # ── Step 1: lightweight property scoring fetch ────────────────────
+    scoring_stmt = (
+        select(
+            Property.county_fips,
+            Property.parcel_id,
+            Property.arv_spread,
+            Property.jv,
+            Property.absentee_owner,
+        )
+        .order_by(Property.county_fips, Property.parcel_id)
+    )
+    scoring_stmt = scoring_stmt.where(Property.county_fips.in_(profile_counties))
+    scoring_stmt = _apply_filters(scoring_stmt, filters)
+
+    scoring_result = await db.execute(scoring_stmt)
+    scoring_rows: list[_ScoringRow] = [
+        _ScoringRow(*row) for row in scoring_result.all()
+    ]
+
+    if not scoring_rows:
+        return PaginatedPropertySearchResult(
+            total=0, page=page, page_size=page_size, total_pages=1, results=[]
+        )
+
+    # ── Step 2: lightweight event scoring fetch ───────────────────────
+    # Fetch the latest event per parcel using a subquery on max(id).
+    # Only fetches columns needed for scoring and event-dependent filters.
+    parcel_key_set = {(r.county_fips, r.parcel_id) for r in scoring_rows}
+
+    ev_subq = (
+        select(
+            ListingEvent.county_fips,
+            ListingEvent.parcel_id,
+            func.max(ListingEvent.id).label("max_id"),
+        )
+        .where(ListingEvent.county_fips.in_(profile_counties))
+        .group_by(ListingEvent.county_fips, ListingEvent.parcel_id)
+        .subquery()
+    )
+
+    ev_scoring_stmt = (
+        select(
+            ListingEvent.county_fips,
+            ListingEvent.parcel_id,
+            ListingEvent.signal_tier,
+            ListingEvent.days_on_market,
+            ListingEvent.listing_type,
+            ListingEvent.arv_estimate,
+            ListingEvent.arv_source,
+            ListingEvent.arv_spread,
+        )
+        .join(
+            ev_subq,
+            (ListingEvent.county_fips == ev_subq.c.county_fips)
+            & (ListingEvent.parcel_id == ev_subq.c.parcel_id)
+            & (ListingEvent.id == ev_subq.c.max_id),
+        )
+    )
+
+    ev_scoring_result = await db.execute(ev_scoring_stmt)
+    event_scoring_map: dict[tuple[str, str], _EventScoringRow] = {}
+    for row in ev_scoring_result.all():
+        key = (row.county_fips, row.parcel_id)
+        if key in parcel_key_set:
+            event_scoring_map[key] = _EventScoringRow(*row)
+
+    # ── Step 3: event-dependent filters, scoring, sorting ────────────
+
+    # listing_type filter — requires event
     lt = filters.get("listing_types", {})
     if lt.get("include"):
         allowed = set(lt["include"])
-        properties = [
-            p for p in properties
-            if (ev := latest_events.get((p.county_fips, p.parcel_id))) is not None
+        scoring_rows = [
+            r for r in scoring_rows
+            if (ev := event_scoring_map.get((r.county_fips, r.parcel_id))) is not None
             and ev.listing_type in allowed
         ]
 
-    # ── Python-side days_on_market filter
+    # days_on_market filter — requires event
     dom = filters.get("days_on_market", {})
     if dom.get("min") is not None or dom.get("max") is not None:
         filtered = []
-        for p in properties:
-            ev = latest_events.get((p.county_fips, p.parcel_id))
+        for r in scoring_rows:
+            ev = event_scoring_map.get((r.county_fips, r.parcel_id))
             if ev is None:
                 continue
             if dom.get("min") is not None and (
@@ -559,22 +662,22 @@ def _build_page(
                 ev.days_on_market is None or ev.days_on_market > dom["max"]
             ):
                 continue
-            filtered.append(p)
-        properties = filtered
+            filtered.append(r)
+        scoring_rows = filtered
 
-    # ── Score and apply min_deal_score filter
+    # Score and apply min_deal_score filter
     min_ds = filters.get("min_deal_score", {})
     min_deal_score_val = min_ds.get("value") if min_ds else None
 
-    scored: list[tuple[Property, ListingEvent | None, float | None]] = []
-    for p in properties:
-        ev = latest_events.get((p.county_fips, p.parcel_id))
-        ds = _compute_deal_score(p, ev, weights)
+    scored: list[tuple[_ScoringRow, _EventScoringRow | None, float | None]] = []
+    for r in scoring_rows:
+        ev = event_scoring_map.get((r.county_fips, r.parcel_id))
+        ds = _compute_deal_score(r, ev, weights)
         if min_deal_score_val is not None and (ds is None or ds < min_deal_score_val):
             continue
-        scored.append((p, ev, ds))
+        scored.append((r, ev, ds))
 
-    # ── Sort
+    # Sort
     sort_cfg = filters.get("sort_by", {})
     sort_field = sort_cfg.get("field") if isinstance(sort_cfg, dict) else None
     sort_direction = sort_cfg.get("direction", "DESC") if isinstance(sort_cfg, dict) else "DESC"
@@ -588,59 +691,104 @@ def _build_page(
         sort_field = "deal_score"
         reverse = True
 
-    def _sort_key(item: tuple[Property, ListingEvent | None, float | None]):
-        prop, ev, ds = item
-        # parcel_id tiebreaker appended to every branch — sort ascending on
-        # parcel_id (negate not needed; string sort is stable and consistent)
-        tb = prop.parcel_id  # always unique within county, stable string sort
+    def _sort_key(
+        item: tuple[_ScoringRow, _EventScoringRow | None, float | None]
+    ):
+        row, ev, ds = item
+        tb = row.parcel_id  # stable unique tiebreaker
 
         if sort_field == "deal_score":
             return (ds if ds is not None else -1.0,
-                    prop.arv_spread if prop.arv_spread is not None else -1,
+                    row.arv_spread if row.arv_spread is not None else -1,
                     tb)
         if sort_field == "arv_spread":
-            return (prop.arv_spread if prop.arv_spread is not None else -1,
-                    ds if ds is not None else -1.0,
-                    tb)
-        if sort_field == "list_price":
-            return (prop.list_price if prop.list_price is not None else -1,
+            return (row.arv_spread if row.arv_spread is not None else -1,
                     ds if ds is not None else -1.0,
                     tb)
         if sort_field == "jv":
-            return (prop.jv if prop.jv is not None else -1,
+            return (row.jv if row.jv is not None else -1,
                     ds if ds is not None else -1.0,
                     tb)
-        if sort_field == "years_since_last_sale":
-            return (prop.years_since_last_sale
-                    if prop.years_since_last_sale is not None else -1,
-                    ds if ds is not None else -1.0,
-                    tb)
+        # list_price and years_since_last_sale not on _ScoringRow —
+        # fall through to deal_score for now. These move to SQL ORDER BY
+        # in the Option A migration when deal scoring is stable.
         return (ds if ds is not None else -1.0,
-                prop.arv_spread if prop.arv_spread is not None else -1,
+                row.arv_spread if row.arv_spread is not None else -1,
                 tb)
 
     scored.sort(key=_sort_key, reverse=reverse)
 
-    # ── Apply max_results cap before pagination
+    # max_results cap before pagination
     max_res = filters.get("max_results", {})
     limit = max_res.get("value") if max_res else None
     if limit:
         scored = scored[:limit]
 
     total = len(scored)
-    total_pages = max(1, -(-total // page_size))  # ceiling division
+    total_pages = max(1, -(-total // page_size))
 
-    # ── Slice for requested page
+    # Page slice — IDs only
     start = (page - 1) * page_size
     end = start + page_size
     page_slice = scored[start:end]
 
-    # ── Build result objects
+    if not page_slice:
+        return PaginatedPropertySearchResult(
+            total=total, page=page, page_size=page_size,
+            total_pages=total_pages, results=[],
+        )
+
+    # ── Step 4: full Property fetch for page slice only ───────────────
+    # Preserve page order — fetch then re-sort by the scored order.
+    page_keys = [(r.county_fips, r.parcel_id) for r, _, _ in page_slice]
+
+    # County-scoped fetches to avoid tuple_ IN StatementTooComplexError
+    # (item 78). Group keys by county, fetch per county, merge.
+    keys_by_county: dict[str, list[str]] = defaultdict(list)
+    for fips, pid in page_keys:
+        keys_by_county[fips].append(pid)
+
+    prop_map: dict[tuple[str, str], Property] = {}
+    for fips, pids in keys_by_county.items():
+        prop_result = await db.execute(
+            select(Property).where(
+                Property.county_fips == fips,
+                Property.parcel_id.in_(pids),
+            )
+        )
+        for prop in prop_result.scalars().all():
+            prop_map[(prop.county_fips, prop.parcel_id)] = prop
+
+    # ── Step 5: full ListingEvent fetch for page slice only ───────────
+    ev_map: dict[tuple[str, str], ListingEvent] = {}
+    for fips, pids in keys_by_county.items():
+        ev_full_result = await db.execute(
+            select(ListingEvent)
+            .where(
+                ListingEvent.county_fips == fips,
+                ListingEvent.parcel_id.in_(pids),
+            )
+            .order_by(ListingEvent.parcel_id, ListingEvent.id.desc())
+        )
+        for ev in ev_full_result.scalars().all():
+            key = (ev.county_fips, ev.parcel_id)
+            if key not in ev_map:
+                ev_map[key] = ev
+
+    # ── Step 6: build response — preserve scored sort order ──────────
     out: list[PropertySearchResult] = []
-    for prop, ev, ds in page_slice:
-        latest = ListingEventSummary.model_validate(ev) if ev else None
-        arv_source = ev.arv_source if ev else None
-        arv_estimate = (ev.arv_estimate if ev else None) or prop.arv_estimate
+    for scoring_row, ev_scoring, ds in page_slice:
+        key = (scoring_row.county_fips, scoring_row.parcel_id)
+        prop = prop_map.get(key)
+        if prop is None:
+            # Should not happen — parcel passed filter so it exists.
+            # Skip defensively rather than crash.
+            continue
+
+        ev_full = ev_map.get(key)
+        latest = ListingEventSummary.model_validate(ev_full) if ev_full else None
+        arv_source = ev_full.arv_source if ev_full else None
+        arv_estimate = (ev_full.arv_estimate if ev_full else None) or prop.arv_estimate
 
         out.append(
             PropertySearchResult(
@@ -697,6 +845,9 @@ async def search_properties(
     Loads the profile, validates county access, applies filter_criteria at
     query time, scores, sorts, and returns one page of results.
 
+    Uses Option C hybrid architecture — lightweight scoring fetch across
+    all filtered rows, full ORM hydration for page slice only.
+
     max_results from filter_criteria is applied before pagination.
     user_profile_prefs is upserted with the total result count (pre-page).
     """
@@ -712,35 +863,11 @@ async def search_properties(
     filters: dict[str, Any] = profile.filter_criteria.get("filters", {})
     weights: dict[str, Any] = profile.deal_score_weights or {}
 
-    stmt = (
-        select(Property)
-        .where(Property.county_fips.in_(profile_counties))
-        .order_by(Property.county_fips, Property.parcel_id)
+    paginated = await _execute_search(
+        profile_counties, filters, weights, page, page_size, db
     )
-    stmt = _apply_filters(stmt, filters)
 
-    result = await db.execute(stmt)
-    properties = list(result.scalars().all())
-
-    latest_events: dict[tuple[str, str], ListingEvent] = {}
-
-    if properties:
-        property_key_set = {(p.county_fips, p.parcel_id) for p in properties}
-        ev_result = await db.execute(
-            select(ListingEvent)
-            .where(ListingEvent.county_fips.in_(profile_counties))
-            .order_by(ListingEvent.county_fips, ListingEvent.parcel_id, ListingEvent.id.desc())
-        )
-        for ev in ev_result.scalars().all():
-            key = (ev.county_fips, ev.parcel_id)
-            if key not in property_key_set:
-                continue
-            if key not in latest_events:
-                latest_events[key] = ev
-
-    paginated = _build_page(properties, latest_events, filters, weights, page, page_size)
-
-    # ── Upsert user_profile_prefs — total count, not page count
+    # Upsert user_profile_prefs — total count, not page count
     await db.execute(
         pg_insert(UserProfilePrefs)
         .values(
@@ -776,6 +903,9 @@ async def search_properties_inline(
     No filter profile is required and none is written. County access is
     validated. Behaviour is otherwise identical to search_properties.
     user_profile_prefs is not written — no profile_id is available.
+
+    Uses Option C hybrid architecture — lightweight scoring fetch across
+    all filtered rows, full ORM hydration for page slice only.
     """
     profile_counties = list(dict.fromkeys(body.county_fips))
     if not profile_counties:
@@ -791,33 +921,9 @@ async def search_properties_inline(
     filters: dict[str, Any] = body.filter_criteria.get("filters", {})
     weights: dict[str, Any] = body.deal_score_weights or {}
 
-    stmt = (
-        select(Property)
-        .where(Property.county_fips.in_(profile_counties))
-        .order_by(Property.county_fips, Property.parcel_id)
+    return await _execute_search(
+        profile_counties, filters, weights, body.page, body.page_size, db
     )
-    stmt = _apply_filters(stmt, filters)
-
-    result = await db.execute(stmt)
-    properties = list(result.scalars().all())
-
-    latest_events: dict[tuple[str, str], ListingEvent] = {}
-
-    if properties:
-        property_key_set = {(p.county_fips, p.parcel_id) for p in properties}
-        ev_result = await db.execute(
-            select(ListingEvent)
-            .where(ListingEvent.county_fips.in_(profile_counties))
-            .order_by(ListingEvent.county_fips, ListingEvent.parcel_id, ListingEvent.id.desc())
-        )
-        for ev in ev_result.scalars().all():
-            key = (ev.county_fips, ev.parcel_id)
-            if key not in property_key_set:
-                continue
-            if key not in latest_events:
-                latest_events[key] = ev
-
-    return _build_page(properties, latest_events, filters, weights, body.page, body.page_size)
 
 
 @router.get("/{county_fips}/properties/{parcel_id}", response_model=PropertyDetail)

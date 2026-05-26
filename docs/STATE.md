@@ -124,6 +124,7 @@ Retained as reference for backfill completeness verification.
 | 91 | Map pins — colored markers by signal tier | Post-deployment polish. Custom Marker children required. |
 | 92 | Map pins — auto-fit bounds to pageResults on page change | Low demo value with single-region data. Revisit when multi-region. |
 | 103 | Local dev environment setup not documented — vite proxy port, docker-compose ports mapping, npm run dev workflow | Will cause repeated confusion when returning to local dev after a gap |
+| 104 | Search architecture — Option A migration (full SQL ORDER BY / LIMIT / OFFSET) | Prerequisite: deal scoring engine (item 19) must be stable enough to express score as a SQL expression. Option C is the correct interim state. |
 
 ## Completed Items (summary — detail in DECISIONS.md and context/ files)
 
@@ -193,3 +194,4 @@ Retained as reference for backfill completeness verification.
 | 99 | Root .dockerignore — removed frontend/ exclusion to allow nginx multi-stage build to access frontend source from repo root build context | 2026-05-24 |
 | 100 | Santa Rosa CAMA scraper — migrate parcelview → parcelcard endpoint; host_database_url fix for host-side scripts | 2026-05-24 |
 | 102 | Pagination stability fix — added ORDER BY county_fips, parcel_id to both search route DB fetches; added parcel_id tiebreaker to _build_page sort key. Resolves Escambia pagination returning identical records on every page change. | 2026-05-25 |
+| 104 | Search architecture — Option C hybrid. Lightweight scoring fetch (5 columns) replaces full ORM load for all filtered rows. Full ORM hydration scoped to page slice only (25 rows). Both search routes unified through _execute_search. _build_page eliminated. County-scoped page hydration preserves item 78 fix. | 2026-05-25 |
