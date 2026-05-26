@@ -1,6 +1,6 @@
 # Project Penstock — context/cama.md
 # Paste this alongside AGENTS.md when working on CAMA ingest.
-# Last updated: 2026-05-24
+# Last updated: 2026-05-26
 
 ## File Paths
 
@@ -23,20 +23,16 @@ python -m real_invest_fl.ingest.cama.escambia [options]
 ## Escambia CAMA Detail
 
 - Source: https://www.escpa.org/CAMA/Detail_a.aspx?s={parcel_id}
-- Site was DOWN 2026-05-04 through approximately 2026-05-24. Now confirmed UP.
+- Site was DOWN 2026-05-04 through approximately 2026-05-24. Restarted 2026-05-26.
 - Target: dor_uc = '001', ~106,372 parcels
 - Beds/baths NOT available from ECPA CAMA detail page
 - Sale history IS available and captured from ECPA CAMA detail page. 
   parse_sales() reads the Sales Data table (ctl00_MasterPlaceHolder_SalesCell).
   Grantor/grantee not available — stored as empty string.
-- Previous run wrote zoning to 1,399 parcels (dor_uc = '001') but
-  cama_enriched_at was never set — confirmed via DB inspection 2026-05-02.
-  All remaining CAMA fields are NULL for those 1,399 parcels.
-  Full re-scrape of all 106,372 dor_uc = '001' parcels required.
 - Parcel ID format: 16-character no-hyphen string (e.g. 182S303000004001)
   confirmed from DB. URL format matches directly — no transformation needed.
 - Rate limits: DEFAULT_DELAY=1.5, DEFAULT_DELAY_MAX=4.0,
-  REST_EVERY=49, REST_SECONDS=420.0
+  REST_EVERY=51, REST_SECONDS=120.0
 - Soft-block signature: 302 redirect to escpa.org root, or response
   body missing "Parcel ID:" marker. Scraper stops cleanly on detection.
 - Sale date parsing: MM/DD/YYYY stored as-is. MM/YYYY normalized to

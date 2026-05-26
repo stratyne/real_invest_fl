@@ -82,9 +82,8 @@ Retained as reference for backfill completeness verification.
 - **Santa Rosa:** ~47,884 / 68,312 enriched. STOPPED — paused pending item 101 resolution.
   REST_EVERY=500, REST_SECONDS=300.0. Resumable via cama_enriched_at IS NULL.
   parcel_sale_history data is correct — no action needed on existing rows.
-- **Escambia:** 847 / 106,372 enriched. STOPPED — parcel_sale_history bug confirmed.
-  Existing 3,941 sale history rows must be deleted before restart.
-  REST_EVERY=49, REST_SECONDS=420.0. Resumable via cama_enriched_at IS NULL after scraper fix.
+- **Escambia:** 0 / 106,372 enriched. Restarted 2026-05-26.
+  REST_EVERY=51, REST_SECONDS=120.0. Resumable via cama_enriched_at IS NULL.
 
 ## Active Items
 
@@ -145,6 +144,7 @@ Retained as reference for backfill completeness verification.
 | 33 | parcel_sale_history table (v0.14, v0.15) | 2026-05-04 |
 | 34 | Multi-county CAMA framework | 2026-05-04 |
 | 35 | Phase 4 API scaffold — deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |
+| 37 | counties.nal_last_ingested_at and cama_last_ingested_at stamps added | 2026-05-26 |
 | 38 | seed_outreach_templates.py — system EMAIL + LETTER templates seeded | 2026-05-04 |
 | 39 | ORM models — OutreachTemplate, SkipTraceCache, OutreachLog, calendar_link, back-populates patches | 2026-05-12 |
 | 40 | Pydantic schemas — outreach inline in routes/outreach.py | 2026-05-12 |
@@ -194,6 +194,7 @@ Retained as reference for backfill completeness verification.
 | 98 | Deployment workflow — frontend build consolidated into nginx multi-stage image; frontend service and frontend_dist named volume eliminated; frontend/Dockerfile deleted | 2026-05-24 |
 | 99 | Root .dockerignore — removed frontend/ exclusion to allow nginx multi-stage build to access frontend source from repo root build context | 2026-05-24 |
 | 100 | Santa Rosa CAMA scraper — migrate parcelview → parcelcard endpoint; host_database_url fix for host-side scripts | 2026-05-24 |
+| 101 | Escambia CAMA scraper — map ECPA Type column to instrument_type; delete 3,941 bad rows; restart full run | 2026-05-26 |
 | 102 | Pagination stability fix — added ORDER BY county_fips, parcel_id to both search route DB fetches; added parcel_id tiebreaker to _build_page sort key. Resolves Escambia pagination returning identical records on every page change. | 2026-05-25 |
 | 104 | Search architecture — Option C hybrid. Lightweight scoring fetch (5 columns) replaces full ORM load for all filtered rows. Full ORM hydration scoped to page slice only (25 rows). Both search routes unified through _execute_search. _build_page eliminated. County-scoped page hydration preserves item 78 fix. | 2026-05-25 |
 | 107 | Column sort — sortable headers in ResultsPage, backend _sort_key for 9 fields, scored.sort() call, max_results cap moved post-sort | 2026-05-26 |

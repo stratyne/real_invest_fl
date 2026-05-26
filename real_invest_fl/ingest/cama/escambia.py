@@ -318,13 +318,14 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
     Fields captured:
         sale_date          — Sale Date column (MM/DD/YYYY or MM/YYYY)
         sale_price         — Value column ($NNN,NNN — stripped to integer)
-        sale_type          — Type column (WD/QC/CT/OT/CJ/SC etc.)
+        instrument_type    — Type column (WD/QC/CT/OT/CJ/SC etc.)
         multi_parcel       — Multi Parcel column (Y = True, N = False)
 
     Fields NOT surfaced on this page (written as empty per schema default):
-        grantor, grantee   — only accessible via Clerk link, not inline
-        instrument_type    — not present on ECPA detail page
-        qualification_code — not present on ECPA detail page
+        grantor, grantee        — only accessible via Clerk link, not inline
+        qualification_code      — not present on ECPA detail page
+        sale_type               — not present on ECPA detail page (I/V
+                                  improved/vacant classification not exposed)
 
     Note: escambia_taxdeed_clerk.py captures tax deed auction listings
     from the Clerk of Court and writes to listing_events. It is entirely
@@ -402,10 +403,10 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
         sales.append({
             "sale_date":          sale_date_raw,
             "sale_price":         _cell("sale_price").replace("$", "").replace(",", "").strip(),
-            "sale_type":          _cell("sale_type"),
-            "multi_parcel":       "N" if multi_raw in ("", "N") else "Y",
-            "instrument_type":    "",
+            "instrument_type":    _cell("sale_type"),
             "qualification_code": "",
+            "sale_type":          "",
+            "multi_parcel":       "N" if multi_raw in ("", "N") else "Y",
             "grantor":            "",
             "grantee":            "",
         })
@@ -431,6 +432,6 @@ if __name__ == "__main__":
         target_dor_ucs=["001"],   # Single-family residential
         default_delay=1.5,        # ECPA tested minimum 1.5
         default_delay_max=4.0,    # ECPA tested maximum 4.0
-        rest_every=49,        # reduced from 100, 75, 49 — fewer requests per window
-        rest_seconds=420.0,   # increased from 270, 360, 420 — longer reset wait
+        rest_every=51,        # reduced from 100, 75, 49 — fewer requests per window
+        rest_seconds=120.0,   # increased from 270, 360, 420 — longer reset wait
     )

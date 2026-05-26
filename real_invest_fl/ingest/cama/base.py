@@ -555,6 +555,29 @@ async def run(
         counters["failed"],
     )
 
+    # ── Stamp counties.cama_last_ingested_at ─────────────────────────────
+    # Skipped in dry_run mode — no writes occurred so no stamp is valid.
+    # Stamped even on soft-block stop — partial progress is real progress.
+    if not dry_run:
+        async with AsyncSessionLocal() as stamp_session:
+            await stamp_session.execute(
+                text(
+                    "UPDATE counties "
+                    "SET cama_last_ingested_at = :now, "
+                    "    updated_at = :now "
+                    "WHERE county_fips = :fips"
+                ),
+                {
+                    "now": datetime.now(timezone.utc),
+                    "fips": county_fips,
+                },
+            )
+            await stamp_session.commit()
+        logger.info(
+            "counties.cama_last_ingested_at stamped | county_fips=%s",
+            county_fips,
+        )
+
     await engine.dispose()
 
 
