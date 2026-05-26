@@ -590,17 +590,34 @@ def _build_page(
 
     def _sort_key(item: tuple[Property, ListingEvent | None, float | None]):
         prop, ev, ds = item
+        # parcel_id tiebreaker appended to every branch — sort ascending on
+        # parcel_id (negate not needed; string sort is stable and consistent)
+        tb = prop.parcel_id  # always unique within county, stable string sort
+
         if sort_field == "deal_score":
-            return (ds if ds is not None else -1.0, prop.arv_spread if prop.arv_spread is not None else -1)
+            return (ds if ds is not None else -1.0,
+                    prop.arv_spread if prop.arv_spread is not None else -1,
+                    tb)
         if sort_field == "arv_spread":
-            return (prop.arv_spread if prop.arv_spread is not None else -1, ds if ds is not None else -1.0)
+            return (prop.arv_spread if prop.arv_spread is not None else -1,
+                    ds if ds is not None else -1.0,
+                    tb)
         if sort_field == "list_price":
-            return (prop.list_price if prop.list_price is not None else -1, ds if ds is not None else -1.0)
+            return (prop.list_price if prop.list_price is not None else -1,
+                    ds if ds is not None else -1.0,
+                    tb)
         if sort_field == "jv":
-            return (prop.jv if prop.jv is not None else -1, ds if ds is not None else -1.0)
+            return (prop.jv if prop.jv is not None else -1,
+                    ds if ds is not None else -1.0,
+                    tb)
         if sort_field == "years_since_last_sale":
-            return (prop.years_since_last_sale if prop.years_since_last_sale is not None else -1, ds if ds is not None else -1.0)
-        return (ds if ds is not None else -1.0, prop.arv_spread if prop.arv_spread is not None else -1)
+            return (prop.years_since_last_sale
+                    if prop.years_since_last_sale is not None else -1,
+                    ds if ds is not None else -1.0,
+                    tb)
+        return (ds if ds is not None else -1.0,
+                prop.arv_spread if prop.arv_spread is not None else -1,
+                tb)
 
     scored.sort(key=_sort_key, reverse=reverse)
 
@@ -695,7 +712,11 @@ async def search_properties(
     filters: dict[str, Any] = profile.filter_criteria.get("filters", {})
     weights: dict[str, Any] = profile.deal_score_weights or {}
 
-    stmt = select(Property).where(Property.county_fips.in_(profile_counties))
+    stmt = (
+        select(Property)
+        .where(Property.county_fips.in_(profile_counties))
+        .order_by(Property.county_fips, Property.parcel_id)
+    )
     stmt = _apply_filters(stmt, filters)
 
     result = await db.execute(stmt)
@@ -770,7 +791,11 @@ async def search_properties_inline(
     filters: dict[str, Any] = body.filter_criteria.get("filters", {})
     weights: dict[str, Any] = body.deal_score_weights or {}
 
-    stmt = select(Property).where(Property.county_fips.in_(profile_counties))
+    stmt = (
+        select(Property)
+        .where(Property.county_fips.in_(profile_counties))
+        .order_by(Property.county_fips, Property.parcel_id)
+    )
     stmt = _apply_filters(stmt, filters)
 
     result = await db.execute(stmt)
