@@ -22,12 +22,10 @@ export async function searchProperties(
 
 export async function searchPropertiesInline(
   payload: InlineSearchRequest,
-  page = 1,
-  pageSize = 25,
 ): Promise<PaginatedPropertySearchResult> {
   const res = await client.post<PaginatedPropertySearchResult>(
     '/properties/search',
-    { ...payload, page, page_size: pageSize },
+    payload,
   )
   return res.data
 }

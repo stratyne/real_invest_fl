@@ -221,8 +221,6 @@ function buildInlineRequest(
   page: number,
   pageSize: number,
 ): InlineSearchRequest {
-  // filterStateToPayload produces a FilterProfileCreateRequest-shaped object.
-  // We extract only the fields InlineSearchRequest needs.
   const payload = filterStateToPayload(filterState, '__inline__', countyFips)
   return {
     county_fips: countyFips,
@@ -296,7 +294,7 @@ export default function ResultsPage() {
     }
 
     setLoading(true)
-    setPopupResult(null)   // clear stale popup whenever results change
+    setPopupResult(null)
     setSelectedResult(null)
 
     const run = (profileId != null && filterState == null)

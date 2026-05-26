@@ -123,6 +123,7 @@ Retained as reference for backfill completeness verification.
 | 44 | Skip-trace live integration | BatchData API wrapper, credit/billing model, DNC compliance. Schema scaffold in place (v0.17). Unblock after Phase 4 outreach flow is live. |
 | 91 | Map pins — colored markers by signal tier | Post-deployment polish. Custom Marker children required. |
 | 92 | Map pins — auto-fit bounds to pageResults on page change | Low demo value with single-region data. Revisit when multi-region. |
+| 103 | Local dev environment setup not documented — vite proxy port, docker-compose ports mapping, npm run dev workflow | Will cause repeated confusion when returning to local dev after a gap |
 
 ## Completed Items (summary — detail in DECISIONS.md and context/ files)
 
@@ -191,3 +192,4 @@ Retained as reference for backfill completeness verification.
 | 98 | Deployment workflow — frontend build consolidated into nginx multi-stage image; frontend service and frontend_dist named volume eliminated; frontend/Dockerfile deleted | 2026-05-24 |
 | 99 | Root .dockerignore — removed frontend/ exclusion to allow nginx multi-stage build to access frontend source from repo root build context | 2026-05-24 |
 | 100 | Santa Rosa CAMA scraper — migrate parcelview → parcelcard endpoint; host_database_url fix for host-side scripts | 2026-05-24 |
+| 102 | Pagination stability fix — added ORDER BY county_fips, parcel_id to both search route DB fetches; added parcel_id tiebreaker to _build_page sort key. Resolves Escambia pagination returning identical records on every page change. | 2026-05-25 |
