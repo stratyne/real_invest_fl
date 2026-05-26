@@ -8,9 +8,10 @@ Data source: https://www.escpa.org/CAMA/Detail_a.aspx?s={parcel_id}
 County-specific implementations:
     fetch_page()      — ECPA ASP.NET detail page, rate-limit aware
     parse_building()  — ECPA-specific HTML structure
-    parse_sales()     — ECPA does not surface sale history on the CAMA
-                        detail page. Returns empty list. Sale history
-                        for Escambia requires a separate source.
+    parse_sales()     — ECPA Sales Data table: Date, Book, Page, Price,
+                        Type, Multi Parcel. Grantor/Grantee not surfaced
+                        on this page — written as empty strings per schema
+                        default. sale history written to parcel_sale_history.
 
 ECPA rate limiting:
     Server enforces ~100 requests per ~3-minute window.
@@ -162,13 +163,27 @@ def parse_building(html: str, parcel_id: str) -> dict:
     """
     Parse building characteristics from the ECPA CAMA detail page.
 
-    ECPA page structure:
+    ECPA page structure (confirmed live 2026-05-25, 20 parcels sampled):
         - Building data in <table id="ctl00_MasterPlaceHolder_tblBldgs">
-        - Year Built in <th> header: "Year Built: YYYY"
-        - Total SF in <th> or <span style="background-color:LightGrey">:
-          "NNNN Total SF"
-        - Structural fields as <b>LABEL</b><i>VALUE</i> pairs
-        - Zoning in <div id="ctl00_MasterPlaceHolder_MapBodyStats">
+        - <th> header per building:
+          "Address:{addr}, Improvement Type: {type},
+           Year Built: {YYYY}, Effective Year: {YYYY},
+           PA Building ID#: {id}"
+        - Total SF in same <th>: "NNNN Total SF"
+          (also available as LightGrey span fallback)
+        - Structural fields as <b>LABEL</b>-<i>VALUE</i> pairs
+
+    Structural elements confirmed present on ALL SFR parcels (13 fields):
+        DECOR/MILLWORK, DWELLING UNITS, EXTERIOR WALL, FLOOR COVER,
+        FOUNDATION, HEAT/AIR, INTERIOR WALL, NO. PLUMBING FIXTURES,
+        NO. STORIES, ROOF COVER, ROOF FRAMING, STORY HEIGHT,
+        STRUCTURAL FRAME
+
+    Fields confirmed ABSENT from ECPA for all SFR parcels:
+        BEDROOMS, BATHROOMS, QUALITY/GRADE, CONDITION
+        These are hard limits of ECPA's public data exposure.
+
+    Zoning in <div id="ctl00_MasterPlaceHolder_MapBodyStats">.
 
     Returns dict with canonical keys matching base.coerce_building()
     input expectations.
@@ -208,19 +223,26 @@ def parse_building(html: str, parcel_id: str) -> dict:
             continue
         th_text = th.get_text(separator=" ", strip=True)
 
-        # Year Built
+        # ── Year Built ───────────────────────────────────────────────── #
         yr_match = re.search(
             r"Year Built:\s*(\d{4})", th_text, re.IGNORECASE
         )
         if yr_match and "act_yr_blt" not in fields:
             fields["act_yr_blt"] = yr_match.group(1)
 
-        # Total SF from <th>
+        # ── Effective Year ───────────────────────────────────────────── #
+        eff_match = re.search(
+            r"Effective Year:\s*(\d{4})", th_text, re.IGNORECASE
+        )
+        if eff_match and "eff_yr_blt" not in fields:
+            fields["eff_yr_blt"] = eff_match.group(1)
+
+        # ── Total SF from <th> ───────────────────────────────────────── #
         sf_match = re.search(r"(\d+)\s+Total SF", th_text, re.IGNORECASE)
         if sf_match and "living_area" not in fields:
             fields["living_area"] = sf_match.group(1)
 
-        # Structural fields as <b>LABEL</b><i>VALUE</i>
+        # ── Structural fields as <b>LABEL</b>-<i>VALUE</i> ──────────── #
         for b_tag in tbl.find_all("b"):
             label_raw = b_tag.get_text(strip=True).upper()
             i_tag = b_tag.find_next_sibling("i")
@@ -261,7 +283,7 @@ def parse_building(html: str, parcel_id: str) -> dict:
                     and "condition_code" not in fields:
                 fields["condition_code"] = value_raw
 
-    # Total SF from LightGrey span (fallback)
+    # ── Total SF from LightGrey span (fallback) ───────────────────────── #
     if "living_area" not in fields and building_tables:
         for span in building_tables.find_all("span"):
             style = span.get("style", "")
@@ -284,16 +306,116 @@ def parse_building(html: str, parcel_id: str) -> dict:
 
 def parse_sales(html: str, parcel_id: str) -> list[dict]:
     """
-    ECPA CAMA detail page does not surface sale history.
+    Parse sale history from the ECPA CAMA detail page.
 
-    Sale history for Escambia County is available from the Escambia
-    Clerk of Court (escambiaclerk.com) and is captured separately
-    via escambia_taxdeed_clerk.py and the lis pendens / foreclosure
-    staging parsers.
+    ECPA Sales Data table structure (confirmed live 2026-05-25):
+        Row 0: <th> — "Sales Data" section header (colspan=7, no data)
+        Row 1: <td> — Column headers: Sale Date | Book | Page | Value |
+                       Type | Multi Parcel | Records
+        Row 2+: <td> — One transaction per row
+        Last row: <td> — Footer attribution (Official Records Inquiry...)
 
-    Returns empty list always.
+    Fields captured:
+        sale_date          — Sale Date column (MM/DD/YYYY or MM/YYYY)
+        sale_price         — Value column ($NNN,NNN — stripped to integer)
+        sale_type          — Type column (WD/QC/CT/OT/CJ/SC etc.)
+        multi_parcel       — Multi Parcel column (Y = True, N = False)
+
+    Fields NOT surfaced on this page (written as empty per schema default):
+        grantor, grantee   — only accessible via Clerk link, not inline
+        instrument_type    — not present on ECPA detail page
+        qualification_code — not present on ECPA detail page
+
+    Note: escambia_taxdeed_clerk.py captures tax deed auction listings
+    from the Clerk of Court and writes to listing_events. It is entirely
+    separate from ownership chain sale history and does not overlap with
+    this function.
+
+    Returns list of raw dicts, one per sale transaction.
+    Returns empty list if no Sales Data section found.
     """
-    return []
+    soup = BeautifulSoup(html, "html.parser")
+    sales: list[dict] = []
+
+    # Locate the Sales Data table via its containing cell ID — more
+    # reliable than searching for <th> text across the whole document.
+    sales_cell = soup.find(id="ctl00_MasterPlaceHolder_SalesCell")
+    if not sales_cell:
+        logger.debug("Parcel %s — no SalesCell found", parcel_id)
+        return sales
+
+    sales_table = sales_cell.find("table")
+    if not sales_table:
+        logger.debug("Parcel %s — no sales table in SalesCell", parcel_id)
+        return sales
+
+    rows = sales_table.find_all("tr")
+    # Row 0: section <th> header ("Sales Data...")
+    # Row 1: column headers (<td> cells)
+    # Row 2+: data rows
+    if len(rows) < 3:
+        return sales
+
+    # ── Column mapping from row 1 ─────────────────────────────────────── #
+    header_cells = rows[1].find_all("td")
+    col_map: dict[str, int] = {}
+    for idx, cell in enumerate(header_cells):
+        text_val = cell.get_text(strip=True).lower()
+        if "sale date" in text_val:
+            col_map["sale_date"] = idx
+        elif text_val == "value":
+            col_map["sale_price"] = idx
+        elif text_val == "type":
+            col_map["sale_type"] = idx
+        elif "multi" in text_val:
+            col_map["multi_parcel"] = idx
+
+    if "sale_date" not in col_map:
+        logger.warning(
+            "Parcel %s — could not identify Sale Date column in sales table",
+            parcel_id,
+        )
+        return sales
+
+    # ── Data rows ─────────────────────────────────────────────────────── #
+    for tr in rows[2:]:
+        cells = tr.find_all("td")
+        if not cells:
+            continue
+
+        def _cell(key: str) -> str:
+            idx = col_map.get(key)
+            if idx is None or idx >= len(cells):
+                return ""
+            return cells[idx].get_text(strip=True)
+
+        sale_date_raw = _cell("sale_date")
+        if not sale_date_raw:
+            continue
+
+        # Skip the footer attribution row
+        if "official records" in sale_date_raw.lower():
+            continue
+
+        multi_raw = _cell("multi_parcel").strip().upper()
+
+        sales.append({
+            "sale_date":          sale_date_raw,
+            "sale_price":         _cell("sale_price").replace("$", "").replace(",", "").strip(),
+            "sale_type":          _cell("sale_type"),
+            "multi_parcel":       "N" if multi_raw in ("", "N") else "Y",
+            "instrument_type":    "",
+            "qualification_code": "",
+            "grantor":            "",
+            "grantee":            "",
+        })
+
+    if sales:
+        logger.debug(
+            "Parcel %s — parsed %d sale records", parcel_id, len(sales)
+        )
+
+    return sales
 
 
 # ── entry point ───────────────────────────────────────────────────────────────
@@ -307,8 +429,8 @@ if __name__ == "__main__":
         parse_sales_fn=parse_sales,
         headers=HEADERS,
         target_dor_ucs=["001"],   # Single-family residential
-        default_delay=1.5,        # ECPA tested minimum
-        default_delay_max=4.0,    # ECPA tested maximum
-        rest_every=100,           # ECPA rate limit window
-        rest_seconds=270.0,       # ECPA rest duration
+        default_delay=1.5,        # ECPA tested minimum 1.5
+        default_delay_max=4.0,    # ECPA tested maximum 4.0
+        rest_every=49,        # reduced from 100, 75, 49 — fewer requests per window
+        rest_seconds=420.0,   # increased from 270, 360, 420 — longer reset wait
     )

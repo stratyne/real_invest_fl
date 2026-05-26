@@ -26,8 +26,9 @@ python -m real_invest_fl.ingest.cama.escambia [options]
 - Site was DOWN 2026-05-04 through approximately 2026-05-24. Now confirmed UP.
 - Target: dor_uc = '001', ~106,372 parcels
 - Beds/baths NOT available from ECPA CAMA detail page
-- Sale history NOT available from ECPA CAMA detail page
-  (captured via escambia_taxdeed_clerk.py and staging parsers)
+- Sale history IS available and captured from ECPA CAMA detail page. 
+  parse_sales() reads the Sales Data table (ctl00_MasterPlaceHolder_SalesCell).
+  Grantor/grantee not available — stored as empty string.
 - Previous run wrote zoning to 1,399 parcels (dor_uc = '001') but
   cama_enriched_at was never set — confirmed via DB inspection 2026-05-02.
   All remaining CAMA fields are NULL for those 1,399 parcels.
@@ -35,9 +36,12 @@ python -m real_invest_fl.ingest.cama.escambia [options]
 - Parcel ID format: 16-character no-hyphen string (e.g. 182S303000004001)
   confirmed from DB. URL format matches directly — no transformation needed.
 - Rate limits: DEFAULT_DELAY=1.5, DEFAULT_DELAY_MAX=4.0,
-  REST_EVERY=100, REST_SECONDS=270.0
+  REST_EVERY=49, REST_SECONDS=420.0
 - Soft-block signature: 302 redirect to escpa.org root, or response
   body missing "Parcel ID:" marker. Scraper stops cleanly on detection.
+- Sale date parsing: MM/DD/YYYY stored as-is. MM/YYYY normalized to
+  date(YYYY, MM, 1) and stored. Unparseable formats logged at DEBUG and skipped.
+- eff_yr_blt: captured from "Effective Year" label in building table header.
 
 ## Santa Rosa CAMA Detail
 

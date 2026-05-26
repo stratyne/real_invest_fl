@@ -1,12 +1,12 @@
 # Project Penstock — STATE.md
 # Current project status only. No rationale. No design decisions.
-# Updated: 2026-05-24
+# Updated: 2026-05-25
 
 ## Active Phase
 **Phase 2** (scraping/matching) — core complete, scheduler/output pending.
 **Phase 4** (UI) — active. Deployment complete. Tail items pending.
-Phase 2 and Phase 4 run in parallel. Santa Rosa CAMA runs in background.
-Escambia CAMA unblocked 2026-05-24 — dry-run pending before live run.
+Phase 2 and Phase 4 run in parallel.
+Both CAMA runs active in background.
 
 ## Phase Summary
 
@@ -17,15 +17,15 @@ Escambia CAMA unblocked 2026-05-24 — dry-run pending before live run.
 | 3 | Subscription Sources and CAMA Refresh | NOT STARTED |
 | 4 | UI — FastAPI + React + MapLibre | ACTIVE — dashboard flow complete, map pins live |
 
-**Phase 1 remaining:** CAMA enrichment (Santa Rosa in progress, Escambia site down).
+**Phase 1 remaining:** CAMA enrichment (Santa Rosa in progress, Escambia in progress).
 All other Phase 1 work complete.
 
 **Phase 3 scope:** Landvoice, REDX, PropStream modules. Annual NAL/CAMA refresh
 pipeline. Multi-county CAMA architecture (each county PA has its own website —
 no shared scraper possible).
 
-**Phase 2 / Phase 4 parallel:** Santa Rosa CAMA runs in background. UI
-development proceeds in parallel.
+**Phase 2 / Phase 4 parallel:** Both CAMA runs active in background.
+UI development proceeds in parallel.
 
 ## Migration Chain
 HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
@@ -78,25 +78,22 @@ Retained as reference for backfill completeness verification.
 | Auction.com listings | 11 records | 2026-04-28 initial load |
 | Zillow listings | 218 records | 13 foreclosures + 205 for-sale, 2026-04-28 |
 
-## CAMA Run Status (updated 2026-05-24)
-- **Santa Rosa:** 7,361 / 68,312 enriched. Run restarted 2026-05-24.
-  60,951 parcels remaining. Scraper migrated from parcelview.srcpa.gov
-  (Remix app, JS-only) to parcelcard.srcpa.gov (SSR, plain httpx).
-  Building data now sourced from window.__remixContext JSON.
-  Settings: delay 1.0–3.0s, REST_EVERY=500, REST_SECONDS=300.0
-  Run is resumable — cama_enriched_at IS NULL filter skips processed parcels.
-- **Escambia:** 0 enriched. escpa.org confirmed UP as of 2026-05-24.
-  Parcel ID format confirmed: 16-character no-hyphen (e.g. 182S303000004001).
-  Must run `--limit 5 --dry-run` before any live run.
+## CAMA Run Status (updated 2026-05-25)
+- **Santa Rosa:** ~36,600 / 68,312 enriched. Running unattended.
+  REST_EVERY=500, REST_SECONDS=300.0. Resumable via cama_enriched_at IS NULL.
+- **Escambia:** ~275 / 106,372 enriched. Live run started 2026-05-25.
+  REST_EVERY=75, REST_SECONDS=360.0. Resumable via cama_enriched_at IS NULL.
+  Sale dates: MM/DD/YYYY stored as-is; MM/YYYY normalized to first-of-month.
+  Soft-block confirmed at ~100 req — REST parameters tuned accordingly.
 
 ## Active Items
 
 | # | Status | Description | Next Action |
 |---|---|---|---|
-| 1 | PARTIAL | Beds/baths opportunistic population | Bulk source pending — not a blocker |
+| 1 | PARTIAL | Beds/baths opportunistic population for Escambia County | Bulk source pending — not a blocker |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
-| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running (parcelcard); Escambia dry-run next |
+| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running (parcelcard); Escambia live run started 2026-05-25 |
 | 17 | PENDING | arv_calculator.py refactor | Comp-based ARV engine using parcel_sale_history + NAL qual codes |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
 | 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job |
@@ -113,6 +110,7 @@ Retained as reference for backfill completeness verification.
 | 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
 | 73 | PENDING | PropertyValueHistory ORM relationship on Property — model not in schema.md | Investigate — may be POC artifact |
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
+| 101 | PENDING | santa_rosa.py — sale_type column stores V/I qualification flag instead of instrument type (WD/QC/etc). Santa Rosa parcelcard does not surface instrument type — need to determine correct source field or rename column usage. Blocks arms-length filter in ARV engine. |
 
 ## Deferred Items
 

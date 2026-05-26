@@ -196,17 +196,22 @@ def coerce_sale(
     sale_date_str = raw.get("sale_date", "").strip()
     sale_date: Optional[date] = None
     if sale_date_str:
-        try:
-            sale_date = datetime.strptime(sale_date_str, "%m/%d/%Y").date()
-        except ValueError:
-            logger.warning(
-                "Parcel %s — unparseable sale_date: %s",
+        for fmt in ("%m/%d/%Y", "%m/%Y"):
+            try:
+                parsed = datetime.strptime(sale_date_str, fmt)
+                # MM/YYYY has no day component — normalize to first of month
+                sale_date = parsed.date().replace(day=1) if fmt == "%m/%Y" \
+                    else parsed.date()
+                break
+            except ValueError:
+                continue
+
+        if sale_date is None:
+            logger.debug(
+                "Parcel %s — unparseable sale_date skipped: %s",
                 parcel_id, sale_date_str,
             )
             return None
-
-    if sale_date is None:
-        return None
 
     price_str = re.sub(r"[^\d]", "", raw.get("sale_price", ""))
     sale_price: Optional[int] = int(price_str) if price_str else None
