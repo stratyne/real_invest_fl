@@ -6,7 +6,7 @@
 **Phase 2** (scraping/matching) — core complete, scheduler/output pending.
 **Phase 4** (UI) — active. Deployment complete. Tail items pending.
 Phase 2 and Phase 4 run in parallel.
-Both CAMA runs STOPPED pending item 101 scraper fix.
+Both CAMA runs ACTIVE.
 
 ## Phase Summary
 
@@ -59,8 +59,8 @@ mqi_qualified_at once Phase 4 query-time filter is live.
 
 | County | FIPS | NAL rows | GIS geometry | CAMA enriched | Notes |
 |---|---|---|---|---|---|
-| Escambia | 12033 | 170,561 | 160,264 | 847 | dor_uc backfilled; escpa.org confirmed UP 2026-05-24; dry-run required before live run |
-| Santa Rosa | 12113 | 120,500 | 111,036 | 47,884 (20,428 remaining) | Run restarted 2026-05-24 against parcelcard.srcpa.gov |
+| Escambia | 12033 | 170,561 | 160,264 | 3060 | dor_uc backfilled; escpa.org confirmed UP 2026-05-24; dry-run required before live run |
+| Santa Rosa | 12113 | 120,500 | 111,036 | 56,858 (11,454 remaining) | Run restarted 2026-05-24 against parcelcard.srcpa.gov |
 | All others | — | staged only | staged only | 0 | NAL + GIS files in place |
 
 **Total properties in DB:** 291,061
@@ -79,11 +79,11 @@ Retained as reference for backfill completeness verification.
 | Zillow listings | 218 records | 13 foreclosures + 205 for-sale, 2026-04-28 |
 
 ## CAMA Run Status (updated 2026-05-26)
-- **Santa Rosa:** ~47,884 / 68,312 enriched. STOPPED — paused pending item 101 resolution.
+- **Santa Rosa:** RUNNING. ~56,858 / 68,312 enriched
   REST_EVERY=500, REST_SECONDS=300.0. Resumable via cama_enriched_at IS NULL.
   parcel_sale_history data is correct — no action needed on existing rows.
-- **Escambia:** 0 / 106,372 enriched. Restarted 2026-05-26.
-  REST_EVERY=51, REST_SECONDS=120.0. Resumable via cama_enriched_at IS NULL.
+- **Escambia:** RUNNING via scripts/run_escambia_cama.py. ~3,060 / 106,372 enriched. Restarted 2026-05-26.
+  REST_EVERY=None, delay=2.0–5.0s, wrapper wait=420s. Resumable via cama_enriched_at IS NULL.
 
 ## Active Items
 
@@ -92,7 +92,7 @@ Retained as reference for backfill completeness verification.
 | 1 | PARTIAL | Beds/baths opportunistic population for Escambia County | Bulk source pending — not a blocker |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
-| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running (parcelcard); Escambia live run started 2026-05-25 |
+| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running (parcelcard); Escambia live run started 2026-05-26 |
 | 17 | PENDING | arv_calculator.py refactor | Comp-based ARV engine using parcel_sale_history + NAL qual codes |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
 | 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job |
@@ -105,10 +105,8 @@ Retained as reference for backfill completeness verification.
 | 27 | PENDING | LienHub advertised list | Check 2026-05-05 — see URL in scrapers.md |
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
-| 37 | PARTIAL | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | nal_last_ingested_at fix shipped (2026-05-26). cama_last_ingested_at fix deferred to item 101 CAMA scraper session. |
 | 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
-| 101 | PENDING | Escambia CAMA scraper — instrument_type/qualification_code bug. Scraper writes WD/QC/etc to sale_type instead of instrument_type; qualification_code never populated. Fix: (1) correct escambia.py column mapping, (2) DELETE FROM parcel_sale_history WHERE county_fips = '12033', (3) restart Escambia CAMA run. Prerequisite for item 17. Santa Rosa scraper confirmed correct. |
 
 ## Deferred Items
 
@@ -194,7 +192,7 @@ Retained as reference for backfill completeness verification.
 | 98 | Deployment workflow — frontend build consolidated into nginx multi-stage image; frontend service and frontend_dist named volume eliminated; frontend/Dockerfile deleted | 2026-05-24 |
 | 99 | Root .dockerignore — removed frontend/ exclusion to allow nginx multi-stage build to access frontend source from repo root build context | 2026-05-24 |
 | 100 | Santa Rosa CAMA scraper — migrate parcelview → parcelcard endpoint; host_database_url fix for host-side scripts | 2026-05-24 |
-| 101 | Escambia CAMA scraper — map ECPA Type column to instrument_type; delete 3,941 bad rows; restart full run | 2026-05-26 |
+| 101 | Escambia CAMA scraper — instrument_type/qualification_code column mapping fix; full reset and restart via unattended wrapper | 2026-05-26 |
 | 102 | Pagination stability fix — added ORDER BY county_fips, parcel_id to both search route DB fetches; added parcel_id tiebreaker to _build_page sort key. Resolves Escambia pagination returning identical records on every page change. | 2026-05-25 |
 | 104 | Search architecture — Option C hybrid. Lightweight scoring fetch (5 columns) replaces full ORM load for all filtered rows. Full ORM hydration scoped to page slice only (25 rows). Both search routes unified through _execute_search. _build_page eliminated. County-scoped page hydration preserves item 78 fix. | 2026-05-25 |
 | 107 | Column sort — sortable headers in ResultsPage, backend _sort_key for 9 fields, scored.sort() call, max_results cap moved post-sort | 2026-05-26 |

@@ -109,6 +109,18 @@ async def fetch_page(
                         soft_blocked = True
                         break
 
+            # Not found: redirect to Search.aspx — parcel absent from ECPA CAMA
+            if resp.history:
+                for h in resp.history:
+                    loc = h.headers.get("location", "").lower()
+                    if "/cama/search.aspx" in loc:
+                        logger.warning(
+                            "Parcel %s — not found in ECPA CAMA "
+                            "(Search.aspx redirect). Skipping.",
+                            parcel_id,
+                        )
+                        return None
+
             # Soft-block: final response missing parcel marker
             if not soft_blocked and resp.status_code == 200:
                 if VALID_PAGE_MARKER not in resp.text:
@@ -429,9 +441,9 @@ if __name__ == "__main__":
         parse_building_fn=parse_building,
         parse_sales_fn=parse_sales,
         headers=HEADERS,
-        target_dor_ucs=["001"],   # Single-family residential
-        default_delay=1.5,        # ECPA tested minimum 1.5
-        default_delay_max=4.0,    # ECPA tested maximum 4.0
-        rest_every=51,        # reduced from 100, 75, 49 — fewer requests per window
-        rest_seconds=120.0,   # increased from 270, 360, 420 — longer reset wait
+        target_dor_ucs=["001"],
+        default_delay=2.0,
+        default_delay_max=5.0,
+        rest_every=None,
+        rest_seconds=0.0,
     )

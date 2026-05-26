@@ -550,7 +550,7 @@ def section_sales() -> None:
           ON p.county_fips = psh.county_fips
          AND p.parcel_id   = psh.parcel_id
         WHERE psh.county_fips IN ('12033', '12113')
-          AND psh.sale_type  = 'WD'
+          AND (psh.instrument_type = 'WD' OR psh.sale_type = 'WD')
           AND psh.sale_price > 10000
           AND p.dor_uc = '001'
           AND p.cama_enriched_at IS NOT NULL
@@ -593,7 +593,7 @@ def section_flags() -> None:
             COUNT(*) FILTER (WHERE sale_price IS NOT NULL
                                AND sale_price > 0
                                AND sale_price < 500
-                               AND sale_type = 'WD')            AS suspicious_wd_price
+                               AND (psh.sale_type = 'WD' OR psh.instrument_type = 'WD'))            AS suspicious_wd_price
         FROM properties p
         LEFT JOIN parcel_sale_history psh
                ON psh.county_fips = p.county_fips

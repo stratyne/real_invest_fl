@@ -18,6 +18,7 @@ python -m real_invest_fl.ingest.cama.santa_rosa [options]
 
 # Escambia
 python -m real_invest_fl.ingest.cama.escambia [options]
+python scripts/run_escambia_cama.py
 # Always verify with --limit 5 --dry-run before any live run.
 
 ## Escambia CAMA Detail
@@ -31,10 +32,9 @@ python -m real_invest_fl.ingest.cama.escambia [options]
   Grantor/grantee not available — stored as empty string.
 - Parcel ID format: 16-character no-hyphen string (e.g. 182S303000004001)
   confirmed from DB. URL format matches directly — no transformation needed.
-- Rate limits: DEFAULT_DELAY=1.5, DEFAULT_DELAY_MAX=4.0,
-  REST_EVERY=51, REST_SECONDS=120.0
-- Soft-block signature: 302 redirect to escpa.org root, or response
-  body missing "Parcel ID:" marker. Scraper stops cleanly on detection.
+- Run via scripts/run_escambia_cama.py for unattended operation — auto-restarts after soft block with 420s wait.
+- Rate limits: DEFAULT_DELAY=2.0, DEFAULT_DELAY_MAX=5.0, REST_EVERY=None, REST_SECONDS=0.0
+- Search.aspx redirect = parcel absent from ECPA CAMA — logged as warning, skipped cleanly, continues run.
 - Sale date parsing: MM/DD/YYYY stored as-is. MM/YYYY normalized to
   date(YYYY, MM, 1) and stored. Unparseable formats logged at DEBUG and skipped.
 - eff_yr_blt: captured from "Effective Year" label in building table header.
