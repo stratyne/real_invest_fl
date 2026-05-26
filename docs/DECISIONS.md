@@ -100,6 +100,51 @@ context/cama.md.
 - grantor/grantee NOT NULL DEFAULT '' — empty string used in place of NULL
   to ensure the unique constraint fires correctly on missing names.
 
+### Column Design (three distinct fields — do not conflate)
+
+- instrument_type VARCHAR(10): deed instrument type. Values: WD (Warranty
+  Deed), QD (Quit Claim Deed), CT (Court/Certificate), SW (Sheriff's
+  Warrant), TD (Tax Deed), PR (Personal Representative), PB (Probate),
+  LD (Lady Bird Deed), DD (Dissolution Deed), FJ (Final Judgment), and
+  others. Source-dependent — not all counties surface this field.
+- qualification_code VARCHAR(5): PA-level arms-length qualification flag.
+  Confirmed values: Q = Qualified (arms-length), U = Unqualified,
+  V = Vacant land. C observed in Santa Rosa data — meaning unconfirmed,
+  treat as non-qualified until verified.
+- sale_type VARCHAR(5): improved/vacant classification of the parcel at
+  time of sale. Values: I = Improved, V = Vacant. Sourced from Santa Rosa
+  parcelcard. Escambia parcelcard does not surface this field.
+
+### County-Specific Scraper Mapping (verified 2026-05-26)
+
+| County | instrument_type | qualification_code | sale_type |
+|---|---|---|---|
+| Escambia (12033) | BUG — scraper writes WD/QC/etc here instead of instrument_type | NULL | NULL |
+| Santa Rosa (12113) | WD/QD/CT/SW/TD etc where available; NULL when parcelcard omits it | Q/U/C/V | I/V |
+
+Escambia scraper bug confirmed 2026-05-26: instrument type (WD/QC/etc)
+is being written to sale_type instead of instrument_type, and
+qualification_code is never populated. The 3,941 existing Escambia rows
+in parcel_sale_history must be deleted and re-scraped once the scraper
+is corrected. Delete-and-re-scrape is the confirmed path — Escambia CAMA
+is only 847 parcels enriched so data loss is negligible. (item 101)
+
+### Arms-Length Filter Logic for ARV Engine (item 17)
+
+Primary comp pool (highest confidence):
+  instrument_type = 'WD' AND qualification_code = 'Q'
+
+Wider comp pool (acceptable when primary is insufficient):
+  instrument_type = 'WD' AND qualification_code IN ('Q', 'U')
+
+Minimum price filter: sale_price >= 10000 (excludes nominal consideration
+  deeds — 555 WD sales between $1–$499 confirmed in Escambia data as
+  non-arms-length transfers).
+
+County logic is identical once Escambia scraper is corrected. Do not
+apply county-specific branching in the ARV engine — fix the data, not
+the query.
+
 ---
 
 ## Scraping and Robots Policy

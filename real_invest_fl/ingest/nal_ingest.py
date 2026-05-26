@@ -29,6 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
+from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -209,6 +210,31 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
                 run.records_read,
                 run.records_inserted,
                 run.records_skipped,
+            )
+
+        # ------------------------------------------------------------------ #
+        # Stamp counties.nal_last_ingested_at                                 #
+        # Runs after IngestRunContext has committed the run record.            #
+        # Skipped in dry_run mode — no writes occurred so no stamp is valid.  #
+        # ------------------------------------------------------------------ #
+        if not dry_run:
+            async with AsyncSessionLocal() as stamp_session:
+                await stamp_session.execute(
+                    text(
+                        "UPDATE counties "
+                        "SET nal_last_ingested_at = :now, "
+                        "    updated_at = :now "
+                        "WHERE county_fips = :fips"
+                    ),
+                    {
+                        "now": datetime.now(tz=timezone.utc),
+                        "fips": county_fips,
+                    },
+                )
+                await stamp_session.commit()
+            logger.info(
+                "counties.nal_last_ingested_at stamped | county_fips=%s",
+                county_fips,
             )
 
     await engine.dispose()

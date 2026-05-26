@@ -1,12 +1,12 @@
 # Project Penstock — STATE.md
 # Current project status only. No rationale. No design decisions.
-# Updated: 2026-05-25
+# Updated: 2026-05-26
 
 ## Active Phase
 **Phase 2** (scraping/matching) — core complete, scheduler/output pending.
 **Phase 4** (UI) — active. Deployment complete. Tail items pending.
 Phase 2 and Phase 4 run in parallel.
-Both CAMA runs active in background.
+Both CAMA runs STOPPED pending item 101 scraper fix.
 
 ## Phase Summary
 
@@ -32,7 +32,7 @@ HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
 
 | Rev | Version | Description |
 |---|---|---|
-| 54c4159dbf59 | v0.2 | initial schema — 14 tables |
+| 54c4159dbf59 | v0.2 | initial schema — 14 tables (includes property_value_history, sales_comps) |
 | 4ca6031e21c4 | v0.3 | NAL rename |
 | f422169456bd | v0.4 | replace scalar with JSON filter |
 | 5381f80387ed | v0.5 | zoning, nav_total_assessment, alt_key index |
@@ -59,8 +59,8 @@ mqi_qualified_at once Phase 4 query-time filter is live.
 
 | County | FIPS | NAL rows | GIS geometry | CAMA enriched | Notes |
 |---|---|---|---|---|---|
-| Escambia | 12033 | 170,561 | 160,264 | 0 | dor_uc backfilled; escpa.org confirmed UP 2026-05-24; dry-run required before live run |
-| Santa Rosa | 12113 | 120,500 | 111,036 | 7,361 (60,951 remaining) | Run restarted 2026-05-24 against parcelcard.srcpa.gov |
+| Escambia | 12033 | 170,561 | 160,264 | 847 | dor_uc backfilled; escpa.org confirmed UP 2026-05-24; dry-run required before live run |
+| Santa Rosa | 12113 | 120,500 | 111,036 | 47,884 (20,428 remaining) | Run restarted 2026-05-24 against parcelcard.srcpa.gov |
 | All others | — | staged only | staged only | 0 | NAL + GIS files in place |
 
 **Total properties in DB:** 291,061
@@ -78,13 +78,13 @@ Retained as reference for backfill completeness verification.
 | Auction.com listings | 11 records | 2026-04-28 initial load |
 | Zillow listings | 218 records | 13 foreclosures + 205 for-sale, 2026-04-28 |
 
-## CAMA Run Status (updated 2026-05-25)
-- **Santa Rosa:** ~36,600 / 68,312 enriched. Running unattended.
+## CAMA Run Status (updated 2026-05-26)
+- **Santa Rosa:** ~47,884 / 68,312 enriched. STOPPED — paused pending item 101 resolution.
   REST_EVERY=500, REST_SECONDS=300.0. Resumable via cama_enriched_at IS NULL.
-- **Escambia:** ~275 / 106,372 enriched. Live run started 2026-05-25.
-  REST_EVERY=75, REST_SECONDS=360.0. Resumable via cama_enriched_at IS NULL.
-  Sale dates: MM/DD/YYYY stored as-is; MM/YYYY normalized to first-of-month.
-  Soft-block confirmed at ~100 req — REST parameters tuned accordingly.
+  parcel_sale_history data is correct — no action needed on existing rows.
+- **Escambia:** 847 / 106,372 enriched. STOPPED — parcel_sale_history bug confirmed.
+  Existing 3,941 sale history rows must be deleted before restart.
+  REST_EVERY=49, REST_SECONDS=420.0. Resumable via cama_enriched_at IS NULL after scraper fix.
 
 ## Active Items
 
@@ -106,11 +106,10 @@ Retained as reference for backfill completeness verification.
 | 27 | PENDING | LienHub advertised list | Check 2026-05-05 — see URL in scrapers.md |
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
-| 37 | PENDING | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | Investigate nal_ingest.py |
+| 37 | PARTIAL | counties.nal_last_ingested_at / cama_last_ingested_at not updated by ingest pipeline | nal_last_ingested_at fix shipped (2026-05-26). cama_last_ingested_at fix deferred to item 101 CAMA scraper session. |
 | 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
-| 73 | PENDING | PropertyValueHistory ORM relationship on Property — model not in schema.md | Investigate — may be POC artifact |
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
-| 101 | PENDING | santa_rosa.py — sale_type column stores V/I qualification flag instead of instrument type (WD/QC/etc). Santa Rosa parcelcard does not surface instrument type — need to determine correct source field or rename column usage. Blocks arms-length filter in ARV engine. |
+| 101 | PENDING | Escambia CAMA scraper — instrument_type/qualification_code bug. Scraper writes WD/QC/etc to sale_type instead of instrument_type; qualification_code never populated. Fix: (1) correct escambia.py column mapping, (2) DELETE FROM parcel_sale_history WHERE county_fips = '12033', (3) restart Escambia CAMA run. Prerequisite for item 17. Santa Rosa scraper confirmed correct. |
 
 ## Deferred Items
 
@@ -124,7 +123,8 @@ Retained as reference for backfill completeness verification.
 | 91 | Map pins — colored markers by signal tier | Post-deployment polish. Custom Marker children required. |
 | 92 | Map pins — auto-fit bounds to pageResults on page change | Low demo value with single-region data. Revisit when multi-region. |
 | 103 | Local dev environment setup not documented — vite proxy port, docker-compose ports mapping, npm run dev workflow | Will cause repeated confusion when returning to local dev after a gap |
-| 104 | Search architecture — Option A migration (full SQL ORDER BY / LIMIT / OFFSET) | Prerequisite: deal scoring engine (item 19) must be stable enough to express score as a SQL expression. Option C is the correct interim state. |
+| 105 | Search architecture — Option A migration (full SQL ORDER BY / LIMIT / OFFSET) | Prerequisite: deal scoring engine (item 19) must be stable enough to express score as a SQL expression. Option C is the correct interim state. |
+| 106 | SalesComp ORM model and sales_comps table exist but have no ingest pipeline and no relationship on Property. Placeholder for FL DOR SDF (item 25). No action until item 25 is prioritized. |
 
 ## Completed Items (summary — detail in DECISIONS.md and context/ files)
 
@@ -169,6 +169,7 @@ Retained as reference for backfill completeness verification.
 | 70 | Map pins — lat/lng added to PropertySearchResult schema + both search route construction loops | 2026-05-15 |
 | 71 | user_profile_prefs upsert — last_result_count bug resolved; upsert placement confirmed correct | 2026-05-15 |
 | 72 | price_reduced filter — removed from FilterState, EMPTY_FILTER, profileToFilterState, filterStateToPayload, countActiveFilters, and Search UI. No backend handler existed. Deferred pending listing_events.price_reduced column + scraper wiring. | 2026-05-23 |
+| 73 | PropertyValueHistory ORM relationship on Property — confirmed real model, real table (created v0.2). Append-only annual value log, populated by annual NAL refresh pipeline (item 28). Not a POC artifact. | 2026-05-26 |
 | 74 | Star/favorite toggle wired in DashboardPage.tsx — toggleFavorite call on star click, optimistic update | 2026-05-15 |
 | 75 | phase4_ui.md route table — profiles prefix corrected to flat /profiles | 2026-05-15 |
 | 76 | ORM model gap — zoning, nav_total_assessment, jv_per_sqft, arv_estimate, arv_spread, list_price added to property.py | 2026-05-15 |

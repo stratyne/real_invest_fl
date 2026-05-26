@@ -51,6 +51,26 @@ Santa Rosa verified qual_cd distribution (dor_uc='001', 2024-2025):
 - '14': 1,428 records — excluded
 - All others: smaller counts, excluded per table above
 
+## parcel_sale_history Qualification Fields
+
+parcel_sale_history uses a different qualification system from the NAL
+embedded sale fields. Do not conflate the two.
+
+### NAL embedded fields (properties.qual_cd1 / qual_cd2)
+These are Florida DOR numeric qualification codes (01, 02, 03, 11, etc).
+Used when falling back to NAL sale data. Full table above applies.
+
+### parcel_sale_history fields (instrument_type, qualification_code, sale_type)
+These are PA-level fields scraped directly from county parcelcard sites.
+Three distinct columns — see DECISIONS.md parcel_sale_history section
+for full column design and county mapping.
+
+Arms-length filter for comp selection:
+  instrument_type = 'WD' AND qualification_code = 'Q' AND sale_price >= 10000
+
+This replaces any logic based on qual_cd1 when using parcel_sale_history
+as the comp source. The two qualification systems are independent.
+
 ## ARV Comp Engine Design (locked)
 
 - Primary source: parcel_sale_history joined to properties
