@@ -9,12 +9,16 @@ export async function searchProperties(
   filterProfileId: number,
   page = 1,
   pageSize = 25,
+  sortField = 'deal_score',
+  sortDirection: 'ASC' | 'DESC' = 'DESC',
 ): Promise<PaginatedPropertySearchResult> {
   const res = await client.get<PaginatedPropertySearchResult>('/properties', {
     params: {
       filter_profile_id: filterProfileId,
       page,
       page_size: pageSize,
+      sort_field: sortField,
+      sort_direction: sortDirection,
     },
   })
   return res.data

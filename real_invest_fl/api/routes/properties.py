@@ -49,6 +49,11 @@ class _ScoringRow(NamedTuple):
     arv_spread: int | None
     jv: int | None
     absentee_owner: bool | None
+    list_price: int | None
+    years_since_last_sale: int | None
+    tot_lvg_area: int | None
+    act_yr_blt: int | None
+    phy_addr1: str | None
 
 
 class _EventScoringRow(NamedTuple):
@@ -249,6 +254,8 @@ class InlineSearchRequest(BaseModel):
     county_fips: list of FIPS codes the search spans. User must have
     access to all of them.
     filter_criteria: same structure as filter_profile.filter_criteria.
+    sort_field / sort_direction: first-class sort params. Take precedence
+    over filter_criteria.filters.sort_by. Defaults: deal_score DESC.
     page / page_size: pagination. Defaults: page=1, page_size=25.
     """
     county_fips: list[str]
@@ -258,6 +265,8 @@ class InlineSearchRequest(BaseModel):
     comp_radius_miles: float = 1.0
     comp_year_built_tolerance: int = 15
     deal_score_weights: dict = {}
+    sort_field: str = "deal_score"
+    sort_direction: str = "DESC"
     page: int = 1
     page_size: int = 25
 
@@ -556,6 +565,8 @@ async def _execute_search(
     weights: dict[str, Any],
     page: int,
     page_size: int,
+    sort_field: str,
+    sort_direction: str,
     db: AsyncSession,
 ) -> PaginatedPropertySearchResult:
     """Option C hybrid search.
@@ -576,6 +587,11 @@ async def _execute_search(
             Property.arv_spread,
             Property.jv,
             Property.absentee_owner,
+            Property.list_price,
+            Property.years_since_last_sale,
+            Property.tot_lvg_area,
+            Property.act_yr_blt,
+            Property.phy_addr1,
         )
         .order_by(Property.county_fips, Property.parcel_id)
     )
@@ -678,14 +694,12 @@ async def _execute_search(
         scored.append((r, ev, ds))
 
     # Sort
-    sort_cfg = filters.get("sort_by", {})
-    sort_field = sort_cfg.get("field") if isinstance(sort_cfg, dict) else None
-    sort_direction = sort_cfg.get("direction", "DESC") if isinstance(sort_cfg, dict) else "DESC"
-    sort_direction = str(sort_direction).upper()
-
     supported_sort_fields = {
-        "deal_score", "arv_spread", "list_price", "jv", "years_since_last_sale",
+        "deal_score", "arv_spread", "arv_source", "list_price", "jv",
+        "years_since_last_sale", "tot_lvg_area", "act_yr_blt",
+        "address", "signal_tier",
     }
+    sort_direction = str(sort_direction).upper()
     reverse = sort_direction != "ASC"
     if sort_field not in supported_sort_fields:
         sort_field = "deal_score"
@@ -695,7 +709,7 @@ async def _execute_search(
         item: tuple[_ScoringRow, _EventScoringRow | None, float | None]
     ):
         row, ev, ds = item
-        tb = row.parcel_id  # stable unique tiebreaker
+        tb = row.parcel_id
 
         if sort_field == "deal_score":
             return (ds if ds is not None else -1.0,
@@ -709,16 +723,40 @@ async def _execute_search(
             return (row.jv if row.jv is not None else -1,
                     ds if ds is not None else -1.0,
                     tb)
-        # list_price and years_since_last_sale not on _ScoringRow —
-        # fall through to deal_score for now. These move to SQL ORDER BY
-        # in the Option A migration when deal scoring is stable.
+        if sort_field == "list_price":
+            return (row.list_price if row.list_price is not None else -1,
+                    ds if ds is not None else -1.0,
+                    tb)
+        if sort_field == "years_since_last_sale":
+            return (row.years_since_last_sale if row.years_since_last_sale is not None else -1,
+                    ds if ds is not None else -1.0,
+                    tb)
+        if sort_field == "tot_lvg_area":
+            return (row.tot_lvg_area if row.tot_lvg_area is not None else -1,
+                    ds if ds is not None else -1.0,
+                    tb)
+        if sort_field == "act_yr_blt":
+            return (row.act_yr_blt if row.act_yr_blt is not None else -1,
+                    ds if ds is not None else -1.0,
+                    tb)
+        if sort_field == "address":
+            return (row.phy_addr1 if row.phy_addr1 is not None else "",
+                    tb)
+        if sort_field == "arv_source":
+            return (ev.arv_source if ev and ev.arv_source is not None else "",
+                    tb)
+        if sort_field == "signal_tier":
+            return (ev.signal_tier if ev and ev.signal_tier is not None else 99,
+                    ds if ds is not None else -1.0,
+                    tb)
         return (ds if ds is not None else -1.0,
                 row.arv_spread if row.arv_spread is not None else -1,
                 tb)
 
     scored.sort(key=_sort_key, reverse=reverse)
 
-    # max_results cap before pagination
+    # max_results cap — applied after sort so the cap takes the
+    # top-N rows by the requested sort field, not by database order.
     max_res = filters.get("max_results", {})
     limit = max_res.get("value") if max_res else None
     if limit:
@@ -837,6 +875,8 @@ async def search_properties(
     filter_profile_id: int = Query(..., description="ID of the filter profile to execute"),
     page: int = Query(1, ge=1, description="Page number (1-based)"),
     page_size: int = Query(25, ge=1, le=500, description="Results per page"),
+    sort_field: str = Query("deal_score", description="Field to sort by"),
+    sort_direction: str = Query("DESC", description="ASC or DESC"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedPropertySearchResult:
@@ -864,7 +904,8 @@ async def search_properties(
     weights: dict[str, Any] = profile.deal_score_weights or {}
 
     paginated = await _execute_search(
-        profile_counties, filters, weights, page, page_size, db
+        profile_counties, filters, weights, page, page_size,
+        sort_field, sort_direction, db
     )
 
     # Upsert user_profile_prefs — total count, not page count
@@ -922,7 +963,8 @@ async def search_properties_inline(
     weights: dict[str, Any] = body.deal_score_weights or {}
 
     return await _execute_search(
-        profile_counties, filters, weights, body.page, body.page_size, db
+        profile_counties, filters, weights, body.page, body.page_size,
+        body.sort_field, body.sort_direction, db
     )
 
 

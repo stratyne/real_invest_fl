@@ -133,6 +133,8 @@ export interface InlineSearchRequest {
   comp_radius_miles?: number
   comp_year_built_tolerance?: number
   deal_score_weights?: Record<string, unknown>
+  sort_field?: string
+  sort_direction?: 'ASC' | 'DESC'
   page?: number
   page_size?: number
 }

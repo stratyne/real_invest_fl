@@ -220,6 +220,8 @@ function buildInlineRequest(
   countyFips: string[],
   page: number,
   pageSize: number,
+  sortField: string,
+  sortDirection: 'ASC' | 'DESC',
 ): InlineSearchRequest {
   const payload = filterStateToPayload(filterState, '__inline__', countyFips)
   return {
@@ -230,6 +232,8 @@ function buildInlineRequest(
     comp_radius_miles: payload.comp_radius_miles,
     comp_year_built_tolerance: payload.comp_year_built_tolerance,
     deal_score_weights: payload.deal_score_weights,
+    sort_field: sortField,
+    sort_direction: sortDirection,
     page,
     page_size: pageSize,
   }
@@ -269,6 +273,15 @@ export default function ResultsPage() {
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null)
 
+  const [sortField, setSortField] = useState<string>(filterState?.sort_by_field ?? 'deal_score')
+  const [sortDirection, setSortDirection] = useState<'ASC' | 'DESC'>((filterState?.sort_by_direction as 'ASC' | 'DESC') ?? 'DESC')
+
+  useEffect(() => {
+    setSortField(filterState?.sort_by_field ?? 'deal_score')
+    setSortDirection((filterState?.sort_by_direction as 'ASC' | 'DESC') ?? 'DESC')
+    setPage(1)
+  }, [location.state]) // eslint-disable-line react-hooks/exhaustive-deps
+
   function centerMapOnResult(r: PropertySearchResult) {
     if (r.latitude == null || r.longitude == null) return
     mapRef.current?.getMap().easeTo({
@@ -285,6 +298,24 @@ export default function ResultsPage() {
     setSelectedResult(null)
   }
 
+  function handleSortClick(field: string) {
+    if (!filterState) return
+    if (field === sortField) {
+      setSortDirection((d) => (d === 'DESC' ? 'ASC' : 'DESC'))
+    } else {
+      setSortField(field)
+      setSortDirection('DESC')
+    }
+    setPage(1)
+  }
+
+  function SortIndicator({ field }: { field: string }) {
+    if (field !== sortField) {
+      return <span style={{ color: 'var(--color-border)', marginLeft: 4 }}>⇅</span>
+    }
+    return <span style={{ marginLeft: 4 }}>{sortDirection === 'DESC' ? '↓' : '↑'}</span>
+  }
+
   // ── Fetch on mount and on every page change
   useEffect(() => {
     if (profileId == null && (!filterState || countyFips.length === 0)) {
@@ -298,9 +329,9 @@ export default function ResultsPage() {
     setSelectedResult(null)
 
     const run = (profileId != null && filterState == null)
-      ? searchProperties(profileId, page, PAGE_SIZE)
+      ? searchProperties(profileId, page, PAGE_SIZE, sortField, sortDirection)
       : searchPropertiesInline(
-          buildInlineRequest(filterState!, countyFips, page, PAGE_SIZE),
+          buildInlineRequest(filterState!, countyFips, page, PAGE_SIZE, sortField, sortDirection),
         )
 
     run
@@ -314,10 +345,10 @@ export default function ResultsPage() {
         setError('Search failed.')
         setLoading(false)
       })
-  }, [page]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, sortField, sortDirection]) // eslint-disable-line react-hooks/exhaustive-deps
   // profileId / filterState / countyFips come from location.state and are
-  // stable for the lifetime of this page mount. Re-fetching on page change
-  // is the only intended trigger.
+  // stable for the lifetime of this page mount. sortField / sortDirection
+  // are session-local and intentionally trigger re-fetch when changed.
 
   function handleEditFilter() {
     navigate('/search', {
@@ -392,15 +423,60 @@ export default function ResultsPage() {
                 <table style={pageStyles.table}>
                   <thead>
                     <tr>
-                      <th style={pageStyles.th}>Address</th>
-                      <th style={pageStyles.th}>JV</th>
-                      <th style={pageStyles.th}>ARV</th>
-                      <th style={pageStyles.th}>Source</th>
-                      <th style={pageStyles.th}>Spread</th>
-                      <th style={pageStyles.th}>Sqft</th>
-                      <th style={pageStyles.th}>Yr Blt</th>
-                      <th style={pageStyles.th}>Score</th>
-                      <th style={pageStyles.th}>Signal</th>
+                      <th
+                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
+                        onClick={() => handleSortClick('address')}
+                      >
+                        Address<SortIndicator field="address" />
+                      </th>
+                      <th
+                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
+                        onClick={() => handleSortClick('jv')}
+                      >
+                        JV<SortIndicator field="jv" />
+                      </th>
+                      <th
+                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
+                        onClick={() => handleSortClick('arv_spread')}
+                      >
+                        ARV<SortIndicator field="arv_spread" />
+                      </th>
+                      <th
+                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
+                        onClick={() => handleSortClick('arv_source')}
+                      >
+                        Source<SortIndicator field="arv_source" />
+                      </th>
+                      <th
+                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
+                        onClick={() => handleSortClick('arv_spread')}
+                      >
+                        Spread<SortIndicator field="arv_spread" />
+                      </th>
+                      <th
+                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
+                        onClick={() => handleSortClick('tot_lvg_area')}
+                      >
+                        Sqft<SortIndicator field="tot_lvg_area" />
+                      </th>
+                      <th
+                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
+                        onClick={() => handleSortClick('act_yr_blt')}
+                      >
+                        Yr Blt<SortIndicator field="act_yr_blt" />
+                      </th>
+                      <th
+                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
+                        onClick={() => handleSortClick('deal_score')}
+                      >
+                        Score<SortIndicator field="deal_score" />
+                      </th>
+                      <th
+                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
+                        onClick={() => handleSortClick('signal_tier')}
+                      >
+                        Signal<SortIndicator field="signal_tier" />
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -609,6 +685,10 @@ const pageStyles: Record<string, React.CSSProperties> = {
     padding: '10px 12px', textAlign: 'left', fontWeight: 600,
     color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)',
     background: 'var(--color-surface)', position: 'sticky', top: 0, zIndex: 1,
+  },
+  thSortable: {
+    cursor: 'pointer',
+    userSelect: 'none' as const,
   },
   tr: { borderBottom: '1px solid var(--color-border)', cursor: 'pointer', transition: 'background 0.1s' },
   trSelected: { background: 'rgba(59,130,246,0.25)' },

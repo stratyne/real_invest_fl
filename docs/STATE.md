@@ -196,3 +196,4 @@ Retained as reference for backfill completeness verification.
 | 100 | Santa Rosa CAMA scraper — migrate parcelview → parcelcard endpoint; host_database_url fix for host-side scripts | 2026-05-24 |
 | 102 | Pagination stability fix — added ORDER BY county_fips, parcel_id to both search route DB fetches; added parcel_id tiebreaker to _build_page sort key. Resolves Escambia pagination returning identical records on every page change. | 2026-05-25 |
 | 104 | Search architecture — Option C hybrid. Lightweight scoring fetch (5 columns) replaces full ORM load for all filtered rows. Full ORM hydration scoped to page slice only (25 rows). Both search routes unified through _execute_search. _build_page eliminated. County-scoped page hydration preserves item 78 fix. | 2026-05-25 |
+| 107 | Column sort — sortable headers in ResultsPage, backend _sort_key for 9 fields, scored.sort() call, max_results cap moved post-sort | 2026-05-26 |
