@@ -3,7 +3,7 @@
 # schema questions arise or when writing migrations, ORM models,
 # or query-time logic.
 # Always current — updated after every migration.
-# Last updated: 2026-05-14
+# Last updated: 2026-05-28
 
 ---
 
@@ -28,7 +28,7 @@ Standard bootstrap block:
 
 ## Migration Chain
 
-HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
+HEAD = n5o6p7q8r9s0 (v0.21) — live and verified
 
 | Rev | Version | Description |
 |---|---|---|
@@ -50,6 +50,8 @@ HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
 | j1k2l3m4n5o6 | v0.17 | Phase 4 outreach schema |
 | k2l3m4n5o6p7 | v0.18 | user_profile_prefs |
 | l3m4n5o6p7q8 | v0.19 | multi-county filter profiles — county_fips VARCHAR(5)[] |
+| m4n5o6p7q8r9 | v0.20 | listing_events workflow_status CHECK constraint |
+| n5o6p7q8r9s0 | v0.21 | add arv_source to properties |
 
 ---
 
@@ -152,6 +154,7 @@ HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
     nav_total_assessment      NUMERIC(12,2)
     jv_per_sqft               NUMERIC
     arv_estimate              INTEGER
+    arv_source                VARCHAR(20)    -- COMP | JV_FALLBACK | ZESTIMATE | MANUAL
     arv_spread                INTEGER
     list_price                INTEGER
     bed_bath_source           VARCHAR(50)
@@ -198,6 +201,10 @@ HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
     zestimate_discount_pct    NUMERIC(6,3)
     zestimate_fetched_at      TIMESTAMPTZ
     workflow_status           VARCHAR(30)    NOT NULL
+                                             -- CHECK constraint (v0.20):
+                                             -- workflow_status IN ('NEW','REVIEWED',
+                                             --   'APPROVE_SEND','SENT','RESPONDED',
+                                             --   'REJECTED','CLOSED')
     notes                     TEXT
     raw_listing_json          JSONB
     scraped_at                TIMESTAMPTZ
@@ -324,20 +331,31 @@ HEAD = l3m4n5o6p7q8 (v0.19) — live and verified
 
 ### parcel_sale_history
 
-    id           INTEGER      PK autoincrement
-    county_fips  VARCHAR(5)   NOT NULL
-    parcel_id    VARCHAR(30)  NOT NULL
-    sale_date    DATE
-    sale_price   INTEGER
-    grantor      VARCHAR(200) NOT NULL  DEFAULT ''
-    grantee      VARCHAR(200) NOT NULL  DEFAULT ''
-    instrument   VARCHAR(100)
-    book         VARCHAR(20)
-    page         VARCHAR(20)
-    created_at   TIMESTAMPTZ  NOT NULL  DEFAULT now()
+    id                  INTEGER        PK autoincrement
+    county_fips         VARCHAR(5)     NOT NULL
+    parcel_id           VARCHAR(30)    NOT NULL
+    sale_date           DATE
+    sale_price          INTEGER
+    instrument_type     VARCHAR(10)    -- WD / QD / CT / TD etc. NULL for current counties
+    qualification_code  VARCHAR(5)     -- Q / U / C / V
+    sale_type           VARCHAR(5)     -- I / V (Santa Rosa only)
+    multi_parcel        BOOLEAN        NOT NULL  DEFAULT false
+    grantor             VARCHAR(300)   NOT NULL  DEFAULT ''
+    grantee             VARCHAR(300)   NOT NULL  DEFAULT ''
+    price_per_sqft      NUMERIC(8,2)
+    source              VARCHAR(100)   NOT NULL
+    scraped_at          TIMESTAMPTZ    NOT NULL  DEFAULT now()
 
     UNIQUE (county_fips, parcel_id, sale_date, grantor, grantee)
       -- uq_psh_county_parcel_sale
+
+    Indexes:
+      pk_parcel_sale_history   PRIMARY KEY (id)
+      ix_psh_county_parcel     btree (county_fips, parcel_id)
+      ix_psh_grantee           btree (grantee)
+      ix_psh_grantor           btree (grantor)
+      ix_psh_qualification_code btree (qualification_code)
+      ix_psh_sale_date         btree (sale_date)
 
 ### data_source_status
 

@@ -2,7 +2,7 @@
 # Authoritative record of current architectural decisions.
 # Always current — edit in place when a decision changes.
 # The git commit message is the audit trail, not this file.
-# Last updated: 2026-05-26
+# Last updated: 2026-05-28
 
 ---
 
@@ -128,8 +128,10 @@ no action required unless duplicate suppression becomes a reported problem.
   NULL where unavailable — do not substitute a default value.
 - qualification_code VARCHAR(5): PA-level arms-length qualification flag.
   Confirmed values: Q = Qualified (arms-length), U = Unqualified,
-  V = Vacant land. C observed in Santa Rosa data — meaning unconfirmed
-  as of 2026-05-26, treat as non-qualified until verified (see arv.md).
+  V = Vacant land, C = Qualified and Confirmed (Santa Rosa PA-local value,
+  confirmed 2026-05-26 by Richard Brosnaham, Administrative Coordinator,
+  Santa Rosa County PA. Contact: 850.983.1880. Equal or higher confidence
+  than Q for comp selection.)
 - sale_type VARCHAR(5): improved/vacant classification of the parcel at
   time of sale. Values: I = Improved, V = Vacant. Sourced from Santa Rosa
   parcelcard. Escambia parcelcard does not surface this field.
@@ -178,29 +180,6 @@ non-arms-length transfers).
 
 ---
 
-## ARV Qualification Systems — Two Independent Systems
-
-This is a frequent source of confusion. There are two entirely separate
-qualification systems in use. They must never be conflated or cross-applied.
-
-### System 1 — parcel_sale_history fields
-instrument_type, qualification_code, sale_type on parcel_sale_history.
-PA-level fields. Used when parcel_sale_history is the comp source.
-Full detail in context/arv.md System 1 section.
-
-### System 2 — NAL embedded fields
-qual_cd1, qual_cd2 on properties. Florida DOR numeric codes.
-Used only as last-resort fallback when parcel_sale_history yields zero
-qualifying comp candidates within the search radius.
-Full detail in context/arv.md System 2 section.
-
-The qual_cd1/qual_cd2 fields on properties have no meaning in the context
-of parcel_sale_history rows. The instrument_type/qualification_code fields
-on parcel_sale_history have no relationship to Florida DOR qual codes.
-Do not join or compare values across these two systems.
-
----
-
 ## Scraping and Robots Policy
 
 Tier 1 government sources use file-drop parsers — robots.txt blocks live
@@ -228,8 +207,7 @@ per-source detail in context/scrapers.md.
   missing-data sentinels — treat as None, never write to DB.
 - Phase 3 sources (Landvoice, REDX, PropStream): slot at
   zillow_staging/auction_com level until data quality is evaluated.
-- Logic lives in the parser layer. Not yet implemented in code.
-  Implementation is part of item 17 scope.
+- Logic lives in the parser layer. Not yet implemented — tracked as item 116.
 - Full detail in context/arv.md and context/scrapers.md.
 
 ---
@@ -237,17 +215,18 @@ per-source detail in context/scrapers.md.
 ## ARV Comp Engine
 
 Primary source is parcel_sale_history joined to properties, filtered by
-PA-level qualification codes. Median price per sqft of qualifying comps
-applied to subject parcel tot_lvg_area. NAL embedded sale fields used as
-last-resort fallback when parcel_sale_history yields zero qualifying
-candidates. jv is the floor fallback when both paths yield nothing.
+PA-level qualification codes. Three-pass strategy: Pass 1 (PSH primary
+pool, Q/C), Pass 2 (PSH wider pool, Q/C/U), Pass 3 (NAL spatial fallback,
+qual_cd1 = '01'). jv is the floor when all passes yield insufficient comps.
 arv_source values: COMP, JV_FALLBACK, ZESTIMATE, MANUAL.
 COMP and JV_FALLBACK are not equivalent — surface distinction in all UI views.
-Full detail including qualification systems, filter logic, and per-county
-data state in context/arv.md.
+Full detail including qualification systems, filter logic, batch defaults,
+two-tier gate, arv_spread stored vs query-time split, and Phase 3 scaling
+limitation in context/arv.md.
 
-arv_calculator.py requires refactor before use — mqi_qualified drift
-present. Do not run current version (item 17).
+## ARV Calculator Refactor (item 17) — 2026-05-28
+
+All design decisions documented in context/arv.md.
 
 ---
 

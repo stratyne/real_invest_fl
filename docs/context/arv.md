@@ -1,24 +1,31 @@
 # Project Penstock — context/arv.md
 # Paste this alongside AGENTS.md when working on ARV calculation,
 # deal scoring, or the comp engine.
-# Last updated: 2026-05-26
+# Last updated: 2026-05-28
 
 ## Status
 
-PENDING — arv_calculator.py requires refactor before use (item 17).
-Do not run current arv_calculator.py — mqi_qualified drift present.
+ACTIVE — arv_calculator.py refactor complete (item 17).
+Santa Rosa first pass complete. --force re-run pending second CAMA pass
+completion (2,265 retry parcels). Escambia pending sufficient CAMA
+enrichment before first run.
 
 ## Key Files
 
 real_invest_fl/ingest/
-  arv_calculator.py     -- PENDING REFACTOR — do not use current version
+  arv_calculator.py     -- ACTIVE — three-pass comp engine, item 17 complete
 
-## Data Sources (verified 2026-05-26)
+## Data Sources (verified 2026-05-28)
 
 ### parcel_sale_history
-- Santa Rosa: growing — ~56,858 parcels enriched as of 2026-05-26, run active
-- Escambia: restarted 2026-05-26 after column mapping fix (item 101).
-  ~3,060 parcels enriched. Previous corrupted rows deleted — all current rows are clean.
+- Santa Rosa: 66,047 parcels enriched (dor_uc '001' only).
+  Second pass active — 2,265 retry parcels. Completion imminent.
+  54,453 unenriched parcels have dor_uc outside scraper target list —
+  they are not SFR and will not be scraped by santa_rosa.py.
+- Escambia: ~18,448 parcels enriched as of 2026-05-28, run active.
+  All current rows are clean (column mapping fix applied item 101).
+  instrument_type is NULL for all Escambia rows — parcelcard does not
+  surface this field.
 - Date range: varies by county, full historical ownership chain per parcel
 - All records have sale_price > 0
 - Populated from CAMA scrape — grows as CAMA runs continue
@@ -28,9 +35,10 @@ real_invest_fl/ingest/
 - sale_prc1, sale_yr1, sale_mo1, qual_cd1 — most recent qualifying sale
 - sale_prc2, sale_yr2, sale_mo2, qual_cd2 — second most recent
 - NAL is an annual snapshot — carries only two most recent sales per parcel
-- **Last-resort fallback only.** Used when parcel_sale_history has no
-  qualifying records for a subject parcel's neighborhood. Never used
-  for comp selection when parcel_sale_history data is available.
+- **Pass 3 fallback only.** Used when parcel_sale_history Passes 1 and 2
+  yield fewer than min_comp_sales_for_arv qualifying comps.
+- qual_cd2 is not used in Pass 3 — two-field NAL history is too thin
+  to reliably widen; jv floor is preferable to noisy qual_cd2 comps.
 - Do not conflate NAL qual codes with parcel_sale_history qualification
   fields — they are entirely independent systems. See section below.
 
@@ -43,7 +51,7 @@ of parcel_sale_history rows. The instrument_type/qualification_code fields
 on parcel_sale_history have no relationship to Florida DOR qual codes.
 
 ### System 1 — parcel_sale_history qualification fields
-Applied when parcel_sale_history is the comp source (primary path).
+Applied in Pass 1 and Pass 2 of the comp engine.
 PA-level fields scraped directly from county parcelcard sites.
 
 Three distinct columns — do not conflate:
@@ -54,25 +62,37 @@ Three distinct columns — do not conflate:
   PB (Probate), LD (Lady Bird Deed), DD (Dissolution Deed),
   FJ (Final Judgment), and others.
   Not all counties surface this field — NULL where unavailable.
+  Neither Santa Rosa nor Escambia currently surfaces instrument_type.
 
 - qualification_code VARCHAR(5): PA-level arms-length qualification flag.
-  Confirmed values: Q = Qualified (arms-length), U = Unqualified,
-  V = Vacant land.
-  C = observed in Santa Rosa data — meaning UNCONFIRMED as of 2026-05-26.
-  Treat 'C' as non-qualified until verified. Verification method: pull
-  10-20 Santa Rosa parcelcard pages for parcels where qualification_code = 'C'
-  and confirm the PA's stated meaning. This is a required step before the
-  ARV engine assigns any meaning to 'C' other than non-qualified.
+  Confirmed values:
+    Q = Qualified (arms-length)
+    U = Unqualified
+    V = Vacant land
+    C = Qualified and Confirmed (Santa Rosa PA-local value — confirmed
+        2026-05-26 by Richard Brosnaham, Administrative Coordinator,
+        Santa Rosa County PA. Contact: 850.983.1880.)
+  'C' is arms-length qualified with additional PA confirmation step.
+  Treat as equal or higher confidence than 'Q' for comp selection.
 
 - sale_type VARCHAR(5): improved/vacant classification at time of sale.
   Values: I = Improved, V = Vacant.
   Santa Rosa only — Escambia does not surface this field.
 
-Arms-length filter for comp selection (primary pool):
-  instrument_type = 'WD' AND qualification_code = 'Q' AND sale_price >= 10000
+Arms-length filter (primary pool — Pass 1):
+  (instrument_type = 'WD' OR instrument_type IS NULL)
+  AND qualification_code IN ('Q', 'C')
+  AND sale_price >= 10000
 
-Wider comp pool (use when primary pool yields fewer than min_comp_sales_for_arv):
-  instrument_type = 'WD' AND qualification_code IN ('Q', 'U') AND sale_price >= 10000
+Arms-length filter (wider pool — Pass 2):
+  (instrument_type = 'WD' OR instrument_type IS NULL)
+  AND qualification_code IN ('Q', 'C', 'U')
+  AND sale_price >= 10000
+
+The instrument_type IS NULL condition is required — neither current county
+surfaces instrument_type on their parcelcard. Applying instrument_type = 'WD'
+alone would silently eliminate the entire comp pool. Revisit if/when a
+county parcelcard begins surfacing instrument_type.
 
 The $10,000 minimum excludes nominal consideration deeds — 555 WD sales
 between $1-$499 confirmed in Escambia data as non-arms-length transfers.
@@ -80,168 +100,196 @@ between $1-$499 confirmed in Escambia data as non-arms-length transfers.
 County logic is identical. Do not apply county-specific branching in the
 ARV engine — fix the data, not the query.
 
-### System 2 — NAL embedded qualification codes (properties.qual_cd1 / qual_cd2)
-Applied only when falling back to NAL embedded sale fields (last-resort path).
+### System 2 — NAL embedded qualification codes (properties.qual_cd1)
+Applied in Pass 3 (NAL spatial fallback) only.
 Never used for comp selection from parcel_sale_history.
 Florida DOR numeric qualification codes.
 
-| qual_cd | Description                        | ARV Use                              |
-|---------|------------------------------------|--------------------------------------|
-| 01      | Qualified arm's-length sale        | PRIMARY — last-resort fallback pool  |
-| 02      | Qualified, multiple parcels        | Usable with caution                  |
-| 03      | Qualified, foreclosure             | Distressed comp signal               |
-| 11      | Disqualified — corrective deed     | EXCLUDE                              |
-| 12      | Disqualified — related parties     | EXCLUDE                              |
-| 14      | Disqualified — transfer            | EXCLUDE                              |
-| 30      | Disqualified — non-arm's length    | EXCLUDE                              |
-| 37      | Disqualified — REO/bank owned      | EXCLUDE from ARV; distressed signal  |
-| 05      | Disqualified — financial           | EXCLUDE                              |
-| All others | Various disqualified           | EXCLUDE                              |
+| qual_cd | Description                        | ARV Use                         |
+|---------|------------------------------------|---------------------------------|
+| 01      | Qualified arm's-length sale        | PRIMARY — Pass 3 comp pool      |
+| 02      | Qualified, multiple parcels        | NOT used — see note below       |
+| 03      | Qualified, foreclosure             | Distressed comp signal          |
+| 11      | Disqualified — corrective deed     | EXCLUDE                         |
+| 12      | Disqualified — related parties     | EXCLUDE                         |
+| 14      | Disqualified — transfer            | EXCLUDE                         |
+| 30      | Disqualified — non-arm's length    | EXCLUDE                         |
+| 37      | Disqualified — REO/bank owned      | EXCLUDE from ARV                |
+| 05      | Disqualified — financial           | EXCLUDE                         |
+| All others | Various disqualified           | EXCLUDE                         |
+
+Note on qual_cd '02': arv.md previously listed '02' as usable with caution.
+Pass 3 uses qual_cd1 = '01' only. qual_cd2 is not used at all — two-field
+NAL history is too thin to reliably widen the pool; jv floor is preferable
+to noisy qual_cd2 comps. This is a deliberate scope constraint, not an
+oversight.
 
 Santa Rosa verified qual_cd distribution (dor_uc='001', 2024-2025):
-- '01': 4,884 records, avg $380,977 — primary fallback pool
-- '02': 1,493 records, avg $509,433
+- '01': 4,884 records, avg $380,977 — Pass 3 pool
+- '02': 1,493 records, avg $509,433 — excluded
 - '11': 1,860 records — excluded
 - '14': 1,428 records — excluded
 - All others: smaller counts, excluded per table above
 
 ## ARV Comp Engine Design
 
-### Primary Path — parcel_sale_history
+### Three-Pass Strategy
+
+Pass 1, Pass 2, and Pass 3 are attempted in sequence for all Tier 1
+parcels (jv IS NOT NULL AND geom IS NOT NULL). Each pass is only
+attempted if the previous pass yielded fewer than min_comp_sales_for_arv
+qualifying comps. Non-viable counties (below MIN_VIABLE_COMP_POOL
+threshold) skip Passes 1 and 2 and go directly to Pass 3.
+
+### Pass 1 — parcel_sale_history primary pool
 
 - Source: parcel_sale_history joined to properties on
-  (county_fips, parcel_id) for subject parcel geometry and attributes
-- Qualification filter: instrument_type = 'WD' AND qualification_code = 'Q'
-  AND sale_price >= 10000 (primary pool).
-  Widen to qualification_code IN ('Q', 'U') when primary pool yields
-  fewer than min_comp_sales_for_arv qualifying comps.
-- Proximity filter: comp_radius_miles from filter_profile, applied via
-  PostGIS ST_DWithin against properties.geom. Requires GIST index on geom.
-  Comp parcels joined to properties to retrieve geometry for spatial filter.
+  (county_fips, parcel_id) for comp geometry and attributes
+- Qualification filter:
+  (instrument_type = 'WD' OR instrument_type IS NULL)
+  AND qualification_code IN ('Q', 'C')
+  AND sale_price >= 10000
+- Proximity filter: ST_DWithin against comp properties.geom using
+  radius_meters derived from --radius CLI flag
 - Year built filter:
-  ABS(comp.eff_yr_blt - subject.eff_yr_blt) <= comp_year_built_tolerance
-  from filter_profile
+  ABS(comp.eff_yr_blt - subject.eff_yr_blt) <= year_tolerance
 - Use code filter: comp parcel dor_uc must match subject parcel dor_uc
-- Minimum comps: min_comp_sales_for_arv from filter_profile
-- Calculation: median(sale_price / tot_lvg_area) of qualifying comps
-  multiplied by subject parcel tot_lvg_area
+- Minimum comps: min_comp_sales_for_arv
+- Calculation: median(sale_price / comp.tot_lvg_area) * subject.tot_lvg_area
 - arv_source: 'COMP'
 
-### Fallback Path — NAL embedded fields
+### Pass 2 — parcel_sale_history wider pool
 
-Used only when parcel_sale_history yields zero qualifying comp candidates
-within the search radius for the subject parcel. Not a substitute for
-a thin parcel_sale_history — if the history table has records but they
-fail the arms-length filter, the fallback does NOT trigger. The fallback
-triggers only on zero candidates after all filters are applied.
+- Triggered when Pass 1 yields fewer than min_comp_sales_for_arv comps
+- Identical to Pass 1 except:
+  qualification_code IN ('Q', 'C', 'U')
+- arv_source: 'COMP'
 
-- Source: properties.sale_prc1, sal_yr1, qual_cd1 (and _2 variants)
-  for properties within comp_radius_miles of subject parcel
-- Qualification filter: qual_cd1 = '01' (primary). qual_cd1 = '02'
-  usable with caution. All other codes excluded.
-- Minimum price filter: sale_prc1 >= 10000
-- Calculation: median(sale_prc1 / tot_lvg_area) of qualifying neighbors
-  multiplied by subject parcel tot_lvg_area
+### Pass 3 — NAL spatial fallback
+
+- Triggered when Pass 2 also yields fewer than min_comp_sales_for_arv comps
+- Source: properties.sale_prc1, qual_cd1 for neighboring parcels
+- Qualification filter: qual_cd1 = '01' AND sale_prc1 >= 10000
+- Proximity filter: ST_DWithin — same radius as Passes 1 and 2
+- Year built filter: same tolerance as Passes 1 and 2
+- Use code filter: neighboring parcel dor_uc must match subject dor_uc
+- Minimum comps: min_comp_sales_for_arv
+- Calculation: median(sale_prc1 / neighbor.tot_lvg_area) * subject.tot_lvg_area
 - arv_source: 'JV_FALLBACK'
-- Note: if NAL fallback also yields zero qualifying comps, arv_estimate
-  is set to properties.jv and arv_source is 'JV_FALLBACK'. jv is the
-  floor — never NULL-out arv_estimate.
+  (NAL-derived estimate is still flagged JV_FALLBACK — it is a lower
+  confidence source than parcel_sale_history. Do not surface with equal
+  visual weight to COMP.)
+- qual_cd2 is not used — see System 2 note above
+
+### Floor — raw jv
+
+- Triggered when Pass 3 also yields fewer than min_comp_sales_for_arv comps
+- arv_estimate = jv
+- arv_source = 'JV_FALLBACK'
+- jv is the floor — never NULL-out arv_estimate
+
+### Two-Tier Eligibility Gate
+
+Tier 1 — jv IS NOT NULL AND geom IS NOT NULL
+  Full three-pass strategy attempted.
+
+Tier 2 — jv IS NOT NULL AND geom IS NULL
+  No spatial query possible. arv_estimate = jv, arv_source = JV_FALLBACK
+  written directly. No passes attempted.
+
+Excluded — jv IS NULL
+  Skipped entirely. Count logged. No write.
+
+dor_uc is not part of the gate. ARV is computed for all property classes.
+dor_uc is used as a like-for-like filter within comp selection only.
 
 ### arv_source Values
 
-| Value        | Meaning                                                    |
-|--------------|------------------------------------------------------------|
-| COMP         | Calculated from parcel_sale_history qualifying comps       |
-| JV_FALLBACK  | Insufficient comps — jv used as proxy, or NAL fallback     |
-| ZESTIMATE    | Zestimate used (future — item 21)                          |
-| MANUAL       | Manually set                                               |
+| Value        | Meaning                                                         |
+|--------------|-----------------------------------------------------------------|
+| COMP         | Calculated from parcel_sale_history qualifying comps (Pass 1/2) |
+| JV_FALLBACK  | NAL spatial fallback (Pass 3), or raw jv floor, or no geom      |
+| ZESTIMATE    | Zestimate used (future — item 21)                               |
+| MANUAL       | Manually set                                                    |
 
 COMP and JV_FALLBACK are not equivalent. Surface arv_source in all
 result views — do not display them with equal visual weight.
 
 ### arv_spread Calculation
 
-arv_spread = arv_estimate - list_price - rehab_cost_estimate
-rehab_cost_estimate = tot_lvg_area x (properties.estimated_rehab_per_sqft
-                      OR filter_profile.rehab_cost_per_sqft)
+Batch script:
+  arv_spread = arv_estimate - list_price - (tot_lvg_area * rehab_cost)
+  rehab_cost = --rehab-cost CLI flag (default $35.00)
+  NULL when list_price is NULL. NULL when tot_lvg_area is NULL or zero.
+  Never substitute 0 for NULL list_price.
 
-list_price is NULL for off-market properties. arv_spread is NULL when
-list_price is NULL. Do not substitute 0 for NULL list_price.
+Search route (query-time recomputation):
+  arv_spread = arv_estimate - list_price -
+               (tot_lvg_area * profile.rehab_cost_per_sqft)
+  The stored properties.arv_spread uses batch default rehab cost.
+  Search routes always recompute using active profile's value.
+  Export pipelines (items 20, 22) must also recompute — never read
+  stored arv_spread directly.
+  Cleanup migration (drop column, pure query-time everywhere) deferred
+  until items 20 and 22 are in scope simultaneously.
 
-## filter_profile Parameters Relevant to ARV
+## CLI Defaults and filter_profile Parameters
 
-rehab_cost_per_sqft         FLOAT    -- fallback when properties.estimated_rehab_per_sqft is NULL
-min_comp_sales_for_arv      INTEGER  -- minimum qualifying comps before COMP arv_source is used
-comp_radius_miles           FLOAT    -- proximity radius for comp selection
-comp_year_built_tolerance   INTEGER  -- +/- years built tolerance for comp selection
+### Batch script CLI defaults
+  --radius          1.5 miles
+  --min-comps       3
+  --year-tolerance  10
+  --rehab-cost      $35.00
 
-## Escambia Data State (as of 2026-05-26)
+### filter_profile columns relevant to ARV (query-time)
+  rehab_cost_per_sqft         FLOAT    -- used for query-time arv_spread recompute
+  min_comp_sales_for_arv      INTEGER  -- not used at batch time, query-time reference
+  comp_radius_miles           FLOAT    -- not used at batch time, query-time reference
+  comp_year_built_tolerance   INTEGER  -- not used at batch time, query-time reference
 
-Escambia CAMA scraper column mapping bug was confirmed and fixed (item 101).
-All previously scraped Escambia parcel_sale_history rows were deleted.
-Run restarted 2026-05-26 — all current Escambia rows are clean.
-~3,060 parcels enriched as of restart. qualification_code is populated
-correctly on all new rows. instrument_type is NULL for Escambia —
-parcelcard does not surface this field.
+## County Viability Pre-flight
 
-IMPORTANT: With instrument_type = NULL for all Escambia rows, the primary
-arms-length filter (instrument_type = 'WD' AND qualification_code = 'Q')
-will return zero Escambia comp candidates. The ARV engine will fall back
-to the NAL path or jv for all Escambia parcels until the parcelcard
-begins surfacing instrument_type, or a county-specific qualification
-strategy is confirmed. This is a known data limitation, not an engine bug.
-Do not add county-specific branching to work around it — document it here
-and revisit when Escambia comp pool is verified post-full-run.
+Threshold: 1,000+ qualification_code IN ('Q', 'C') records in
+parcel_sale_history with sale_price >= 10000.
+Counties below threshold skip Passes 1 and 2 entirely.
+Pass 3 (NAL spatial fallback) is always attempted for all Tier 1 parcels
+regardless of county viability.
+Purpose of pre-flight: log clarity, not performance.
 
-## Santa Rosa Data State (as of 2026-05-26)
+## Re-run Triggers
 
-~56,858 parcels enriched, run active. qualification_code populated (Q/U/C/V).
+Run arv_calculator.py after:
+  - CAMA scrape completion for a county (new parcel_sale_history data)
+  - Annual NAL refresh (updated jv, tot_lvg_area, sale fields)
+
+Always use --force when re-running after data changes — the resume
+filter (arv_estimate IS NULL) will skip all previously calculated parcels.
+Always scope to --county when practical to avoid unnecessary re-computation
+of already-current counties.
+
+## Santa Rosa Data State (as of 2026-05-28)
+
+First ARV pass complete: 120,500 processed, 67,545 COMP, 52,955 JV_FALLBACK.
+Second CAMA pass active — 2,265 retry parcels (dor_uc '001' only).
+54,453 unenriched parcels have dor_uc outside scraper target — not SFR,
+will not be scraped by santa_rosa.py.
+--force re-run pending second CAMA pass completion.
+instrument_type is NULL for all Santa Rosa rows — parcelcard does not
+surface this field.
+qualification_code populated: Q / U / C / V.
+
+## Escambia Data State (as of 2026-05-28)
+
+~18,448 parcels enriched, run active (~17.3% coverage).
+All current rows are clean (column mapping fix applied item 101).
 instrument_type is NULL — parcelcard does not surface this field.
-
-Same implication as Escambia: instrument_type = NULL means the primary
-arms-length filter yields zero candidates for Santa Rosa as well.
-
-REVISED ARMS-LENGTH FILTER FOR CURRENT DATA:
-Since neither county surfaces instrument_type on their parcelcard,
-the practical primary filter for both counties is:
-  qualification_code = 'Q' AND sale_price >= 10000
-
-And the wider pool is:
-  qualification_code IN ('Q', 'U') AND sale_price >= 10000
-
-The instrument_type = 'WD' condition should be applied only when
-instrument_type IS NOT NULL, to avoid silently eliminating the entire
-comp pool. Implement as:
-  (instrument_type = 'WD' OR instrument_type IS NULL)
-  AND qualification_code = 'Q'
-  AND sale_price >= 10000
-
-This is the correct filter given current data. Revisit if/when a county
-parcelcard begins surfacing instrument_type.
-
-## qualification_code = 'C' — Resolved (Santa Rosa)
-
-'C' is a Santa Rosa PA-local qualification value meaning "Qualified and
-Confirmed." Confirmed directly with Richard Brosnaham, Administrative
-Coordinator, Santa Rosa County Property Appraiser's Office, 2026-05-26.
-Contact: 850.983.1880.
-
-'C' represents an arms-length qualified sale where the PA has taken an
-additional confirmation step beyond standard 'Q' qualification. It is
-not a Florida DOR transfer code — it is Santa Rosa's internal value in
-the parcelcard Q/U column.
-
-Data profile (verified 2026-05-26, sale_price >= 10000):
-- 6,941 records (6,510 improved, 417 vacant)
-- Improved avg: $408,045
-- Vacant avg: $96,040
-- Instrument type: WD throughout sampled records
-- Active through 2026
-
-ARV engine treatment: 'C' is at least equal confidence to 'Q' and may
-be treated as higher confidence given the additional confirmation step.
-Primary comp pool: qualification_code IN ('Q', 'C') AND sale_price >= 10000
-Wider pool: qualification_code IN ('Q', 'C', 'U') AND sale_price >= 10000
+bedrooms, bathrooms, cama_quality_code absent from Escambia parcelcard —
+these fields will remain NULL for all Escambia parcels.
+ARV first run pending — await sufficient CAMA enrichment.
+County viability pre-flight will gate correctly when run is attempted.
+With instrument_type NULL and no dor_uc '001' instrument_type data,
+Pass 1 and Pass 2 rely entirely on qualification_code. Pass 3 provides
+NAL spatial fallback for all parcels where PSH pool is insufficient.
 
 ## bed_bath_source Confidence Hierarchy
 
@@ -250,9 +298,9 @@ Confidence order (highest to lowest):
 
 1. cama          — PA parcelcard, most authoritative
 2. county_clerk  — direct county government source. Current clerk sources
-                   (lis pendens, foreclosure, tax deed) are legal event records
-                   and do NOT carry beds/baths. Reserved for future county
-                   sources that surface building characteristics.
+                   (lis pendens, foreclosure, tax deed) are legal event
+                   records and do NOT carry beds/baths. Reserved for future
+                   county sources that surface building characteristics.
 3. zillow_staging / auction_com — equal confidence, third-party sourced
 4. manual        — lowest, human-entered, no current write workflow
 
@@ -264,8 +312,8 @@ auction_com level until data quality is evaluated.
 
 If incoming source confidence equals existing, overwrite (fresher data
 from same source is acceptable). If lower, skip entirely.
-Logic lives in the parser layer. Not yet implemented — implementation
-is part of item 17 scope.
+Logic lives in the parser layer. Not yet implemented — tracked as item 116.
+scope completion for full bed_bath_source enforcement.
 
 ## Multi-year SDF (Florida DOR Sales Data File)
 
@@ -274,7 +322,18 @@ sufficient comp pool for the ARV engine. SDF improves comp pool depth and
 geographic coverage when it arrives. Contact: PTOTechnology@floridarevenue.com
 Do not raise SDF as a blocker — this decision is locked (2026-05-04).
 
-## New County Checklist Addition
+## Phase 3 Scaling Limitation
+
+Per-parcel spatial query at ~120ms/parcel is acceptable for current
+2-county scope (~291K parcels, ~11 hour full run). At 67-county scale
+(~8-10M parcels) this approach becomes untenable. Architecture options
+at Phase 3: temp table pre-aggregation or partitioned bulk join.
+County-wide bulk join was attempted and failed at Santa Rosa scale —
+query did not complete after 4+ hours. Do not retry bulk join without
+first resolving PostgreSQL work_mem and query planner configuration.
+Documented in deferred item 115.
+
+## New County Checklist
 
 When a new county CAMA scrape completes, verify comp pool viability:
 
@@ -288,7 +347,7 @@ When a new county CAMA scrape completes, verify comp pool viability:
   WHERE county_fips = '{fips}'
   AND sale_price > 0;
 
-And qualification code distribution:
+Qualification code distribution:
 
   SELECT
       qual_cd1,
@@ -302,12 +361,12 @@ And qualification code distribution:
   GROUP BY qual_cd1
   ORDER BY count DESC;
 
-And parcel_sale_history qualification distribution:
+parcel_sale_history qualification distribution:
 
   SELECT
       instrument_type,
       qualification_code,
-      COUNT(*)              AS count,
+      COUNT(*)               AS count,
       ROUND(AVG(sale_price)) AS avg_price
   FROM parcel_sale_history
   WHERE county_fips = '{fips}'
@@ -315,5 +374,6 @@ And parcel_sale_history qualification distribution:
   GROUP BY instrument_type, qualification_code
   ORDER BY count DESC;
 
-Minimum viable comp pool: 1,000+ qualification_code = 'Q' records
-for the county before COMP arv_source is considered reliable.
+Minimum viable comp pool: 1,000+ qualification_code IN ('Q', 'C') records
+for the county before COMP arv_source is considered reliable for Pass 1/2.
+Pass 3 (NAL spatial fallback) is always available regardless of PSH pool size.

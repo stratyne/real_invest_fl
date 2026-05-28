@@ -100,6 +100,7 @@ class Property(Base):
     jv_per_sqft:           Mapped[float | None] = mapped_column(Numeric)
     arv_estimate:          Mapped[int | None]   = mapped_column(Integer)
     arv_spread:            Mapped[int | None]   = mapped_column(Integer)
+    arv_source:            Mapped[str | None]   = mapped_column(String(20))
     list_price:            Mapped[int | None]   = mapped_column(Integer)
 
     # ------------------------------------------------------------------ #

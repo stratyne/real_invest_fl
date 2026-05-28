@@ -1,6 +1,6 @@
 # Project Penstock — STATE.md
 # Current project status only. No rationale. No design decisions.
-# Updated: 2026-05-26
+# Updated: 2026-05-28
 
 ## Active Phase
 **Phase 2** (scraping/matching) — core complete, scheduler/output pending.
@@ -28,7 +28,7 @@ no shared scraper possible).
 UI development proceeds in parallel.
 
 ## Migration Chain
-HEAD = m4n5o6p7q8r9 (v0.20) — live and verified
+HEAD = n5o6p7q8r9s0 (v0.21) — live and verified
 
 | Rev | Version | Description |
 |---|---|---|
@@ -51,22 +51,30 @@ HEAD = m4n5o6p7q8r9 (v0.20) — live and verified
 | k2l3m4n5o6p7 | v0.18 | user_profile_prefs |
 | l3m4n5o6p7q8 | v0.19 | multi-county filter profiles — county_fips VARCHAR(5)[] |
 | m4n5o6p7q8r9 | v0.20 | listing_events workflow_status CHECK constraint |
+| n5o6p7q8r9s0 | v0.21 | add arv_source to properties |
 
 **Note:** Ingest refactor (2026-05-02) produced NO migration — code only.
 **Note:** alembic/env.py updated 2026-05-26 to use HOST_SYNC_DATABASE_URL — required for host-side migration runs.
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
 mqi_qualified_at once Phase 4 query-time filter is live.
 
-## Database State (verified 2026-05-24)
+## Database State (verified 2026-05-28)
 
 | County | FIPS | NAL rows | GIS geometry | CAMA enriched | Notes |
 |---|---|---|---|---|---|
-| Escambia | 12033 | 170,561 | 160,264 | 3060 | dor_uc backfilled; escpa.org confirmed UP 2026-05-24; dry-run required before live run |
-| Santa Rosa | 12113 | 120,500 | 111,036 | 56,858 (11,454 remaining) | Run restarted 2026-05-24 against parcelcard.srcpa.gov |
+| Escambia | 12033 | 170,561 | 160,264 | ~18,448 | Live CAMA run active. beds/baths/quality absent from parcelcard. ARV run pending sufficient enrichment. |
+| Santa Rosa | 12113 | 120,500 | 111,036 | ~67,041 | ARV first pass complete — 67,545 COMP / 52,955 JV_FALLBACK. Second CAMA pass active (2,265 retry parcels). --force re-run pending second pass completion. |
 | All others | — | staged only | staged only | 0 | NAL + GIS files in place |
 
 **Total properties in DB:** 291,061
-**parcel_sale_history:** 17,596+ rows (Santa Rosa only, growing)
+
+**parcel_sale_history (verified 2026-05-28):**
+
+| Metric | Escambia | Santa Rosa |
+|---|---|---|
+| Enriched parcels | 18,448 | 67,041 |
+| Parcels with sales | 18,321 | 66,750 |
+| Total sale records | 84,140 | 150,484 |
 
 ## Historical POC Baseline (Escambia only — superseded 2026-05-02)
 Retained as reference for backfill completeness verification.
@@ -80,12 +88,14 @@ Retained as reference for backfill completeness verification.
 | Auction.com listings | 11 records | 2026-04-28 initial load |
 | Zillow listings | 218 records | 13 foreclosures + 205 for-sale, 2026-04-28 |
 
-## CAMA Run Status (updated 2026-05-26)
-- **Santa Rosa:** RUNNING. ~56,858 / 68,312 enriched
-  REST_EVERY=500, REST_SECONDS=300.0. Resumable via cama_enriched_at IS NULL.
-  parcel_sale_history data is correct — no action needed on existing rows.
-- **Escambia:** RUNNING via scripts/run_escambia_cama.py. ~3,060 / 106,372 enriched. Restarted 2026-05-26.
-  REST_EVERY=None, delay=2.0–5.0s, wrapper wait=420s. Resumable via cama_enriched_at IS NULL.
+## CAMA Run Status (updated 2026-05-28)
+- **Santa Rosa:** Second pass RUNNING. 2,265 retry parcels (dor_uc '001' only).
+  54,453 unenriched parcels are non-SFR dor_uc — will not be scraped.
+  Resumable via cama_enriched_at IS NULL.
+- **Escambia:** RUNNING via scripts/run_escambia_cama.py. ~18,448 / 106,372 enriched.
+  Soft-block rate limiting active — wrapper cycling at 420s intervals.
+  beds/baths/cama_quality_code absent from Escambia parcelcard — will remain NULL.
+  Resumable via cama_enriched_at IS NULL.
 
 ## Active Items
 
@@ -94,8 +104,8 @@ Retained as reference for backfill completeness verification.
 | 1 | PARTIAL | Beds/baths opportunistic population for Escambia County | Bulk source pending — not a blocker |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
-| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa running (parcelcard); Escambia live run started 2026-05-26 |
-| 17 | PENDING | arv_calculator.py refactor | Design complete in arv.md. Ready to implement. |
+| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa second pass active (2,265 retry parcels, completion imminent). Escambia live run active (~18,448 enriched, soft-block rate limiting in progress). |
+| 17 | PARTIAL | arv_calculator.py refactor | Three-pass engine complete. Santa Rosa first pass done. --force re-run pending second CAMA pass completion. Escambia pending sufficient enrichment. |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
 | 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job |
 | 20 | PENDING | Daily scheduler | Windows Task Scheduler → master runner script |
@@ -109,6 +119,7 @@ Retained as reference for backfill completeness verification.
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
 | 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
+| 116 | PENDING | bed_bath_source enforcement in parser layer — confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing — ready to implement when prioritized. | — |
 
 ## Deferred Items
 
@@ -124,6 +135,7 @@ Retained as reference for backfill completeness verification.
 | 103 | Local dev environment setup not documented — vite proxy port, docker-compose ports mapping, npm run dev workflow | Will cause repeated confusion when returning to local dev after a gap |
 | 105 | Search architecture — Option A migration (full SQL ORDER BY / LIMIT / OFFSET) | Prerequisite: deal scoring engine (item 19) must be stable enough to express score as a SQL expression. Option C is the correct interim state. |
 | 106 | SalesComp ORM model and sales_comps table exist but have no ingest pipeline and no relationship on Property. Placeholder for FL DOR SDF (item 25). No action until item 25 is prioritized. |
+| 115 | arv_calculator.py Phase 3 scaling — per-parcel spatial query ~120ms/parcel acceptable for 2-county scope. County-wide bulk join attempted and failed at Santa Rosa scale. Revisit at Phase 3 with temp table pre-aggregation or partitioned bulk join. | Phase 3 |
 
 ## Completed Items (summary — detail in DECISIONS.md and context/ files)
 
@@ -203,3 +215,5 @@ Retained as reference for backfill completeness verification.
 | 110 | listing_events data fix — 6,011 lowercase workflow_status 'new' rows corrected to 'NEW' | 2026-05-26 |
 | 111 | v0.20 migration — listing_events workflow_status CHECK constraint live and verified | 2026-05-26 |
 | 112 | qualification_code 'C' resolved — confirmed "Qualified and Confirmed" by Santa Rosa County PA (Richard Brosnaham, 2026-05-26). arv.md and DECISIONS.md updated. | 2026-05-26 |
+| 113 | v0.21 migration — arv_source column added to properties table | 2026-05-28 |
+| 114 | arv_calculator.py refactor — three-pass comp engine (PSH primary, PSH wider, NAL spatial fallback), two-tier gate, county viability pre-flight. Santa Rosa first pass: 67,545 COMP / 52,955 JV_FALLBACK / 120,500 updated. | 2026-05-28 |
