@@ -269,11 +269,9 @@ of already-current counties.
 
 ## Santa Rosa Data State (as of 2026-05-28)
 
-First ARV pass complete: 120,500 processed, 67,545 COMP, 52,955 JV_FALLBACK.
-Second CAMA pass active — 2,265 retry parcels (dor_uc '001' only).
-54,453 unenriched parcels have dor_uc outside scraper target — not SFR,
-will not be scraped by santa_rosa.py.
---force re-run pending second CAMA pass completion.
+Second ARV pass complete: 120,500 processed, 67,595 COMP, 52,905 JV_FALLBACK.
+CAMA second pass complete. No further ARV runs required until next CAMA refresh
+or NAL annual update.
 instrument_type is NULL for all Santa Rosa rows — parcelcard does not
 surface this field.
 qualification_code populated: Q / U / C / V.

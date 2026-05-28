@@ -63,7 +63,7 @@ mqi_qualified_at once Phase 4 query-time filter is live.
 | County | FIPS | NAL rows | GIS geometry | CAMA enriched | Notes |
 |---|---|---|---|---|---|
 | Escambia | 12033 | 170,561 | 160,264 | ~18,448 | Live CAMA run active. beds/baths/quality absent from parcelcard. ARV run pending sufficient enrichment. |
-| Santa Rosa | 12113 | 120,500 | 111,036 | ~67,041 | ARV first pass complete — 67,545 COMP / 52,955 JV_FALLBACK. Second CAMA pass active (2,265 retry parcels). --force re-run pending second pass completion. |
+| Santa Rosa | 12113 | 120,500 | 111,036 | ~67,041 | ARV second pass complete — 67,595 COMP / 52,905 JV_FALLBACK. CAMA run complete. |
 | All others | — | staged only | staged only | 0 | NAL + GIS files in place |
 
 **Total properties in DB:** 291,061
@@ -105,7 +105,7 @@ Retained as reference for backfill completeness verification.
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa second pass active (2,265 retry parcels, completion imminent). Escambia live run active (~18,448 enriched, soft-block rate limiting in progress). |
-| 17 | PARTIAL | arv_calculator.py refactor | Three-pass engine complete. Santa Rosa first pass done. --force re-run pending second CAMA pass completion. Escambia pending sufficient enrichment. |
+| 17 | PARTIAL | arv_calculator.py refactor | Santa Rosa second pass complete — 67,595 COMP / 52,905 JV_FALLBACK / 120,500 updated. Escambia --force run pending sufficient CAMA enrichment. |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
 | 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job |
 | 20 | PENDING | Daily scheduler | Windows Task Scheduler → master runner script |
