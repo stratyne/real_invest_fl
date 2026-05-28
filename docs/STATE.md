@@ -104,10 +104,9 @@ Retained as reference for backfill completeness verification.
 | 1 | PARTIAL | Beds/baths opportunistic population for Escambia County | Bulk source pending — not a blocker |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
-| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa second pass active (2,265 retry parcels, completion imminent). Escambia live run active (~18,448 enriched, soft-block rate limiting in progress). |
+| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa complete. Escambia live run active (~18,448 enriched, soft-block rate limiting in progress). |
 | 17 | PARTIAL | arv_calculator.py refactor | Santa Rosa second pass complete — 67,595 COMP / 52,905 JV_FALLBACK / 120,500 updated. Escambia --force run pending sufficient CAMA enrichment. |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
-| 19 | PENDING | Deal scoring engine | Query-time only — no pre-computation job |
 | 20 | PENDING | Daily scheduler | Windows Task Scheduler → master runner script |
 | 21 | PENDING | Zestimate integration | RapidAPI wrapper, rate-limited |
 | 22 | PENDING | Output pipeline — Google Sheets export | — |
@@ -117,7 +116,6 @@ Retained as reference for backfill completeness verification.
 | 27 | PENDING | LienHub advertised list | Check 2026-05-05 — see URL in scrapers.md |
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
-| 58 | PENDING | deal_score_weights editor in SearchPage filter UI | Blocked on item 19 (deal scoring engine) |
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
 | 116 | PENDING | bed_bath_source enforcement in parser layer — confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing — ready to implement when prioritized. | — |
 
@@ -153,6 +151,7 @@ Retained as reference for backfill completeness verification.
 | 11 | seed_superuser.py — superuser created, Escambia access granted | 2026-05-04 |
 | 12 | seed_bundles.py — pensacola_metro bundle seeded, Santa Rosa activated | 2026-05-04 |
 | 13 | Phase 4 UI — dashboard flow complete, map pins live, deployment complete | 2026-05-23 |
+| 19 | Deal scoring engine — deal_score_weights round-trip complete. Weights hydrated from profile, passed through filterStateToPayload. dom_score dimension added. Hardcoded weights removed. | 2026-05-28 |
 | 33 | parcel_sale_history table (v0.14, v0.15) | 2026-05-04 |
 | 34 | Multi-county CAMA framework | 2026-05-04 |
 | 35 | Phase 4 API scaffold — deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |
@@ -175,6 +174,7 @@ Retained as reference for backfill completeness verification.
 | 55 | routes/profiles.py — toggle_favorite implemented | 2026-05-15 |
 | 56 | v0.19 migration — multi-county filter profiles, county_fips VARCHAR(5)[] | 2026-05-15 |
 | 57 | DashboardPage.tsx rewrite; SearchPage.tsx extracted; App.tsx updated; ResultsPage.tsx import fix | 2026-05-14 |
+| 58 | Deal score weights editor — Deal Score Weights section in SearchPage with four NumInput fields and live weight sum indicator. | 2026-05-28 |
 | 59 | Frontend multi-county refactor — types/api.ts, SearchPage.tsx, DashboardPage.tsx, ResultsPage.tsx, profiles.ts, api/properties.ts, App.tsx route updated to /results (profileId moved to nav state) | 2026-05-15 |
 | 60 | Seed script audit — seed_bundles.py, seed_demo_account.py clean, no changes needed | 2026-05-15 |
 | 69 | Backend multi-county route contract refactor — routes/profiles.py de-county-scoped (flat /profiles prefix); routes/properties.py search profile-driven via /properties?filter_profile_id= and POST /properties/search; routes/dashboard.py county_fips returns string[] | 2026-05-15 |
@@ -219,3 +219,6 @@ Retained as reference for backfill completeness verification.
 | 114 | arv_calculator.py refactor — three-pass comp engine (PSH primary, PSH wider, NAL spatial fallback), two-tier gate, county viability pre-flight. Santa Rosa first pass: 67,545 COMP / 52,955 JV_FALLBACK / 120,500 updated. | 2026-05-28 |
 | 117 | Address sort — USPS-style street-name sort with nulls-last on both directions. _address_sort_key() in properties.py. | 2026-05-28 |
 | 118 | Escambia CAMA — NOT_FOUND sentinel + cama_enriched_at stamp for permanent not-found parcels. Inter-request delay on not-found path. | 2026-05-28 |
+| 119 | Persistent nav bar — AppNav component extracted. Brand, Dashboard, New Search, Sign Out accessible from all authenticated pages. | 2026-05-28 |
+| 120 | ResultsPage filterState type annotation corrected to FilterState | null. Page-specific actions moved to sub-header below persistent nav. | 2026-05-28 |
+| 121 | SearchPage Sort By options expanded to match all backend supported_sort_fields — address and tot_lvg_area added. | 2026-05-28 |

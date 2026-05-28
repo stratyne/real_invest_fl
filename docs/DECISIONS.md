@@ -277,8 +277,11 @@ is Tier 1.
   "Save as my profile" is a first-class UI action.
 - User profiles: user_id = owner, private, fully editable.
 - Uniqueness enforced via two partial unique indexes:
-  - System: UNIQUE (county_fips, profile_name) WHERE user_id IS NULL
-  - User: UNIQUE (user_id, county_fips, profile_name) WHERE user_id IS NOT NULL
+  - System profiles: unique on (profile_name) WHERE user_id IS NULL
+  - User profiles: unique on (user_id, profile_name) WHERE user_id IS NOT NULL
+  - county_fips is a VARCHAR(5)[] array column — it cannot participate in a
+    PostgreSQL unique index and is not part of either uniqueness constraint.
+    Uniqueness is enforced on name alone within each ownership scope.
 - Cross-county profiles deferred to Phase 3+. Single-county-per-route
   is an explicit architectural choice tied to the subscription model.
 
@@ -311,6 +314,33 @@ is Tier 1.
 
 ---
 
+## Deal Score Weights
+
+Decision (2026-05-28): deal_score_weights is stored as a top-level scalar
+column on filter_profiles and as a top-level field on FilterState, parallel
+to rehab_cost_per_sqft and other engine configuration columns. It is NOT
+embedded inside filter_criteria.filters.
+
+Rationale: deal_score_weights governs pipeline behaviour (scoring), not
+property selection (filtering). The filter_criteria JSONB blob is the
+vocabulary for WHERE clause construction only. Engine configuration columns
+are scalar columns on the ORM model for the same reason rehab_cost_per_sqft
+is a scalar — they are first-class operational parameters, not filter
+dimensions.
+
+Default weights: arv_spread_score=0.50, signal_tier_score=0.25,
+dom_score=0.15, absentee_score=0.10. Sum to 1.00. Lead with financial
+outcome, treat seller motivation as secondary. dom_score intentionally
+small — most inventory has no listing_event and the weight self-adjusts
+to zero for unlisted properties via the total_weight normalization in
+_compute_deal_score().
+
+Existing profiles with empty deal_score_weights dict ({}) will fall back
+to these defaults silently on first hydration via profileToFilterState().
+No migration required.
+
+---
+
 ## Search Architecture
 
 - Current state: Option C hybrid (item 104). Lightweight scoring fetch
@@ -320,8 +350,10 @@ is Tier 1.
   pagination is applied. max_results cap is a known limitation — users
   with broad filters receive a silently truncated result set.
 - Target state: Option A — full SQL ORDER BY / LIMIT / OFFSET, migrating
-  to keyset/cursor pagination at scale. Prerequisite: deal scoring engine
-  (item 19) must be expressible as a SQL expression.
+  to keyset/cursor pagination at scale. Prerequisite: deal scoring engine 
+  scoring dimensions must be expressible as SQL expressions. Current Python-side 
+  scoring uses parcel_sale_history join logic that is not yet directly 
+  expressible in SQL — this is the blocking constraint for Option A, not item 19.
 - The ORDER BY county_fips, parcel_id tiebreaker (item 102) must be
   preserved through any search architecture migration — it is the
   foundation for keyset pagination.

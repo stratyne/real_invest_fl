@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import AppNav from '../components/AppNav'
 import { getMe } from '../api/auth'
 import { getDashboard } from '../api/dashboard'
 import { toggleFavorite } from '../api/profiles'
@@ -18,11 +19,6 @@ export default function DashboardPage() {
       .catch(() => setLoadError('Failed to load dashboard.'))
   }, [])
 
-  function handleSignOut() {
-    localStorage.removeItem('access_token')
-    navigate('/login')
-  }
-
   function handleRunProfile(entry: ProfileActivityEntry) {
     navigate('/results', {
       state: {
@@ -40,10 +36,6 @@ export default function DashboardPage() {
         countyFips: entry.county_fips,
       },
     })
-  }
-
-  function handleNewSearch() {
-    navigate('/search')
   }
 
   async function handleToggleFavorite(entry: ProfileActivityEntry) {
@@ -72,16 +64,7 @@ export default function DashboardPage() {
 
   return (
     <div style={s.outer}>
-
-      {/* ── Header ── */}
-      <header style={s.header}>
-        <span style={s.brand}>Penstock</span>
-        <div style={s.headerRight}>
-          <span style={s.userName}>{user.full_name ?? user.email}</span>
-          <button style={s.ghostBtn} onClick={handleNewSearch}>New Search</button>
-          <button style={s.ghostBtn} onClick={handleSignOut}>Sign out</button>
-        </div>
-      </header>
+      <AppNav userName={user.full_name ?? user.email} />
 
       <div style={s.body}>
 
@@ -103,7 +86,7 @@ export default function DashboardPage() {
         <section style={s.section}>
           <div style={s.sectionHeader}>
             <h2 style={s.sectionTitle}>Filter Profiles</h2>
-            <button style={s.primaryBtn} onClick={handleNewSearch}>
+            <button style={s.primaryBtn} onClick={() => navigate('/search')}>
               + New Search
             </button>
           </div>
@@ -111,7 +94,7 @@ export default function DashboardPage() {
           {profile_activity.length === 0 ? (
             <div style={s.emptyState}>
               <p style={s.emptyText}>No profiles run yet.</p>
-              <button style={s.primaryBtn} onClick={handleNewSearch}>
+              <button style={s.primaryBtn} onClick={() => navigate('/search')}>
                 Start your first search
               </button>
             </div>
@@ -199,67 +182,135 @@ function ProfileRow({
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const s: Record<string, React.CSSProperties> = {
-  outer: { minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column' },
-  header: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '0 32px', height: '56px', background: 'var(--color-surface)',
-    borderBottom: '1px solid var(--color-border)', flexShrink: 0,
+  outer: {
+    minHeight: '100vh',
+    background: 'var(--color-bg)',
+    display: 'flex',
+    flexDirection: 'column',
   },
-  brand: { fontWeight: 700, fontSize: '18px' },
-  headerRight: { display: 'flex', alignItems: 'center', gap: '12px' },
-  userName: { color: 'var(--color-text-muted)', fontSize: '13px' },
-  ghostBtn: {
-    background: 'transparent', border: '1px solid var(--color-border)',
-    borderRadius: '6px', color: 'var(--color-text-muted)', padding: '6px 12px', fontSize: '13px',
-    cursor: 'pointer',
+  body: {
+    padding: '32px',
+    maxWidth: '960px',
+    margin: '0 auto',
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '40px',
+  },
+  section: {},
+  sectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: '16px',
+  },
+  sectionTitle: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: 'var(--color-text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    margin: 0,
   },
   primaryBtn: {
-    background: 'var(--color-primary)', border: 'none', borderRadius: '6px',
-    color: '#fff', padding: '8px 16px', fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+    background: 'var(--color-primary)',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    padding: '8px 16px',
+    fontWeight: 600,
+    fontSize: '13px',
+    cursor: 'pointer',
   },
-  body: { padding: '32px', maxWidth: '960px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '40px' },
-  section: {},
-  sectionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' },
-  sectionTitle: { fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 },
   pipelineRow: { display: 'flex', gap: '12px', flexWrap: 'wrap' },
   pipelineTile: {
-    background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-    borderRadius: '10px', padding: '16px 24px', display: 'flex', flexDirection: 'column', gap: '4px',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '10px',
+    padding: '16px 24px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
     minWidth: '160px',
   },
   pipelineValue: { fontSize: '28px', fontWeight: 700 },
   pipelineValueMuted: { color: 'var(--color-text-muted)' },
   pipelineLabel: { fontSize: '12px', color: 'var(--color-text-muted)' },
-  pipelineMutedNote: { fontSize: '10px', color: 'var(--color-text-muted)', fontStyle: 'italic' },
+  pipelineMutedNote: {
+    fontSize: '10px',
+    color: 'var(--color-text-muted)',
+    fontStyle: 'italic',
+  },
   profileList: {
-    display: 'flex', flexDirection: 'column',
-    border: '1px solid var(--color-border)', borderRadius: '10px', overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    border: '1px solid var(--color-border)',
+    borderRadius: '10px',
+    overflow: 'hidden',
   },
   profileRow: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '14px 20px', background: 'var(--color-surface)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '14px 20px',
+    background: 'var(--color-surface)',
     borderBottom: '1px solid var(--color-border)',
   },
   profileLeft: { display: 'flex', alignItems: 'center', gap: '14px' },
-  favStar: { fontSize: '18px', color: 'var(--color-warning)', cursor: 'default', userSelect: 'none' },
+  favStar: {
+    fontSize: '18px',
+    color: 'var(--color-warning)',
+    userSelect: 'none',
+  },
   profileInfo: { display: 'flex', flexDirection: 'column', gap: '3px' },
-  profileName: { fontSize: '14px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' },
+  profileName: {
+    fontSize: '14px',
+    fontWeight: 600,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+  },
   systemBadge: {
-    fontSize: '10px', background: 'var(--color-border)', color: 'var(--color-text-muted)',
-    borderRadius: '4px', padding: '1px 6px', fontWeight: 500,
+    fontSize: '10px',
+    background: 'var(--color-border)',
+    color: 'var(--color-text-muted)',
+    borderRadius: '4px',
+    padding: '1px 6px',
+    fontWeight: 500,
   },
   profileMeta: { fontSize: '12px', color: 'var(--color-text-muted)' },
-  runBtn: {
-    background: 'var(--color-primary)', border: 'none', borderRadius: '6px',
-    color: '#fff', padding: '7px 18px', fontWeight: 600, fontSize: '13px', cursor: 'pointer',
-  },
-  emptyState: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px', padding: '48px 0' },
-  emptyText: { color: 'var(--color-text-muted)', fontSize: '14px', margin: 0 },
-  centerMsg: { padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' },
   rowActions: { display: 'flex', gap: '8px', alignItems: 'center' },
   editBtn: {
-    background: 'transparent', border: '1px solid var(--color-border)',
-    borderRadius: '6px', color: 'var(--color-text)', padding: '7px 18px',
-    fontWeight: 600, fontSize: '13px', cursor: 'pointer',
-  },  
+    background: 'transparent',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    color: 'var(--color-text)',
+    padding: '7px 18px',
+    fontWeight: 600,
+    fontSize: '13px',
+    cursor: 'pointer',
+  },
+  runBtn: {
+    background: 'var(--color-primary)',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    padding: '7px 18px',
+    fontWeight: 600,
+    fontSize: '13px',
+    cursor: 'pointer',
+  },
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '16px',
+    padding: '48px 0',
+  },
+  emptyText: { color: 'var(--color-text-muted)', fontSize: '14px', margin: 0 },
+  centerMsg: {
+    padding: '40px',
+    textAlign: 'center',
+    color: 'var(--color-text-muted)',
+  },
 }

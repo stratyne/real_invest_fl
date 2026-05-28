@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import AppNav from '../components/AppNav'
 import { getMe } from '../api/auth'
 import { listCounties } from '../api/counties'
 import { listProfiles, createProfile } from '../api/profiles'
@@ -62,6 +63,12 @@ export interface FilterState {
   listing_types: string[]
   min_arv_spread: number | null
   min_deal_score: number | null
+  deal_score_weights: {
+    arv_spread_score: number
+    signal_tier_score: number
+    dom_score: number
+    absentee_score: number
+  }
   rehab_cost_per_sqft: number
   min_comp_sales_for_arv: number
   comp_radius_miles: number
@@ -121,6 +128,12 @@ const EMPTY_FILTER: FilterState = {
   listing_types: [],
   min_arv_spread: null,
   min_deal_score: null,
+  deal_score_weights: {
+    arv_spread_score: 0.50,
+    signal_tier_score: 0.25,
+    dom_score: 0.15,
+    absentee_score: 0.10,
+  },
   rehab_cost_per_sqft: 22.0,
   min_comp_sales_for_arv: 3,
   comp_radius_miles: 1.0,
@@ -139,6 +152,8 @@ function profileToFilterState(p: FilterProfileResponse): FilterState {
   function numVal(key: string): number | null { return ((f[key] as Record<string, unknown>)?.value as number) ?? null }
   function boolReq(key: string): boolean | null { const v = (f[key] as Record<string, unknown>)?.required; return v == null ? null : Boolean(v) }
   function excludeList(key: string): string[] { return ((f[key] as Record<string, unknown>)?.exclude as string[]) ?? [] }
+
+  const w = (p.deal_score_weights ?? {}) as Record<string, unknown>
 
   return {
     zip_codes: (includeList('zip_codes') as string[]) ?? [],
@@ -190,6 +205,12 @@ function profileToFilterState(p: FilterProfileResponse): FilterState {
     listing_types: (includeList('listing_types') as string[]) ?? [],
     min_arv_spread: numVal('min_arv_spread'),
     min_deal_score: numVal('min_deal_score'),
+    deal_score_weights: {
+      arv_spread_score: (w.arv_spread_score as number) ?? 0.50,
+      signal_tier_score: (w.signal_tier_score as number) ?? 0.25,
+      dom_score: (w.dom_score as number) ?? 0.15,
+      absentee_score: (w.absentee_score as number) ?? 0.10,
+    },
     rehab_cost_per_sqft: p.rehab_cost_per_sqft,
     min_comp_sales_for_arv: p.min_comp_sales_for_arv,
     comp_radius_miles: p.comp_radius_miles,
@@ -255,11 +276,7 @@ export function filterStateToPayload(
     min_comp_sales_for_arv: fs.min_comp_sales_for_arv,
     comp_radius_miles: fs.comp_radius_miles,
     comp_year_built_tolerance: fs.comp_year_built_tolerance,
-    deal_score_weights: {
-      arv_spread_score: 0.5,
-      signal_tier_score: 0.25,
-      absentee_score: 0.25,
-    },
+    deal_score_weights: fs.deal_score_weights,
   }
 }
 
@@ -370,7 +387,7 @@ function TriStateSelect({ label, value, onChange }: {
   )
 }
 
-// ── Collapsible section — row layout ─────────────────────────────────────
+// ── Collapsible section ───────────────────────────────────────────────────
 
 function Section({ title, children, defaultOpen = false }: {
   title: string; children: React.ReactNode; defaultOpen?: boolean
@@ -443,14 +460,12 @@ export default function SearchPage() {
   const canSearch = activeCount >= 2 && selectedFips.length > 0
   const canSave = activeCount >= 2 && selectedFips.length > 0
 
-  // ── On mount — load user and accessible counties
   useEffect(() => {
     Promise.all([getMe(), listCounties()])
       .then(([u, cs]) => { setUser(u); setCounties(cs) })
       .catch(() => setLoadError('Failed to load.'))
   }, [])
 
-  // ── Load visible profiles once
   useEffect(() => {
     listProfiles()
       .then((ps) => {
@@ -461,21 +476,14 @@ export default function SearchPage() {
         const useNav = hasNavProfileId || hasNavFilterState
 
         if (useNav) {
-          // Restore county selection from nav state if present
           if (navState?.countyFips?.length) {
             setSelectedFips(navState.countyFips)
           } else {
             setSelectedFips([])
           }
 
-          // Restore profile ID from nav state if present
           setSelectedProfileId(navState?.profileId ?? null)
 
-          // Prefer explicit filterState from nav state (covers both the unsaved
-          // inline case and the saved-profile edit case). Only fall back to
-          // hydrating from the profile record if nav state has a profileId but
-          // no filterState — which should not happen in normal flow but is
-          // handled defensively.
           if (hasNavFilterState) {
             setFilterState(navState!.filterState!)
           } else if (hasNavProfileId) {
@@ -485,39 +493,35 @@ export default function SearchPage() {
             setFilterState(EMPTY_FILTER)
           }
         } else {
-          // Fresh arrival with no nav state — start clean
           setSelectedProfileId(null)
           setSelectedFips([])
           setFilterState(EMPTY_FILTER)
         }
       })
       .catch(() => setLoadError('Failed to load filter profiles.'))
-  }, [location.state])
+  }, [location.state]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleCountySelect(fips: string) {
     setSelectedFips((prev) =>
-      prev.includes(fips)
-        ? prev.filter((x) => x !== fips)
-        : [...prev, fips]
+      prev.includes(fips) ? prev.filter((x) => x !== fips) : [...prev, fips]
     )
     setSelectedProfileId(null)
   }
 
   function handleProfileSelect(id: number | null) {
-  if (id == null) {
-    setSelectedProfileId(null)
-    setSelectedFips([])
-    setFilterState(EMPTY_FILTER)
-    return
+    if (id == null) {
+      setSelectedProfileId(null)
+      setSelectedFips([])
+      setFilterState(EMPTY_FILTER)
+      return
+    }
+    setSelectedProfileId(id)
+    const p = profiles.find((x) => x.id === id)
+    if (p) {
+      setFilterState(profileToFilterState(p))
+      setSelectedFips(p.county_fips)
+    }
   }
-
-  setSelectedProfileId(id)
-  const p = profiles.find((x) => x.id === id)
-  if (p) {
-    setFilterState(profileToFilterState(p))
-    setSelectedFips(p.county_fips)
-  }
-}
 
   const handleClearAll = useCallback(() => {
     setSelectedProfileId(null)
@@ -556,10 +560,6 @@ export default function SearchPage() {
     })
   }
 
-  function handleBack() {
-    navigate('/dashboard')
-  }
-
   function setFs(partial: Partial<FilterState>) {
     setFilterState((prev) => ({ ...prev, ...partial }))
   }
@@ -569,15 +569,7 @@ export default function SearchPage() {
 
   return (
     <div style={pg.outer}>
-
-      {/* ── Header ── */}
-      <header style={pg.header}>
-        <div style={pg.headerLeft}>
-          <button style={pg.backBtn} onClick={handleBack}>← Dashboard</button>
-          <span style={pg.brand}>Search</span>
-        </div>
-        <span style={pg.userName}>{user.full_name ?? user.email}</span>
-      </header>
+      <AppNav userName={user.full_name ?? user.email} />
 
       <div style={pg.body}>
 
@@ -603,21 +595,18 @@ export default function SearchPage() {
         {/* ── Profile picker ── */}
         <section style={pg.section}>
           <h2 style={pg.sectionTitle}>Filter Profile</h2>
-
           <div style={pg.profilePickerRow}>
             <select
               style={pg.profileSelect}
               value={selectedProfileId == null ? '' : String(selectedProfileId)}
               onChange={(e) => {
                 const value = e.target.value
-
                 if (value === '') {
                   setSelectedProfileId(null)
                   setSelectedFips([])
                   setFilterState(EMPTY_FILTER)
                   return
                 }
-
                 handleProfileSelect(Number(value))
               }}
             >
@@ -629,24 +618,15 @@ export default function SearchPage() {
               ))}
             </select>
           </div>
-
           <div style={{ marginTop: 8 }}>
             <button
               type="button"
               onClick={handleClearAll}
-              style={{
-                padding: '8px 12px',
-                borderRadius: 8,
-                border: '1px solid #d0d7de',
-                background: '#fff',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
+              style={pg.clearBtn}
             >
               Clear all
             </button>
           </div>
-
           {profiles.length === 0 && (
             <div style={{ marginTop: 8, fontSize: 14, color: '#6b7280' }}>
               No saved profiles available.
@@ -749,6 +729,34 @@ export default function SearchPage() {
                 <NumInput label="Min Deal Score (0–1)" value={filterState.min_deal_score} onChange={(v) => setFs({ min_deal_score: v })} />
               </Section>
 
+              <Section title="Deal Score Weights">
+                <NumInput
+                  label="ARV Spread Weight"
+                  value={filterState.deal_score_weights.arv_spread_score}
+                  onChange={(v) => setFs({ deal_score_weights: { ...filterState.deal_score_weights, arv_spread_score: v ?? 0 } })}
+                  placeholder="0.0 – 1.0"
+                />
+                <NumInput
+                  label="Signal Tier Weight"
+                  value={filterState.deal_score_weights.signal_tier_score}
+                  onChange={(v) => setFs({ deal_score_weights: { ...filterState.deal_score_weights, signal_tier_score: v ?? 0 } })}
+                  placeholder="0.0 – 1.0"
+                />
+                <NumInput
+                  label="Days on Market Weight"
+                  value={filterState.deal_score_weights.dom_score}
+                  onChange={(v) => setFs({ deal_score_weights: { ...filterState.deal_score_weights, dom_score: v ?? 0 } })}
+                  placeholder="0.0 – 1.0"
+                />
+                <NumInput
+                  label="Absentee Owner Weight"
+                  value={filterState.deal_score_weights.absentee_score}
+                  onChange={(v) => setFs({ deal_score_weights: { ...filterState.deal_score_weights, absentee_score: v ?? 0 } })}
+                  placeholder="0.0 – 1.0"
+                />
+                <WeightSumIndicator weights={filterState.deal_score_weights} />
+              </Section>
+
               <Section title="ARV Engine">
                 <NumInput label="Rehab Cost / sqft ($)" value={filterState.rehab_cost_per_sqft} onChange={(v) => setFs({ rehab_cost_per_sqft: v ?? 22 })} />
                 <NumInput label="Min Comp Sales for ARV" value={filterState.min_comp_sales_for_arv} onChange={(v) => setFs({ min_comp_sales_for_arv: v ?? 3 })} />
@@ -765,9 +773,11 @@ export default function SearchPage() {
                     onChange={(e) => setFs({ sort_by_field: e.target.value })}>
                     <option value="deal_score">Deal Score</option>
                     <option value="list_price">List Price</option>
-                    <option value="just_value">Just Value</option>
+                    <option value="jv">Just Value</option>
                     <option value="arv_spread">ARV Spread</option>
-                    <option value="year_built">Year Built</option>
+                    <option value="act_yr_blt">Year Built</option>
+                    <option value="tot_lvg_area">Living Area</option>
+                    <option value="address">Address</option>
                   </select>
                 </label>
                 <label style={inp.label}>
@@ -793,31 +803,33 @@ export default function SearchPage() {
               {saveSuccess && <span style={pg.saveSuccess}>{saveSuccess}</span>}
               <div style={pg.actionBtns}>
                 <button
-                    style={{ ...pg.saveBtn, opacity: canSave ? 1 : 0.5 }}
-                    onClick={() => canSave && setShowSaveModal(true)}
-                    disabled={!canSave}
+                  style={{ ...pg.saveBtn, opacity: canSave ? 1 : 0.5 }}
+                  onClick={() => canSave && setShowSaveModal(true)}
+                  disabled={!canSave}
                 >
-                    Save Filter
+                  Save Filter
                 </button>
                 <button
-                    style={{ ...pg.searchBtn, opacity: canSearch ? 1 : 0.5 }}
-                    onClick={handleSearch}
-                    disabled={!canSearch}
+                  style={{ ...pg.searchBtn, opacity: canSearch ? 1 : 0.5 }}
+                  onClick={handleSearch}
+                  disabled={!canSearch}
                 >
-                    Search
+                  Search
                 </button>
-                </div>
-                {!canSearch && (
+              </div>
+              {!canSearch && (
                 <div style={{ marginTop: 8, fontSize: 14, color: '#6b7280' }}>
-                    Select one or more counties, select a profile, and set at least 2 active filters.
+                  Select one or more counties and set at least 2 active filters.
                 </div>
-                )}
+              )}
             </div>
           </section>
         )}
 
         {selectedFips.length === 0 && counties.length > 0 && (
-          <div style={pg.centerMsg}>Select one or more counties above to configure filter parameters.</div>
+          <div style={pg.centerMsg}>
+            Select one or more counties above to configure filter parameters.
+          </div>
         )}
 
       </div>
@@ -834,68 +846,156 @@ export default function SearchPage() {
   )
 }
 
+// ── Weight sum indicator ──────────────────────────────────────────────────
+
+function WeightSumIndicator({ weights }: {
+  weights: FilterState['deal_score_weights']
+}) {
+  const sum = Object.values(weights).reduce((a, b) => a + (b ?? 0), 0)
+  const rounded = Math.round(sum * 100) / 100
+  const ok = Math.abs(rounded - 1.0) < 0.01
+  return (
+    <div style={{
+      ...inp.label,
+      justifyContent: 'center',
+      paddingTop: '4px',
+    }}>
+      <span style={{
+        fontSize: '11px',
+        fontWeight: 600,
+        color: ok ? 'var(--color-success)' : 'var(--color-warning)',
+      }}>
+        Weights sum: {rounded.toFixed(2)} {ok ? '✓' : '— should equal 1.00'}
+      </span>
+    </div>
+  )
+}
+
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const pg: Record<string, React.CSSProperties> = {
-  outer: { minHeight: '100vh', background: 'var(--color-bg)', display: 'flex', flexDirection: 'column' },
-  header: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '0 32px', height: '56px', background: 'var(--color-surface)',
-    borderBottom: '1px solid var(--color-border)', flexShrink: 0,
+  outer: {
+    minHeight: '100vh',
+    background: 'var(--color-bg)',
+    display: 'flex',
+    flexDirection: 'column',
   },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: '16px' },
-  backBtn: {
-    background: 'transparent', border: 'none', color: 'var(--color-text-muted)',
-    fontSize: '13px', cursor: 'pointer', padding: '4px 0',
+  body: {
+    padding: '32px',
+    maxWidth: '800px',
+    margin: '0 auto',
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '32px',
   },
-  brand: { fontWeight: 700, fontSize: '16px' },
-  userName: { color: 'var(--color-text-muted)', fontSize: '13px' },
-  body: { padding: '32px', maxWidth: '800px', margin: '0 auto', width: '100%', display: 'flex', flexDirection: 'column', gap: '32px' },
   section: {},
-  sectionTitle: { fontSize: '13px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px' },
+  sectionTitle: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: 'var(--color-text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.06em',
+    marginBottom: '12px',
+  },
   countyRow: { display: 'flex', flexWrap: 'wrap', gap: '8px' },
   countyBtn: {
-    background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-    borderRadius: '8px', padding: '10px 20px', fontSize: '13px', fontWeight: 500,
-    color: 'var(--color-text)', cursor: 'pointer',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '8px',
+    padding: '10px 20px',
+    fontSize: '13px',
+    fontWeight: 500,
+    color: 'var(--color-text)',
+    cursor: 'pointer',
   },
-  countyBtnSelected: { borderColor: 'var(--color-primary)', background: 'rgba(59,130,246,0.06)', color: 'var(--color-primary)' },
+  countyBtnSelected: {
+    borderColor: 'var(--color-primary)',
+    background: 'rgba(59,130,246,0.06)',
+    color: 'var(--color-primary)',
+  },
   profilePickerRow: { display: 'flex', alignItems: 'center', gap: '12px' },
   profileSelect: {
-    background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-    borderRadius: '6px', color: 'var(--color-text)', padding: '8px 12px', fontSize: '13px',
+    background: 'var(--color-bg)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    color: 'var(--color-text)',
+    padding: '8px 12px',
+    fontSize: '13px',
     minWidth: '280px',
+  },
+  clearBtn: {
+    padding: '8px 12px',
+    borderRadius: '8px',
+    border: '1px solid var(--color-border)',
+    background: 'var(--color-surface)',
+    color: 'var(--color-text)',
+    cursor: 'pointer',
+    fontSize: '13px',
   },
   filterStack: { display: 'flex', flexDirection: 'column', gap: '8px' },
   actionsBar: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    marginTop: '20px', paddingTop: '16px', borderTop: '1px solid var(--color-border)',
-    flexWrap: 'wrap', gap: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: '20px',
+    paddingTop: '16px',
+    borderTop: '1px solid var(--color-border)',
+    flexWrap: 'wrap',
+    gap: '12px',
   },
   filterCount: { fontSize: '13px', color: 'var(--color-text-muted)' },
   filterCountWarning: { color: 'var(--color-warning)' },
   saveSuccess: { fontSize: '12px', color: 'var(--color-success)' },
   actionBtns: { display: 'flex', gap: '10px' },
   saveBtn: {
-    background: 'transparent', border: '1px solid var(--color-border)',
-    borderRadius: '6px', color: 'var(--color-text)', padding: '10px 20px',
-    fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+    background: 'transparent',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    color: 'var(--color-text)',
+    padding: '10px 20px',
+    fontWeight: 600,
+    fontSize: '13px',
+    cursor: 'pointer',
   },
   searchBtn: {
-    background: 'var(--color-primary)', border: 'none', borderRadius: '6px',
-    color: '#fff', padding: '10px 24px', fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+    background: 'var(--color-primary)',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    padding: '10px 24px',
+    fontWeight: 600,
+    fontSize: '13px',
+    cursor: 'pointer',
   },
-  centerMsg: { padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '14px' },
+  centerMsg: {
+    padding: '40px',
+    textAlign: 'center',
+    color: 'var(--color-text-muted)',
+    fontSize: '14px',
+  },
 }
 
-// Section body: row layout — wrapping flex instead of column
 const sec: Record<string, React.CSSProperties> = {
-  wrapper: { border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' },
+  wrapper: {
+    border: '1px solid var(--color-border)',
+    borderRadius: '8px',
+    overflow: 'hidden',
+  },
   header: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '10px 14px', background: 'var(--color-bg)', border: 'none',
-    color: 'var(--color-text)', fontWeight: 600, fontSize: '12px', width: '100%',
-    cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '10px 14px',
+    background: 'var(--color-bg)',
+    border: 'none',
+    color: 'var(--color-text)',
+    fontWeight: 600,
+    fontSize: '12px',
+    width: '100%',
+    cursor: 'pointer',
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
   },
   chevron: { fontSize: '12px', color: 'var(--color-text-muted)' },
   body: {
@@ -909,40 +1009,75 @@ const sec: Record<string, React.CSSProperties> = {
 }
 
 const inp: Record<string, React.CSSProperties> = {
-  label: { display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px', flex: '1 1 180px' },
+  label: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    minWidth: '180px',
+    flex: '1 1 180px',
+  },
   labelText: { fontSize: '11px', color: 'var(--color-text-muted)', fontWeight: 500 },
   input: {
-    background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-    borderRadius: '5px', padding: '7px 10px', color: 'var(--color-text)',
-    fontSize: '12px', outline: 'none',
+    background: 'var(--color-bg)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '5px',
+    padding: '7px 10px',
+    color: 'var(--color-text)',
+    fontSize: '12px',
+    outline: 'none',
   },
   select: {
-    background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-    borderRadius: '5px', padding: '7px 10px', color: 'var(--color-text)',
-    fontSize: '12px', outline: 'none',
+    background: 'var(--color-bg)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '5px',
+    padding: '7px 10px',
+    color: 'var(--color-text)',
+    fontSize: '12px',
+    outline: 'none',
   },
   hint: { fontSize: '10px', color: 'var(--color-text-muted)' },
 }
 
 const mod: Record<string, React.CSSProperties> = {
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    zIndex: 200,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modal: {
-    background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-    borderRadius: '12px', padding: '28px', width: '380px',
-    display: 'flex', flexDirection: 'column', gap: '16px',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '12px',
+    padding: '28px',
+    width: '380px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
   },
   title: { fontSize: '16px', fontWeight: 700 },
   error: { color: 'var(--color-danger)', fontSize: '12px' },
   actions: { display: 'flex', justifyContent: 'flex-end', gap: '10px' },
   cancelBtn: {
-    background: 'transparent', border: '1px solid var(--color-border)',
-    borderRadius: '6px', color: 'var(--color-text)', padding: '8px 16px', fontSize: '13px', cursor: 'pointer',
+    background: 'transparent',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    color: 'var(--color-text)',
+    padding: '8px 16px',
+    fontSize: '13px',
+    cursor: 'pointer',
   },
   saveBtn: {
-    background: 'var(--color-primary)', border: 'none', borderRadius: '6px',
-    color: '#fff', padding: '8px 16px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+    background: 'var(--color-primary)',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    padding: '8px 16px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
   },
 }

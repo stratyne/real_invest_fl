@@ -72,6 +72,16 @@ ACTIVE — Phase 4 in progress. See STATE.md for item status.
   in property drawer closes drawer, recenters map, opens popup.
   Colored markers by signal tier deferred (item 91).
   Auto-fit bounds on page change deferred (item 92).
+- Deal score weights — per-profile, user-configurable via Deal Score Weights
+  section in SearchPage. Four dimensions: arv_spread_score, signal_tier_score,
+  dom_score, absentee_score. Weights round-trip correctly through FilterState,
+  filterStateToPayload, and profileToFilterState. Live weight sum indicator
+  warns if weights do not sum to 1.00. Default weights: 0.50 / 0.25 / 0.15 / 0.10.
+- Persistent navigation — AppNav component rendered on all authenticated pages.
+  Brand links to /dashboard. Dashboard and New Search nav links always visible.
+  Sign Out accessible from every page. User name displayed in nav right slot.
+  ResultsPage uses a page sub-header below AppNav for page-specific actions
+  (Edit Filter, result count, Save Filter).  
 - Outreach template generation (triggered by user selection)
 - One-click email send with calendar booking link
 - Full outreach log with response tracking
@@ -132,6 +142,15 @@ real_invest_fl/api/routes/
   No volume management required. The root .dockerignore must not exclude 
   frontend/ — the nginx multi-stage build requires access to the frontend 
   source from the repo root build context.
+- AppNav is the single navigation shell for all authenticated pages. It must
+  be included on every new authenticated page added in Phase 4 tail items.
+  Page-specific actions (back navigation, result counts, save buttons) belong
+  in a page sub-header below AppNav, not inside AppNav itself.
+- deal_score_weights lives as a first-class field on FilterState, not inside
+  filter_criteria. It is passed directly as a top-level key in
+  FilterProfileCreateRequest and InlineSearchRequest. It is never embedded
+  in filter_criteria.filters. This is consistent with rehab_cost_per_sqft
+  and other engine configuration columns.  
 
 ## Pre-flight Checklist
 
@@ -148,6 +167,10 @@ real_invest_fl/api/routes/
 All routes documented here before implementation. No route is written
 until it appears in this table. County-scoped routes always use
 Depends(county_access()) — never the explicit await pattern.
+
+Note: AppNav "New Search" link navigates to /search with no state — always
+produces a clean EMPTY_FILTER state. This is distinct from the Dashboard
+Edit path which navigates with profileId + countyFips in nav state.
 
 ### Conventions
 

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Map, { Popup, Marker, type MapRef } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import AppNav from '../components/AppNav'
 import { searchProperties, searchPropertiesInline, getProperty } from '../api/properties'
 import { createProfile } from '../api/profiles'
 import type {
@@ -39,7 +40,7 @@ function ArvBadge({ source }: { source: string | null }) {
 
 // ── Property detail drawer ────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function DrawerSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={drawerStyles.section}>
       <div style={drawerStyles.sectionTitle}>{title}</div>
@@ -100,12 +101,12 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
               {detail.phy_addr1 ?? '—'}<br />
               {detail.phy_city ?? '—'}, FL {detail.phy_zipcd ?? '—'}
             </p>
-            <Section title="Ownership">
+            <DrawerSection title="Ownership">
               <Row label="Owner" value={detail.own_name} />
               <Row label="Mailing" value={[detail.own_addr1, detail.own_city, detail.own_state, detail.own_zipcd].filter(Boolean).join(', ')} />
               <Row label="Absentee" value={detail.absentee_owner == null ? '—' : detail.absentee_owner ? 'Yes' : 'No'} />
-            </Section>
-            <Section title="Valuation">
+            </DrawerSection>
+            <DrawerSection title="Valuation">
               <Row label="Just Value" value={fmt(detail.jv, '$')} />
               <Row label="Assessed Value" value={fmt(detail.av_nsd, '$')} />
               <Row label="Land Value" value={fmt(detail.lnd_val, '$')} />
@@ -116,8 +117,8 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
                   : '—'
               } />
               <Row label="ARV Spread" value={fmt(detail.arv_spread, '$')} />
-            </Section>
-            <Section title="Property">
+            </DrawerSection>
+            <DrawerSection title="Property">
               <Row label="DOR Use Code" value={detail.dor_uc} />
               <Row label="Year Built" value={detail.act_yr_blt} />
               <Row label="Eff. Year Built" value={detail.eff_yr_blt} />
@@ -129,29 +130,29 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
               <Row label="Res. Units" value={detail.no_res_unts} />
               <Row label="Imp. Quality" value={detail.imp_qual} />
               <Row label="Zoning" value={detail.zoning} />
-            </Section>
-            <Section title="CAMA">
+            </DrawerSection>
+            <DrawerSection title="CAMA">
               <Row label="Quality Code" value={detail.cama_quality_code} />
               <Row label="Condition Code" value={detail.cama_condition_code} />
               <Row label="Foundation" value={detail.foundation_type} />
               <Row label="Exterior Wall" value={detail.exterior_wall} />
               <Row label="Roof Type" value={detail.roof_type} />
               <Row label="CAMA Enriched" value={detail.cama_enriched_at ? new Date(detail.cama_enriched_at).toLocaleDateString() : 'Not enriched'} />
-            </Section>
-            <Section title="Sale History">
+            </DrawerSection>
+            <DrawerSection title="Sale History">
               <Row label="Sale 1 Date" value={detail.sale_yr1 != null ? `${detail.sale_mo1 ?? '?'}/${detail.sale_yr1}` : '—'} />
               <Row label="Sale 1 Price" value={fmt(detail.sale_prc1, '$')} />
               <Row label="Sale 1 Qual" value={detail.qual_cd1} />
               <Row label="Sale 2 Date" value={detail.sale_yr2 != null ? `${detail.sale_mo2 ?? '?'}/${detail.sale_yr2}` : '—'} />
               <Row label="Sale 2 Price" value={fmt(detail.sale_prc2, '$')} />
               <Row label="Years Since Sale" value={detail.years_since_last_sale} />
-            </Section>
-            <Section title="Ratios">
+            </DrawerSection>
+            <DrawerSection title="Ratios">
               <Row label="Imp / Land Ratio" value={detail.improvement_to_land_ratio != null ? fmtFloat(detail.improvement_to_land_ratio, 4) : '—'} />
               <Row label="SOH Compression" value={detail.soh_compression_ratio != null ? fmtFloat(detail.soh_compression_ratio, 4) : '—'} />
-            </Section>
+            </DrawerSection>
             {detail.latest_listing && (
-              <Section title="Latest Signal">
+              <DrawerSection title="Latest Signal">
                 <Row label="Type" value={detail.latest_listing.listing_type} />
                 <Row label="Signal Tier" value={detail.latest_listing.signal_tier} />
                 <Row label="Signal Type" value={detail.latest_listing.signal_type} />
@@ -162,7 +163,7 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
                 {detail.latest_listing.listing_url && (
                   <Row label="URL" value={<a href={detail.latest_listing.listing_url} target="_blank" rel="noreferrer">View listing</a>} />
                 )}
-              </Section>
+              </DrawerSection>
             )}
             <div style={drawerStyles.parcelId}>Parcel ID: {detail.parcel_id}</div>
           </div>
@@ -247,7 +248,7 @@ export default function ResultsPage() {
 
   const locationState = location.state as {
     profileId?: number
-    filterState: FilterState
+    filterState: FilterState | null
     countyFips: string[]
   } | null
 
@@ -257,7 +258,6 @@ export default function ResultsPage() {
   const countyFips: string[] = locationState?.countyFips ?? []
   const profileId: number | undefined = locationState?.profileId
 
-  // ── Pagination state
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
@@ -275,6 +275,14 @@ export default function ResultsPage() {
 
   const [sortField, setSortField] = useState<string>(filterState?.sort_by_field ?? 'deal_score')
   const [sortDirection, setSortDirection] = useState<'ASC' | 'DESC'>((filterState?.sort_by_direction as 'ASC' | 'DESC') ?? 'DESC')
+
+  // We need the user for the nav bar — fetch it
+  const [userName, setUserName] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    import('../api/auth').then(({ getMe }) => {
+      getMe().then((u) => setUserName(u.full_name ?? u.email)).catch(() => undefined)
+    })
+  }, [])
 
   useEffect(() => {
     setSortField(filterState?.sort_by_field ?? 'deal_score')
@@ -299,7 +307,7 @@ export default function ResultsPage() {
   }
 
   function handleSortClick(field: string) {
-    if (!filterState) return
+    if (!filterState && profileId == null) return
     if (field === sortField) {
       setSortDirection((d) => (d === 'DESC' ? 'ASC' : 'DESC'))
     } else {
@@ -316,7 +324,6 @@ export default function ResultsPage() {
     return <span style={{ marginLeft: 4 }}>{sortDirection === 'DESC' ? '↓' : '↑'}</span>
   }
 
-  // ── Fetch on mount and on every page change
   useEffect(() => {
     if (profileId == null && (!filterState || countyFips.length === 0)) {
       setError('No filter state available. Return to search and try again.')
@@ -346,17 +353,10 @@ export default function ResultsPage() {
         setLoading(false)
       })
   }, [page, sortField, sortDirection]) // eslint-disable-line react-hooks/exhaustive-deps
-  // profileId / filterState / countyFips come from location.state and are
-  // stable for the lifetime of this page mount. sortField / sortDirection
-  // are session-local and intentionally trigger re-fetch when changed.
 
   function handleEditFilter() {
     navigate('/search', {
-      state: {
-        profileId,
-        countyFips,
-        filterState,
-      },
+      state: { profileId, countyFips, filterState },
     })
   }
 
@@ -381,13 +381,14 @@ export default function ResultsPage() {
 
   return (
     <div style={pageStyles.outer}>
-      {/* Header */}
-      <header style={pageStyles.header}>
-        <button style={pageStyles.editBtn} onClick={handleEditFilter}>
-          ← Edit Filter
-        </button>
-        <div style={pageStyles.headerCenter}>
-          <span style={pageStyles.brand}>Penstock</span>
+      <AppNav userName={userName} />
+
+      {/* Page sub-header */}
+      <div style={pageStyles.subHeader}>
+        <div style={pageStyles.subHeaderLeft}>
+          <button style={pageStyles.editBtn} onClick={handleEditFilter}>
+            ← Edit Filter
+          </button>
           {!loading && (
             <span style={pageStyles.resultCount}>
               {total.toLocaleString()} result{total !== 1 ? 's' : ''}
@@ -395,7 +396,7 @@ export default function ResultsPage() {
             </span>
           )}
         </div>
-        <div style={pageStyles.headerRight}>
+        <div style={pageStyles.subHeaderRight}>
           {saveSuccess && <span style={pageStyles.saveSuccess}>{saveSuccess}</span>}
           <button
             style={{ ...pageStyles.saveBtn, opacity: !filterState ? 0.5 : 1 }}
@@ -405,7 +406,7 @@ export default function ResultsPage() {
             Save Filter
           </button>
         </div>
-      </header>
+      </div>
 
       {/* Body */}
       <div style={pageStyles.body}>
@@ -423,58 +424,31 @@ export default function ResultsPage() {
                 <table style={pageStyles.table}>
                   <thead>
                     <tr>
-                      <th
-                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
-                        onClick={() => handleSortClick('address')}
-                      >
+                      <th style={{ ...pageStyles.th, ...pageStyles.thSortable }} onClick={() => handleSortClick('address')}>
                         Address<SortIndicator field="address" />
                       </th>
-                      <th
-                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
-                        onClick={() => handleSortClick('jv')}
-                      >
+                      <th style={{ ...pageStyles.th, ...pageStyles.thSortable }} onClick={() => handleSortClick('jv')}>
                         JV<SortIndicator field="jv" />
                       </th>
-                      <th
-                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
-                        onClick={() => handleSortClick('arv_spread')}
-                      >
+                      <th style={{ ...pageStyles.th, ...pageStyles.thSortable }} onClick={() => handleSortClick('arv_spread')}>
                         ARV<SortIndicator field="arv_spread" />
                       </th>
-                      <th
-                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
-                        onClick={() => handleSortClick('arv_source')}
-                      >
+                      <th style={{ ...pageStyles.th, ...pageStyles.thSortable }} onClick={() => handleSortClick('arv_source')}>
                         Source<SortIndicator field="arv_source" />
                       </th>
-                      <th
-                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
-                        onClick={() => handleSortClick('arv_spread')}
-                      >
+                      <th style={{ ...pageStyles.th, ...pageStyles.thSortable }} onClick={() => handleSortClick('arv_spread')}>
                         Spread<SortIndicator field="arv_spread" />
                       </th>
-                      <th
-                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
-                        onClick={() => handleSortClick('tot_lvg_area')}
-                      >
+                      <th style={{ ...pageStyles.th, ...pageStyles.thSortable }} onClick={() => handleSortClick('tot_lvg_area')}>
                         Sqft<SortIndicator field="tot_lvg_area" />
                       </th>
-                      <th
-                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
-                        onClick={() => handleSortClick('act_yr_blt')}
-                      >
+                      <th style={{ ...pageStyles.th, ...pageStyles.thSortable }} onClick={() => handleSortClick('act_yr_blt')}>
                         Yr Blt<SortIndicator field="act_yr_blt" />
                       </th>
-                      <th
-                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
-                        onClick={() => handleSortClick('deal_score')}
-                      >
+                      <th style={{ ...pageStyles.th, ...pageStyles.thSortable }} onClick={() => handleSortClick('deal_score')}>
                         Score<SortIndicator field="deal_score" />
                       </th>
-                      <th
-                        style={{ ...pageStyles.th, ...pageStyles.thSortable }}
-                        onClick={() => handleSortClick('signal_tier')}
-                      >
+                      <th style={{ ...pageStyles.th, ...pageStyles.thSortable }} onClick={() => handleSortClick('signal_tier')}>
                         Signal<SortIndicator field="signal_tier" />
                       </th>
                     </tr>
@@ -523,35 +497,19 @@ export default function ResultsPage() {
 
               {/* Pagination */}
               <div style={pageStyles.pagination}>
-                <button
-                  style={pageStyles.pageBtn}
-                  onClick={() => setPage(1)}
-                  disabled={page === 1 || loading}
-                >«</button>
-                <button
-                  style={pageStyles.pageBtn}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1 || loading}
-                >‹ Prev</button>
+                <button style={pageStyles.pageBtn} onClick={() => setPage(1)} disabled={page === 1 || loading}>«</button>
+                <button style={pageStyles.pageBtn} onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1 || loading}>‹ Prev</button>
 
                 {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
                   let pageNum: number
-                  if (totalPages <= 7) {
-                    pageNum = i + 1
-                  } else if (page <= 4) {
-                    pageNum = i + 1
-                  } else if (page >= totalPages - 3) {
-                    pageNum = totalPages - 6 + i
-                  } else {
-                    pageNum = page - 3 + i
-                  }
+                  if (totalPages <= 7) { pageNum = i + 1 }
+                  else if (page <= 4) { pageNum = i + 1 }
+                  else if (page >= totalPages - 3) { pageNum = totalPages - 6 + i }
+                  else { pageNum = page - 3 + i }
                   return (
                     <button
                       key={pageNum}
-                      style={{
-                        ...pageStyles.pageBtn,
-                        ...(pageNum === page ? pageStyles.pageBtnActive : {}),
-                      }}
+                      style={{ ...pageStyles.pageBtn, ...(pageNum === page ? pageStyles.pageBtnActive : {}) }}
                       onClick={() => setPage(pageNum)}
                       disabled={loading}
                     >
@@ -560,16 +518,8 @@ export default function ResultsPage() {
                   )
                 })}
 
-                <button
-                  style={pageStyles.pageBtn}
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages || loading}
-                >Next ›</button>
-                <button
-                  style={pageStyles.pageBtn}
-                  onClick={() => setPage(totalPages)}
-                  disabled={page === totalPages || loading}
-                >»</button>
+                <button style={pageStyles.pageBtn} onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages || loading}>Next ›</button>
+                <button style={pageStyles.pageBtn} onClick={() => setPage(totalPages)} disabled={page === totalPages || loading}>»</button>
 
                 <span style={pageStyles.pageInfo}>
                   {((page - 1) * PAGE_SIZE) + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()}
@@ -657,40 +607,79 @@ export default function ResultsPage() {
 // ── Styles ────────────────────────────────────────────────────────────────
 
 const pageStyles: Record<string, React.CSSProperties> = {
-  outer: { display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--color-bg)' },
-  header: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '0 20px', height: '52px', background: 'var(--color-surface)',
-    borderBottom: '1px solid var(--color-border)', flexShrink: 0, gap: '16px',
+  outer: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100vh',
+    overflow: 'hidden',
+    background: 'var(--color-bg)',
+  },
+  subHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0 20px',
+    height: '44px',
+    background: 'var(--color-surface)',
+    borderBottom: '1px solid var(--color-border)',
+    flexShrink: 0,
+    gap: '16px',
+  },
+  subHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '16px',
+  },
+  subHeaderRight: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
   },
   editBtn: {
-    background: 'transparent', border: 'none',
-    color: 'var(--color-primary)', fontSize: '13px', padding: '4px 0', whiteSpace: 'nowrap',
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--color-primary)',
+    fontSize: '13px',
+    padding: '4px 0',
+    whiteSpace: 'nowrap',
+    cursor: 'pointer',
   },
-  headerCenter: { display: 'flex', alignItems: 'center', gap: '16px', flex: 1, justifyContent: 'center' },
-  brand: { fontWeight: 700, fontSize: '16px' },
-  resultCount: { fontSize: '12px', color: 'var(--color-text-muted)' },
-  headerRight: { display: 'flex', alignItems: 'center', gap: '12px' },
+  resultCount: {
+    fontSize: '12px',
+    color: 'var(--color-text-muted)',
+  },
   saveSuccess: { fontSize: '12px', color: 'var(--color-success)' },
   saveBtn: {
-    background: 'transparent', border: '1px solid var(--color-border)',
-    borderRadius: '6px', color: 'var(--color-text)', padding: '7px 14px',
-    fontWeight: 600, fontSize: '12px',
+    background: 'transparent',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    color: 'var(--color-text)',
+    padding: '6px 14px',
+    fontWeight: 600,
+    fontSize: '12px',
+    cursor: 'pointer',
   },
   body: { display: 'flex', flex: 1, overflow: 'hidden' },
   tablePanel: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' },
   tableWrapper: { overflowX: 'auto', flex: 1 },
   table: { width: '100%', borderCollapse: 'collapse', fontSize: '12px' },
   th: {
-    padding: '10px 12px', textAlign: 'left', fontWeight: 600,
-    color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)',
-    background: 'var(--color-surface)', position: 'sticky', top: 0, zIndex: 1,
+    padding: '10px 12px',
+    textAlign: 'left',
+    fontWeight: 600,
+    color: 'var(--color-text-muted)',
+    borderBottom: '1px solid var(--color-border)',
+    background: 'var(--color-surface)',
+    position: 'sticky',
+    top: 0,
+    zIndex: 1,
   },
-  thSortable: {
+  thSortable: { cursor: 'pointer', userSelect: 'none' as const },
+  tr: {
+    borderBottom: '1px solid var(--color-border)',
     cursor: 'pointer',
-    userSelect: 'none' as const,
+    transition: 'background 0.1s',
   },
-  tr: { borderBottom: '1px solid var(--color-border)', cursor: 'pointer', transition: 'background 0.1s' },
   trSelected: { background: 'rgba(59,130,246,0.25)' },
   td: { padding: '10px 12px', verticalAlign: 'middle' },
   addrLine1: { fontWeight: 500 },
@@ -698,86 +687,162 @@ const pageStyles: Record<string, React.CSSProperties> = {
   tierBadge: { fontSize: '10px', color: 'var(--color-text-muted)' },
   msg: { padding: '40px', textAlign: 'center', color: 'var(--color-text-muted)' },
   pagination: {
-    display: 'flex', alignItems: 'center', gap: '4px',
-    padding: '12px 16px', borderTop: '1px solid var(--color-border)',
-    flexShrink: 0, flexWrap: 'wrap',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '12px 16px',
+    borderTop: '1px solid var(--color-border)',
+    flexShrink: 0,
+    flexWrap: 'wrap',
   },
   pageBtn: {
-    background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-    borderRadius: '5px', color: 'var(--color-text)', padding: '5px 10px',
-    fontSize: '12px', cursor: 'pointer',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '5px',
+    color: 'var(--color-text)',
+    padding: '5px 10px',
+    fontSize: '12px',
+    cursor: 'pointer',
   },
   pageBtnActive: {
-    background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: '#fff',
+    background: 'var(--color-primary)',
+    borderColor: 'var(--color-primary)',
+    color: '#fff',
   },
   pageInfo: { fontSize: '11px', color: 'var(--color-text-muted)', marginLeft: '8px' },
   mapPanel: {
-    width: '380px', flexShrink: 0, borderLeft: '1px solid var(--color-border)',
+    width: '380px',
+    flexShrink: 0,
+    borderLeft: '1px solid var(--color-border)',
     position: 'relative',
   },
 }
 
 const drawerStyles: Record<string, React.CSSProperties> = {
   overlay: {
-    position: 'fixed', top: 0, right: 0, bottom: 0, background: 'transparent', zIndex: 100,
-    display: 'flex', justifyContent: 'flex-end',
+    position: 'fixed',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    background: 'transparent',
+    zIndex: 100,
+    display: 'flex',
+    justifyContent: 'flex-end',
   },
   drawer: {
-    width: '420px', height: '100%', background: 'var(--color-surface)',
-    borderLeft: '1px solid var(--color-border)', display: 'flex',
-    flexDirection: 'column', overflow: 'hidden',
+    width: '420px',
+    height: '100%',
+    background: 'var(--color-surface)',
+    borderLeft: '1px solid var(--color-border)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   },
   header: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '16px 20px', borderBottom: '1px solid var(--color-border)', flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '16px 20px',
+    borderBottom: '1px solid var(--color-border)',
+    flexShrink: 0,
   },
   title: { fontSize: '15px', fontWeight: 600 },
-  closeBtn: { background: 'transparent', border: 'none', color: 'var(--color-text-muted)', fontSize: '16px' },
-  body: { overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '16px' },
+  closeBtn: {
+    background: 'transparent',
+    border: 'none',
+    color: 'var(--color-text-muted)',
+    fontSize: '16px',
+    cursor: 'pointer',
+  },
+  body: {
+    overflowY: 'auto',
+    padding: '16px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+  },
   address: { fontSize: '15px', fontWeight: 600, lineHeight: 1.5 },
   section: { display: 'flex', flexDirection: 'column', gap: '4px' },
   sectionTitle: {
-    fontSize: '10px', fontWeight: 700, color: 'var(--color-text-muted)',
-    textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px',
-    borderBottom: '1px solid var(--color-border)', paddingBottom: '4px',
+    fontSize: '10px',
+    fontWeight: 700,
+    color: 'var(--color-text-muted)',
+    textTransform: 'uppercase',
+    letterSpacing: '0.08em',
+    marginBottom: '4px',
+    borderBottom: '1px solid var(--color-border)',
+    paddingBottom: '4px',
   },
   row: { display: 'flex', justifyContent: 'space-between', padding: '3px 0' },
   rowLabel: { color: 'var(--color-text-muted)', fontSize: '12px' },
   rowValue: { fontSize: '12px', fontWeight: 500, textAlign: 'right', maxWidth: '220px' },
   parcelId: { fontSize: '10px', color: 'var(--color-text-muted)', marginTop: '8px' },
   locateBtn: {
-    display: 'inline-flex', alignItems: 'center', gap: '6px',
-    background: 'transparent', border: '1px solid var(--color-border)',
-    borderRadius: '6px', color: 'var(--color-primary)', padding: '6px 12px',
-    fontSize: '12px', fontWeight: 600, marginBottom: '4px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    background: 'transparent',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    color: 'var(--color-primary)',
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: 600,
+    marginBottom: '4px',
+    cursor: 'pointer',
   },
 }
 
 const saveModalStyles: Record<string, React.CSSProperties> = {
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.6)',
+    zIndex: 200,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   modal: {
-    background: 'var(--color-surface)', border: '1px solid var(--color-border)',
-    borderRadius: '12px', padding: '28px', width: '380px',
-    display: 'flex', flexDirection: 'column', gap: '16px',
+    background: 'var(--color-surface)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '12px',
+    padding: '28px',
+    width: '380px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
   },
   title: { fontSize: '16px', fontWeight: 700 },
   label: { display: 'flex', flexDirection: 'column', gap: '6px' },
   labelText: { fontSize: '12px', color: 'var(--color-text-muted)' },
   input: {
-    background: 'var(--color-bg)', border: '1px solid var(--color-border)',
-    borderRadius: '6px', padding: '9px 12px', color: 'var(--color-text)',
-    fontSize: '13px', outline: 'none',
+    background: 'var(--color-bg)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    padding: '9px 12px',
+    color: 'var(--color-text)',
+    fontSize: '13px',
+    outline: 'none',
   },
   actions: { display: 'flex', justifyContent: 'flex-end', gap: '10px' },
   cancelBtn: {
-    background: 'transparent', border: '1px solid var(--color-border)',
-    borderRadius: '6px', color: 'var(--color-text)', padding: '8px 16px', fontSize: '13px',
+    background: 'transparent',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    color: 'var(--color-text)',
+    padding: '8px 16px',
+    fontSize: '13px',
+    cursor: 'pointer',
   },
   saveBtn: {
-    background: 'var(--color-primary)', border: 'none', borderRadius: '6px',
-    color: '#fff', padding: '8px 16px', fontSize: '13px', fontWeight: 600,
+    background: 'var(--color-primary)',
+    border: 'none',
+    borderRadius: '6px',
+    color: '#fff',
+    padding: '8px 16px',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
   },
 }

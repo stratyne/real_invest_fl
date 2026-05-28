@@ -50,8 +50,10 @@ python scripts/run_escambia_cama.py
   Plain httpx GET is sufficient.
 - No robots.txt on srcpa.gov or parcelcard.srcpa.gov.
 - TARGET: dor_uc = '001', 68,312 parcels
-- Status: 7,361 enriched (via old parcelview scraper, data quality verified good).
-  60,951 remaining. Run restarted 2026-05-24.
+- Status: COMPLETE. 67,041 parcels enriched. Second pass complete (2,265
+  retry parcels). 54,453 unenriched parcels are non-SFR dor_uc — will not
+  be scraped by santa_rosa.py. No further CAMA runs required until Phase 3
+  annual refresh pipeline.
 - Rate limits: DEFAULT_DELAY=1.0, DEFAULT_DELAY_MAX=3.0,
   REST_EVERY=500, REST_SECONDS=300.0
 - Soft-block confirmed at ~2,859 requests over ~1h54m at 1.0–3.0s delay
@@ -85,12 +87,11 @@ python scripts/run_escambia_cama.py
 ### Santa Rosa Run Resumability
 - cama_enriched_at IS NULL filter skips already-processed parcels automatically.
 - Run is fully resumable after any stop (soft-block, empty:true skip, or manual).
+- Run complete as of 2026-05-28. Resumability applies to future refresh runs.
 
-### Santa Rosa Data Quality (verified 2026-05-24)
-- 7,361 parcels enriched via old parcelview scraper retained — not re-scraped.
-- Quality check: 7,330 / 7,361 have tot_lvg_area (99.6%), 7,300 have zoning,
-  7,300 have bedrooms, 7,310 have bathrooms. Gaps are genuine vacant/non-standard
-  parcels, not scraper failures.
+### Santa Rosa Data Quality (verified 2026-05-28)
+- 67,041 parcels enriched. Second pass complete.
+- 54,453 unenriched parcels are non-SFR dor_uc — correct by design.
 
 ## base.py Design Rules (never override)
 
