@@ -119,7 +119,7 @@ async def fetch_page(
                             "(Search.aspx redirect). Skipping.",
                             parcel_id,
                         )
-                        return None
+                        return base.NOT_FOUND  # ← was: return None
 
             # Soft-block: final response missing parcel marker
             if not soft_blocked and resp.status_code == 200:

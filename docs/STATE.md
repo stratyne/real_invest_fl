@@ -217,3 +217,5 @@ Retained as reference for backfill completeness verification.
 | 112 | qualification_code 'C' resolved — confirmed "Qualified and Confirmed" by Santa Rosa County PA (Richard Brosnaham, 2026-05-26). arv.md and DECISIONS.md updated. | 2026-05-26 |
 | 113 | v0.21 migration — arv_source column added to properties table | 2026-05-28 |
 | 114 | arv_calculator.py refactor — three-pass comp engine (PSH primary, PSH wider, NAL spatial fallback), two-tier gate, county viability pre-flight. Santa Rosa first pass: 67,545 COMP / 52,955 JV_FALLBACK / 120,500 updated. | 2026-05-28 |
+| 117 | Address sort — USPS-style street-name sort with nulls-last on both directions. _address_sort_key() in properties.py. | 2026-05-28 |
+| 118 | Escambia CAMA — NOT_FOUND sentinel + cama_enriched_at stamp for permanent not-found parcels. Inter-request delay on not-found path. | 2026-05-28 |

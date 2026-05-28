@@ -79,7 +79,7 @@ logger = logging.getLogger("cama.base")
 
 # ── sentinel ──────────────────────────────────────────────────────────────────
 SOFT_BLOCK = "__SOFT_BLOCK__"
-
+NOT_FOUND  = "__NOT_FOUND__"
 
 # ── coercion ──────────────────────────────────────────────────────────────────
 
@@ -468,6 +468,7 @@ async def run(
             "cama_written":   0,
             "cama_empty":     0,
             "sales_inserted": 0,
+            "not_found":      0,
             "failed":         0,
         }
 
@@ -492,6 +493,28 @@ async def run(
                         pid,
                     )
                     break
+
+                if html is NOT_FOUND or html == NOT_FOUND:
+                    counters["not_found"] += 1
+                    if not dry_run:
+                        await session.execute(
+                            text(
+                                "UPDATE properties "
+                                "SET cama_enriched_at = :now, "
+                                "    updated_at = :now "
+                                "WHERE county_fips = :fips "
+                                "AND parcel_id = :pid"
+                            ),
+                            {
+                                "now": datetime.now(timezone.utc),
+                                "fips": county_fips,
+                                "pid": pid,
+                            },
+                        )
+                        await session.commit()
+                    if i < len(parcel_ids):
+                        await asyncio.sleep(random.uniform(delay, delay_max))
+                    continue
 
                 if html is None:
                     counters["failed"] += 1
@@ -546,12 +569,13 @@ async def run(
 
     logger.info(
         "CAMA run complete | county=%s fetched=%d cama_written=%d "
-        "cama_empty=%d sales_inserted=%d failed=%d",
+        "cama_empty=%d sales_inserted=%d not_found=%d failed=%d",
         county_fips,
         counters["fetched"],
         counters["cama_written"],
         counters["cama_empty"],
         counters["sales_inserted"],
+        counters["not_found"],
         counters["failed"],
     )
 

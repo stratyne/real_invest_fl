@@ -34,7 +34,9 @@ python scripts/run_escambia_cama.py
   confirmed from DB. URL format matches directly — no transformation needed.
 - Run via scripts/run_escambia_cama.py for unattended operation — auto-restarts after soft block with 420s wait.
 - Rate limits: DEFAULT_DELAY=2.0, DEFAULT_DELAY_MAX=5.0, REST_EVERY=None, REST_SECONDS=0.0
-- Search.aspx redirect = parcel absent from ECPA CAMA — logged as warning, skipped cleanly, continues run.
+- Search.aspx redirect = parcel absent from ECPA CAMA — logged as warning,
+  cama_enriched_at stamped (excludes from future runs), inter-request delay
+  applied, continues run. Returns base.NOT_FOUND sentinel.
 - Sale date parsing: MM/DD/YYYY stored as-is. MM/YYYY normalized to
   date(YYYY, MM, 1) and stored. Unparseable formats logged at DEBUG and skipped.
 - eff_yr_blt: captured from "Effective Year" label in building table header.
@@ -102,9 +104,17 @@ python scripts/run_escambia_cama.py
   County module must declare: DEFAULT_DELAY, DEFAULT_DELAY_MAX,
   REST_EVERY (None = no rest pauses), REST_SECONDS
 - target_dor_ucs is county-supplied. Never hardcoded in base.py.
-- Soft-block sentinel: base.SOFT_BLOCK = "__SOFT_BLOCK__"
-  - County fetch_page() returns this string to stop the run cleanly
-  - Returning None skips the parcel and continues the run
+- Sentinels:
+  - base.SOFT_BLOCK = "__SOFT_BLOCK__" — county fetch_page() returns this
+    to stop the run cleanly. Increments failed counter. No DB write.
+  - base.NOT_FOUND = "__NOT_FOUND__" — county fetch_page() returns this
+    when a parcel is permanently absent from the county PA site (e.g.
+    Search.aspx redirect on ECPA). Stamps cama_enriched_at so the parcel
+    is excluded from all future runs. Respects inter-request delay.
+    Increments not_found counter.
+  - Returning None indicates a transient failure (timeout, HTTP error,
+    retries exhausted). Increments failed counter. No DB write. Parcel
+    remains in queue for next run.
 - base.py uses settings.host_database_url (async) for DB connection.
   Do not change to settings.database_url — that URL uses the Docker
   service name 'db' and is unreachable from the Windows host.
