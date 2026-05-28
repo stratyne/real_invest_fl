@@ -21,6 +21,7 @@ GET /{county_fips}/properties/{parcel_id}
 from __future__ import annotations
 
 from datetime import datetime
+import re
 from typing import Any, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -65,6 +66,67 @@ class _EventScoringRow(NamedTuple):
     arv_estimate: int | None
     arv_source: str | None
     arv_spread: int | None
+
+
+# ── Address sort key (USPS-style) ────────────────────────────────────────
+
+_HOUSE_NUM_RE = re.compile(r'^(\d+)\s+(.*)', re.IGNORECASE)
+_DIRECTIONALS = frozenset({
+    'N', 'S', 'E', 'W', 'NE', 'NW', 'SE', 'SW',
+    'NORTH', 'SOUTH', 'EAST', 'WEST',
+    'NORTHEAST', 'NORTHWEST', 'SOUTHEAST', 'SOUTHWEST',
+})
+
+
+def _address_sort_key(addr: str | None, reverse: bool) -> tuple:
+    """Return a sort tuple approximating USPS street-name order.
+
+    Sort key: (street_name, street_suffix, pre_directional, house_number)
+    Nulls sort last regardless of ascending/descending direction.
+
+    The final element is the raw address string as a tiebreaker so that
+    addresses that produce identical parsed components still have a
+    deterministic stable order.
+    """
+    # Null sentinel — '~' sorts after all uppercase ASCII (nulls-last ASC).
+    # On DESC (reverse=True) '~' would float to the front, so use '' instead
+    # (sorts before all real data, which reverse=True pushes to the back).
+    if not addr:
+        sentinel = '' if reverse else '~'
+        return (sentinel, '', '', 999_999_999, '')
+
+    normalized = addr.strip().upper()
+    m = _HOUSE_NUM_RE.match(normalized)
+
+    if not m:
+        # No leading house number — treat entire string as street name.
+        return (normalized, '', '', 0, normalized)
+
+    house_num = int(m.group(1))
+    remainder = m.group(2).strip()
+    tokens = remainder.split()
+
+    if not tokens:
+        return ('', '', '', house_num, normalized)
+
+    # Detect pre-directional (e.g. "N OAK ST" → pre_dir="N", rest=["OAK","ST"])
+    if tokens[0] in _DIRECTIONALS and len(tokens) > 1:
+        pre_dir = tokens[0]
+        rest = tokens[1:]
+    else:
+        pre_dir = ''
+        rest = tokens
+
+    # Last token is street suffix (ST, DR, RD, LN, BLVD, …)
+    if len(rest) > 1:
+        street_suffix = rest[-1]
+        street_name = ' '.join(rest[:-1])
+    else:
+        # Single token — treat as street name, no suffix extractable
+        street_suffix = ''
+        street_name = rest[0]
+
+    return (street_name, street_suffix, pre_dir, house_num, normalized)
 
 
 # ── Access helpers ───────────────────────────────────────────────────────
@@ -740,8 +802,7 @@ async def _execute_search(
                     ds if ds is not None else -1.0,
                     tb)
         if sort_field == "address":
-            return (row.phy_addr1 if row.phy_addr1 is not None else "",
-                    tb)
+            return _address_sort_key(row.phy_addr1, reverse)
         if sort_field == "arv_source":
             return (ev.arv_source if ev and ev.arv_source is not None else "",
                     tb)
