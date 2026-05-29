@@ -80,9 +80,28 @@ Three distinct columns — do not conflate:
   Santa Rosa only — Escambia does not surface this field.
 
 Arms-length filter (primary pool — Pass 1):
-  (instrument_type = 'WD' OR instrument_type IS NULL)
-  AND qualification_code IN ('Q', 'C')
+  (
+      qualification_code IN ('Q', 'C')
+      OR (qualification_code IS NULL AND instrument_type = 'WD')
+  )
   AND sale_price >= 10000
+
+The OR branch fires for counties where qualification_code is NULL
+across all rows but instrument_type is populated (currently Escambia).
+For Santa Rosa, qualification_code is always populated so the first
+branch fires. For Escambia, qualification_code is always NULL so the
+WD branch fires. No county-specific branching in code — the filter is
+self-selecting by county data shape.
+
+Arms-length filter (wider pool — Pass 2):
+  (
+      qualification_code IN ('Q', 'C', 'U')
+      OR (qualification_code IS NULL AND instrument_type = 'WD')
+  )
+  AND sale_price >= 10000
+
+County viability pre-flight uses the same filter as Pass 1 to correctly
+assess counties without qualification_code as viable when WD records exist.
 
 Arms-length filter (wider pool — Pass 2):
   (instrument_type = 'WD' OR instrument_type IS NULL)
@@ -175,10 +194,11 @@ threshold) skip Passes 1 and 2 and go directly to Pass 3.
 - Use code filter: neighboring parcel dor_uc must match subject dor_uc
 - Minimum comps: min_comp_sales_for_arv
 - Calculation: median(sale_prc1 / neighbor.tot_lvg_area) * subject.tot_lvg_area
-- arv_source: 'JV_FALLBACK'
-  (NAL-derived estimate is still flagged JV_FALLBACK — it is a lower
-  confidence source than parcel_sale_history. Do not surface with equal
-  visual weight to COMP.)
+- arv_source: 'NAL_COMP'
+  (NAL spatial fallback comp calculation — lower confidence than
+  parcel_sale_history COMP but a real comp calculation, not a raw jv
+  substitution. Do not display with equal visual weight to COMP or
+  equal visual weight to JV_FALLBACK floor.)
 - qual_cd2 is not used — see System 2 note above
 
 ### Floor — raw jv
@@ -205,12 +225,13 @@ dor_uc is used as a like-for-like filter within comp selection only.
 
 ### arv_source Values
 
-| Value        | Meaning                                                         |
-|--------------|-----------------------------------------------------------------|
-| COMP         | Calculated from parcel_sale_history qualifying comps (Pass 1/2) |
-| JV_FALLBACK  | NAL spatial fallback (Pass 3), or raw jv floor, or no geom      |
-| ZESTIMATE    | Zestimate used (future — item 21)                               |
-| MANUAL       | Manually set                                                    |
+| Value        | Meaning                                                              |
+|--------------|----------------------------------------------------------------------|
+| COMP         | Calculated from parcel_sale_history qualifying comps (Pass 1/2)      |
+| NAL_COMP     | Calculated from NAL embedded sale_prc1 on neighboring parcels (Pass 3)|
+| JV_FALLBACK  | Raw jv used — no geom, or all passes yielded insufficient comps      |
+| ZESTIMATE    | Zestimate used (future — item 21)                                    |
+| MANUAL       | Manually set                                                         |
 
 COMP and JV_FALLBACK are not equivalent. Surface arv_source in all
 result views — do not display them with equal visual weight.
@@ -249,8 +270,13 @@ Search route (query-time recomputation):
 
 ## County Viability Pre-flight
 
-Threshold: 1,000+ qualification_code IN ('Q', 'C') records in
-parcel_sale_history with sale_price >= 10000.
+Threshold: 1,000+ records meeting the arms-length filter:
+  (qualification_code IN ('Q', 'C')
+   OR (qualification_code IS NULL AND instrument_type = 'WD'))
+  AND sale_price >= 10000
+Previously used qualification_code IN ('Q', 'C') only — this caused
+Escambia (qualification_code NULL, instrument_type populated) to be
+assessed as non-viable and skip Passes 1+2 entirely. Fixed 2026-05-29.
 Counties below threshold skip Passes 1 and 2 entirely.
 Pass 3 (NAL spatial fallback) is always attempted for all Tier 1 parcels
 regardless of county viability.
@@ -267,27 +293,33 @@ filter (arv_estimate IS NULL) will skip all previously calculated parcels.
 Always scope to --county when practical to avoid unnecessary re-computation
 of already-current counties.
 
-## Santa Rosa Data State (as of 2026-05-28)
+## Santa Rosa Data State (as of 2026-05-29)
 
-Second ARV pass complete: 120,500 processed, 67,595 COMP, 52,905 JV_FALLBACK.
-CAMA second pass complete. No further ARV runs required until next CAMA refresh
-or NAL annual update.
-instrument_type is NULL for all Santa Rosa rows — parcelcard does not
-surface this field.
+CAMA complete: 68,303 / 68,312 enriched.
+ARV re-run pending (item 125).
+tot_lvg_area corrected: 67,543 rows restored from raw_cama_json —
+NAL re-ingest had overwritten CAMA heated area (2,439 sqft) with NAL
+effective area (2,803 sqft). CAMA wins for tot_lvg_area going forward
+(_NAL_UPSERT_NEVER_OVERWRITE).
+instrument_type: NULL for all parcelcard-sourced rows. Will be
+backfilled by santa_rosa_sales.py (item 124) from srcpa.gov/parcel.
 qualification_code populated: Q / U / C / V.
+parcel_sale_history: 152,909 records, source srcpa_parcelcard.
+57,987 parcels truncated at 2 sales — full history pending item 124.
 
-## Escambia Data State (as of 2026-05-28)
+## Escambia Data State (as of 2026-05-29)
 
-~18,448 parcels enriched, run active (~17.3% coverage).
-All current rows are clean (column mapping fix applied item 101).
-instrument_type is NULL — parcelcard does not surface this field.
-bedrooms, bathrooms, cama_quality_code absent from Escambia parcelcard —
-these fields will remain NULL for all Escambia parcels.
-ARV first run pending — await sufficient CAMA enrichment.
-County viability pre-flight will gate correctly when run is attempted.
-With instrument_type NULL and no dor_uc '001' instrument_type data,
-Pass 1 and Pass 2 rely entirely on qualification_code. Pass 3 provides
-NAL spatial fallback for all parcels where PSH pool is insufficient.
+~27,284 / 106,372 SFR parcels enriched, CAMA run active.
+beds/baths/cama_quality_code absent from Escambia parcelcard — NULL permanent.
+instrument_type populated in parcel_sale_history: WD, QC, OT, CJ, CT, etc.
+qualification_code: NULL for all Escambia parcel_sale_history rows —
+parcelcard does not surface it. ARV engine uses WD fallback branch.
+County viability pre-flight now correctly assesses Escambia as VIABLE
+based on WD record count. Passes 1+2 will fire on ARV run.
+ARV first run pending CAMA completion (item 125).
+own_state_dom: NULL for 170,491 of 170,561 rows — Escambia PA does
+not populate this NAL field. Out-of-state owner filter non-functional
+for Escambia on this dimension.
 
 ## bed_bath_source Confidence Hierarchy
 

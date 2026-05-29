@@ -53,15 +53,21 @@ def _compute_absentee(row: dict) -> bool | None:
 
     Returns True if owner mailing address differs from physical address.
     Returns False if addresses are present and match.
-    Returns None if own_addr1 is absent — cannot determine residency.
+    Returns None if neither OWN_ADDR1 nor OWN_ADDR2 yields a usable
+    street address — cannot determine residency, store as NULL.
 
-    Option A per DECISIONS.md: NULL when undeterminable. Preserves
-    data integrity — False would incorrectly imply owner-occupied
-    when the address is simply missing.
+    Option A per DECISIONS.md: NULL when undeterminable.
     """
-    own_addr = (row.get("OWN_ADDR1") or "").strip()
-    if not own_addr:
+    own_addr1 = (row.get("OWN_ADDR1") or "").strip()
+    own_addr2 = (row.get("OWN_ADDR2") or "").strip()
+
+    # If neither field starts with a digit, no usable street address exists
+    if not (
+        (own_addr1 and own_addr1[0].isdigit())
+        or (own_addr2 and own_addr2[0].isdigit())
+    ):
         return None
+
     return _compute_absentee_raw(row)
 
 # ------------------------------------------------------------------ #
@@ -295,6 +301,7 @@ _NAL_UPSERT_NEVER_OVERWRITE: frozenset[str] = frozenset({
     "latitude",
     "longitude",
     # CAMA ingest
+    "tot_lvg_area", # heated area takes precedence over NAL effective area
     "foundation_type",
     "exterior_wall",
     "roof_type",

@@ -131,3 +131,24 @@ data/staging/
   foreclosure/    -- RealForeclose .csv (2-col key-value), weekly
   tax_deed/       -- retained pending Ch. 119 response; no active file-drop
   zillow/         -- Zillow .csv (one value per line), weekly
+
+## Sale History Scraping
+
+parcel_sale_history is populated by county PA scrapers, not NAL ingest.
+
+Santa Rosa: real_invest_fl/ingest/sales/santa_rosa_sales.py
+    Source: https://srcpa.gov/parcel?id={parcel_id}
+    Full sale history — all transactions, instrument_type included.
+    Parcelcard truncates at 2 — do not use for sale history.
+    Quarterly cadence. Resumable via --resume-from {parcel_id}.
+
+Escambia: real_invest_fl/ingest/cama/escambia.py (parse_sales)
+    Source: https://www.escpa.org/CAMA/Detail_a.aspx?s={parcel_id}
+    Full sale history — instrument_type populated, qualification_code absent.
+    Runs as part of CAMA enrichment. Quarterly re-scrape via --force.
+
+Known gaps:
+    Santa Rosa: 57,987 parcels capped at 2 sales (parcelcard truncation).
+    Backfill via santa_rosa_sales.py — item 124.
+    Both counties: sale_yr1 NULL for 82%+ SFR — use parcel_sale_history
+    for years_since_last_sale computation, not NAL embedded fields.

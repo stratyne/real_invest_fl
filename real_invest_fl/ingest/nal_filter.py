@@ -210,18 +210,45 @@ def _is_absentee(row: dict) -> bool:
     """
     Derive absentee owner flag.
     True when owner mailing address differs from physical address.
-    Compares OWN_ADDR1 + OWN_ZIPCD vs PHY_ADDR1 + PHY_ZIPCD.
-    Case-insensitive, whitespace-normalized.
-    """
-    own_addr = _str(row.get("OWN_ADDR1")) or ""
-    own_zip = _str(row.get("OWN_ZIPCD")) or ""
-    phy_addr = _str(row.get("PHY_ADDR1")) or ""
-    phy_zip = _str(row.get("PHY_ZIPCD")) or ""
 
-    if not own_addr or not phy_addr:
+    Address resolution order:
+        1. OWN_ADDR1 — used if it starts with a digit (street address).
+        2. OWN_ADDR2 — used if OWN_ADDR1 is a name overflow (does not
+           start with a digit). Covers cases where a long owner name
+           spills OWN_ADDR1 and the actual street address is in OWN_ADDR2.
+        3. Neither usable — return False (undeterminable).
+
+    PO Box addresses do not start with a digit and are treated as
+    undeterminable — a PO Box cannot be compared against a situs address.
+
+    Note: _compute_absentee() in nal_ingest.py wraps this function and
+    returns None (rather than False) when no usable mailing address is
+    found, preserving the NULL-when-undeterminable contract for DB storage.
+    This function's False return for the undeterminable case is only
+    reached from evaluate_nal() in the filter evaluator path.
+    """
+    own_zip  = _str(row.get("OWN_ZIPCD")) or ""
+    phy_addr = _str(row.get("PHY_ADDR1")) or ""
+    phy_zip  = _str(row.get("PHY_ZIPCD")) or ""
+
+    if not phy_addr:
+        return False
+
+    # Resolve mailing street address — prefer OWN_ADDR1, fall through
+    # to OWN_ADDR2 when OWN_ADDR1 is a name overflow.
+    own_addr1 = _str(row.get("OWN_ADDR1")) or ""
+    own_addr2 = _str(row.get("OWN_ADDR2")) or ""
+
+    if own_addr1 and own_addr1[0].isdigit():
+        mailing_addr = own_addr1
+    elif own_addr2 and own_addr2[0].isdigit():
+        mailing_addr = own_addr2
+        own_zip = _str(row.get("OWN_ZIPCD")) or ""
+    else:
+        # No usable mailing street address found
         return False
 
     return (
-        own_addr.upper() != phy_addr.upper()
+        mailing_addr.upper() != phy_addr.upper()
         or own_zip != phy_zip
     )

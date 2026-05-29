@@ -218,11 +218,12 @@ Primary source is parcel_sale_history joined to properties, filtered by
 PA-level qualification codes. Three-pass strategy: Pass 1 (PSH primary
 pool, Q/C), Pass 2 (PSH wider pool, Q/C/U), Pass 3 (NAL spatial fallback,
 qual_cd1 = '01'). jv is the floor when all passes yield insufficient comps.
-arv_source values: COMP, JV_FALLBACK, ZESTIMATE, MANUAL.
-COMP and JV_FALLBACK are not equivalent — surface distinction in all UI views.
-Full detail including qualification systems, filter logic, batch defaults,
-two-tier gate, arv_spread stored vs query-time split, and Phase 3 scaling
-limitation in context/arv.md.
+arv_source values: COMP, NAL_COMP, JV_FALLBACK, ZESTIMATE, MANUAL.
+NAL_COMP: Pass 3 NAL spatial fallback — comp calculation performed
+using neighboring parcels' NAL-embedded sale_prc1. Lower confidence
+than COMP (parcel_sale_history). Higher confidence than JV_FALLBACK
+(raw jv substitution). Surface distinction in all UI views.
+Full detail in context/arv.md.
 
 ## ARV Calculator Refactor (item 17) — 2026-05-28
 

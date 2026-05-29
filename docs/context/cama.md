@@ -9,12 +9,18 @@ real_invest_fl/ingest/cama/
   escambia.py       -- Escambia County scraper
   santa_rosa.py     -- Santa Rosa County scraper
   __init__.py       -- package marker
+real_invest_fl/ingest/sales/
+  santa_rosa_sales.py   -- Santa Rosa full sale history scraper (item 124)
+  __init__.py           -- package marker  
 real_invest_fl/ingest/cama_ingest.py  -- retained; do not delete until Escambia confirmed
 
 ## Run Commands
 
 # Santa Rosa
 python -m real_invest_fl.ingest.cama.santa_rosa [options]
+
+# Santa Rosa full sale history (item 124 — pending implementation)
+python -m real_invest_fl.ingest.sales.santa_rosa_sales [options]
 
 # Escambia
 python -m real_invest_fl.ingest.cama.escambia [options]
@@ -26,6 +32,9 @@ python scripts/run_escambia_cama.py
 - Source: https://www.escpa.org/CAMA/Detail_a.aspx?s={parcel_id}
 - Site was DOWN 2026-05-04 through approximately 2026-05-24. Restarted 2026-05-26.
 - Target: dor_uc = '001', ~106,372 parcels
+- Status: IN PROGRESS. ~27,284 / 106,372 SFR parcels enriched as of
+  2026-05-29. Soft-block rate limiting active. Resumable via
+  cama_enriched_at IS NULL.
 - Beds/baths NOT available from ECPA CAMA detail page
 - Sale history IS available and captured from ECPA CAMA detail page. 
   parse_sales() reads the Sales Data table (ctl00_MasterPlaceHolder_SalesCell).
@@ -50,10 +59,10 @@ python scripts/run_escambia_cama.py
   Plain httpx GET is sufficient.
 - No robots.txt on srcpa.gov or parcelcard.srcpa.gov.
 - TARGET: dor_uc = '001', 68,312 parcels
-- Status: COMPLETE. 67,041 parcels enriched. Second pass complete (2,265
-  retry parcels). 54,453 unenriched parcels are non-SFR dor_uc — will not
-  be scraped by santa_rosa.py. No further CAMA runs required until Phase 3
-  annual refresh pipeline.
+- Status: COMPLETE. 68,303 parcels enriched. Second pass complete (2,265
+  retry parcels). 9 remaining SFR parcels are edge cases — not a blocker.
+  54,453 unenriched parcels are non-SFR dor_uc — will not be scraped.
+  No further CAMA runs required until Phase 3 annual refresh pipeline.
 - Rate limits: DEFAULT_DELAY=1.0, DEFAULT_DELAY_MAX=3.0,
   REST_EVERY=500, REST_SECONDS=300.0
 - Soft-block confirmed at ~2,859 requests over ~1h54m at 1.0–3.0s delay
@@ -80,17 +89,31 @@ python scripts/run_escambia_cama.py
   Grantor/Grantee rows. Book, Page, Date, Q/U (qualification_code),
   V/I (sale_type), Price columns.
 - Sale history captured from same parcelcard page per request.
-- parcel_sale_history populated with full ownership chain per parcel.
+- parcel_sale_history populated with up to 2 sales per parcel.
+  Parcelcard truncates older records — "... N more" is not scraped.
+  Full history source is srcpa.gov/parcel — see item 124.
 - instrument_type not surfaced on parcelcard — always None.
+  instrument_type IS available on srcpa.gov/parcel (full parcel page).
+  santa_rosa_sales.py (item 124) captures it from that endpoint.
 - multi_parcel not surfaced on parcelcard — always False.
+
+Note: parse_sales() in santa_rosa.py captures only 2 sales per parcel
+(parcelcard truncation). Full history available from srcpa.gov/parcel
+endpoint. santa_rosa_sales.py (item 124) is the permanent sale history
+source. parse_sales() will be removed from santa_rosa.py after
+santa_rosa_sales.py is verified (item 127).
 
 ### Santa Rosa Run Resumability
 - cama_enriched_at IS NULL filter skips already-processed parcels automatically.
 - Run is fully resumable after any stop (soft-block, empty:true skip, or manual).
-- Run complete as of 2026-05-28. Resumability applies to future refresh runs.
+- Run complete as of 2026-05-29. Resumability applies to future refresh runs.
 
-### Santa Rosa Data Quality (verified 2026-05-28)
-- 67,041 parcels enriched. Second pass complete.
+### Santa Rosa Data Quality (verified 2026-05-29)
+- 68,303 parcels enriched. Second pass complete.
+- tot_lvg_area corrected for 67,543 parcels — NAL re-ingest had
+  overwritten CAMA heated area with NAL effective area. Restored from
+  raw_cama_json. tot_lvg_area now protected by _NAL_UPSERT_NEVER_OVERWRITE.
+- 9 remaining unenriched SFR parcels are edge cases — not a blocker.
 - 54,453 unenriched parcels are non-SFR dor_uc — correct by design.
 
 ## base.py Design Rules (never override)

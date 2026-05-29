@@ -176,8 +176,10 @@ _COMP_SQL = text("""
       ON p.county_fips = psh.county_fips
      AND p.parcel_id   = psh.parcel_id
     WHERE psh.county_fips = :county_fips
-      AND (psh.instrument_type = 'WD' OR psh.instrument_type IS NULL)
-      AND psh.qualification_code = ANY(:qual_codes)
+      AND (
+          psh.qualification_code = ANY(:qual_codes)
+          OR (psh.qualification_code IS NULL AND psh.instrument_type = 'WD')
+      )
       AND psh.sale_price >= 10000
       AND p.dor_uc = :dor_uc
       AND p.eff_yr_blt IS NOT NULL
@@ -225,12 +227,18 @@ def _check_county_viability(
 ) -> dict[str, bool]:
     """
     For each county, check whether parcel_sale_history contains at least
-    MIN_VIABLE_COMP_POOL qualifying records (qualification_code IN ('Q','C'),
-    sale_price >= 10000).
+    MIN_VIABLE_COMP_POOL qualifying arms-length records.
+
+    Arms-length definition mirrors _COMP_SQL:
+        (qualification_code IN ('Q', 'C'))
+        OR (qualification_code IS NULL AND instrument_type = 'WD')
+        AND sale_price >= 10000
+
+    This ensures counties like Escambia that surface instrument_type
+    but not qualification_code are correctly assessed as viable rather
+    than being sent directly to Pass 3.
 
     Returns dict mapping county_fips -> viable (bool).
-    Viable counties attempt Pass 1 and Pass 2 before Pass 3.
-    Non-viable counties skip directly to Pass 3 (NAL spatial fallback).
     """
     result = conn.execute(
         text("""
@@ -239,7 +247,10 @@ def _check_county_viability(
                 COUNT(*) AS qualifying_count
             FROM parcel_sale_history
             WHERE county_fips = ANY(:fips_list)
-              AND qualification_code IN ('Q', 'C')
+              AND (
+                  qualification_code IN ('Q', 'C')
+                  OR (qualification_code IS NULL AND instrument_type = 'WD')
+              )
               AND sale_price >= 10000
             GROUP BY county_fips
         """),
@@ -249,10 +260,10 @@ def _check_county_viability(
 
     viability = {}
     for fips in county_fips_list:
-        count   = counts.get(fips, 0)
-        viable  = count >= MIN_VIABLE_COMP_POOL
+        count  = counts.get(fips, 0)
+        viable = count >= MIN_VIABLE_COMP_POOL
         viability[fips] = viable
-        status  = "VIABLE" if viable else "BELOW THRESHOLD"
+        status = "VIABLE" if viable else "BELOW THRESHOLD"
         logger.info(
             "County %s — qualifying comp pool: %d (%s, threshold: %d)",
             fips, count, status, MIN_VIABLE_COMP_POOL,
@@ -386,7 +397,7 @@ def _compute_comp_arv(
             nal_comps, "sale_prc1", "tot_lvg_area", subject_area,
         )
         if arv is not None:
-            return arv, "JV_FALLBACK"
+            return arv, "NAL_COMP"
 
     # ── Floor — raw jv ────────────────────────────────────────────── #
     return subject["jv"], "JV_FALLBACK"
