@@ -322,10 +322,10 @@ class InlineSearchRequest(BaseModel):
     """
     county_fips: list[str]
     filter_criteria: dict
-    rehab_cost_per_sqft: float = 22.00
+    rehab_cost_per_sqft: float = 35.00
     min_comp_sales_for_arv: int = 3
-    comp_radius_miles: float = 1.0
-    comp_year_built_tolerance: int = 15
+    comp_radius_miles: float = 1.5
+    comp_year_built_tolerance: int = 10
     deal_score_weights: dict = {}
     sort_field: str = "deal_score"
     sort_direction: str = "DESC"

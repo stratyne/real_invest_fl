@@ -87,6 +87,26 @@ Do not consolidate until explicitly assigned — do not touch during other work.
 - --county-fips is a required CLI arg for both nal_ingest.py and gis_ingest.py.
 - mqi_qualified is set to false for all rows at ingest — it is a POC artifact
   and will be removed in a future migration.
+  
+## Host-Side DB Session Pattern
+
+nal_ingest.py runs on the Windows host, not inside the Docker network.
+settings.database_url uses the Docker service name 'db' as the hostname —
+unreachable from the host. nal_ingest.py therefore does NOT import
+AsyncSessionLocal from real_invest_fl.db.session.
+
+Instead it constructs its own engine and session factory using
+settings.host_database_url (localhost:5432), which is reachable from
+the host:
+
+    _host_engine = create_async_engine(settings.host_database_url, ...)
+    _HostSessionLocal = async_sessionmaker(_host_engine, ...)
+
+This is the same pattern used by the CAMA scrapers (cama/base.py).
+Any future host-side ingest script must follow this pattern.
+gis_ingest.py uses the sync pattern (settings.host_sync_database_url)
+and is unaffected — verify before adding any new async session usage
+to gis_ingest.py.
 
 ## Staging File-Drop Workflow
 

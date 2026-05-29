@@ -118,6 +118,7 @@ Retained as reference for backfill completeness verification.
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
 | 116 | PENDING | bed_bath_source enforcement in parser layer — confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing — ready to implement when prioritized. | — |
+| 122 | PENDING | absentee_owner population — NULL for all 291,061 properties in both counties. Computation never implemented in NAL ingest pipeline. Must be derived at ingest time by comparing owner mailing address to property address. Affects absentee_owner filter and absentee_score deal scoring dimension. | Implement in nal_ingest.py or as a post-ingest update script. |
 
 ## Deferred Items
 

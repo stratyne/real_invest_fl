@@ -35,12 +35,54 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.settings import settings
 from real_invest_fl.db.models.property import Property
-from real_invest_fl.db.session import AsyncSessionLocal, engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from real_invest_fl.ingest.nal_mapper import map_nal_row
+from real_invest_fl.ingest.nal_filter import _is_absentee as _compute_absentee_raw
 from real_invest_fl.ingest.run_context import IngestRunContext
 from real_invest_fl.utils.logging_setup import configure_logging
 
 logger = logging.getLogger(__name__)
+
+# ------------------------------------------------------------------ #
+# Helpers                                                              #
+# ------------------------------------------------------------------ #
+
+def _compute_absentee(row: dict) -> bool | None:
+    """
+    Derive absentee owner flag for a NAL row.
+
+    Returns True if owner mailing address differs from physical address.
+    Returns False if addresses are present and match.
+    Returns None if own_addr1 is absent — cannot determine residency.
+
+    Option A per DECISIONS.md: NULL when undeterminable. Preserves
+    data integrity — False would incorrectly imply owner-occupied
+    when the address is simply missing.
+    """
+    own_addr = (row.get("OWN_ADDR1") or "").strip()
+    if not own_addr:
+        return None
+    return _compute_absentee_raw(row)
+
+# ------------------------------------------------------------------ #
+# Host-side DB engine                                                  #
+# nal_ingest.py runs on the Windows host, not inside the Docker       #
+# network. settings.database_url uses the 'db' service hostname which #
+# is unreachable from the host. settings.host_database_url resolves   #
+# to localhost:5432 and is required for all host-side scripts.        #
+# This mirrors the pattern used by the CAMA scrapers (cama/base.py).  #
+# ------------------------------------------------------------------ #
+_host_engine = create_async_engine(
+    settings.host_database_url,
+    echo=False,
+    pool_pre_ping=True,
+)
+_HostSessionLocal = async_sessionmaker(
+    _host_engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
 
 # ------------------------------------------------------------------ #
 # Constants                                                            #
@@ -138,7 +180,7 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
         nal_file,
     )
 
-    async with AsyncSessionLocal() as session:
+    async with _HostSessionLocal() as session:
 
         async with IngestRunContext(
             session=session,
@@ -167,7 +209,7 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
                     mapped = map_nal_row(
                         row=row,
                         county_fips=county_fips,
-                        absentee_owner=None,  # absentee flag deferred to Phase 4
+                        absentee_owner=_compute_absentee(row),
                     )
 
                     if not mapped.get("parcel_id"):
@@ -218,7 +260,7 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
         # Skipped in dry_run mode — no writes occurred so no stamp is valid.  #
         # ------------------------------------------------------------------ #
         if not dry_run:
-            async with AsyncSessionLocal() as stamp_session:
+            async with _HostSessionLocal() as stamp_session:
                 await stamp_session.execute(
                     text(
                         "UPDATE counties "
@@ -237,12 +279,49 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
                 county_fips,
             )
 
-    await engine.dispose()
+    await _host_engine.dispose()
 
 
 # ------------------------------------------------------------------ #
 # Database helpers                                                     #
 # ------------------------------------------------------------------ #
+
+# ── NAL upsert column protection ─────────────────────────────────────────
+# Columns written by other pipelines that must never be overwritten
+# by a NAL re-ingest run. NAL does not own these values.
+_NAL_UPSERT_NEVER_OVERWRITE: frozenset[str] = frozenset({
+    # GIS ingest
+    "geom",
+    "latitude",
+    "longitude",
+    # CAMA ingest
+    "foundation_type",
+    "exterior_wall",
+    "roof_type",
+    "bedrooms",
+    "bathrooms",
+    "bed_bath_source",
+    "cama_quality_code",
+    "cama_condition_code",
+    "cama_enriched_at",
+    "raw_cama_json",
+    "zoning",
+    # ARV calculator
+    "arv_estimate",
+    "arv_spread",
+    "arv_source",
+    "jv_per_sqft",
+    # Listing matcher
+    "list_price",
+    # Phase 2 scoring — not yet built, protect slots
+    "seller_probability_score",
+    "seller_score_updated_at",
+    "permit_count",
+    "estimated_rehab_per_sqft",
+    # Audit — server_default on insert only; never overwrite
+    "created_at",
+})
+
 
 async def _upsert_batch(
     session: AsyncSession,
@@ -251,6 +330,13 @@ async def _upsert_batch(
     """
     PostgreSQL INSERT ... ON CONFLICT DO UPDATE (upsert).
     Conflict target: (county_fips, parcel_id).
+
+    On conflict, only NAL-owned columns are updated. Columns written
+    by GIS ingest, CAMA ingest, the ARV calculator, the listing matcher,
+    Phase 2 scoring, and audit timestamps are excluded from the update
+    set so that re-running NAL ingest cannot wipe downstream pipeline
+    work. See _NAL_UPSERT_NEVER_OVERWRITE.
+
     Automatically splits batch if parameter count would exceed
     asyncpg's 32767 limit.
     """
@@ -273,7 +359,8 @@ async def _upsert_batch(
         update_cols = {
             col.name: stmt.excluded[col.name]
             for col in Property.__table__.columns
-            if col.name not in ("county_fips", "parcel_id", "created_at")
+            if col.name not in _NAL_UPSERT_NEVER_OVERWRITE
+            and col.name not in ("county_fips", "parcel_id")
         }
 
         stmt = stmt.on_conflict_do_update(

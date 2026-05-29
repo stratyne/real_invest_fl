@@ -134,10 +134,10 @@ const EMPTY_FILTER: FilterState = {
     dom_score: 0.15,
     absentee_score: 0.10,
   },
-  rehab_cost_per_sqft: 22.0,
+  rehab_cost_per_sqft: 35.0,
   min_comp_sales_for_arv: 3,
-  comp_radius_miles: 1.0,
-  comp_year_built_tolerance: 15,
+  comp_radius_miles: 1.5,
+  comp_year_built_tolerance: 10,
   max_results: null,
   sort_by_field: 'deal_score',
   sort_by_direction: 'DESC',
@@ -758,10 +758,10 @@ export default function SearchPage() {
               </Section>
 
               <Section title="ARV Engine">
-                <NumInput label="Rehab Cost / sqft ($)" value={filterState.rehab_cost_per_sqft} onChange={(v) => setFs({ rehab_cost_per_sqft: v ?? 22 })} />
+                <NumInput label="Rehab Cost / sqft ($)" value={filterState.rehab_cost_per_sqft} onChange={(v) => setFs({ rehab_cost_per_sqft: v ?? 35 })} />
                 <NumInput label="Min Comp Sales for ARV" value={filterState.min_comp_sales_for_arv} onChange={(v) => setFs({ min_comp_sales_for_arv: v ?? 3 })} />
-                <NumInput label="Comp Radius (miles)" value={filterState.comp_radius_miles} onChange={(v) => setFs({ comp_radius_miles: v ?? 1.0 })} />
-                <NumInput label="Comp Year Built Tolerance" value={filterState.comp_year_built_tolerance} onChange={(v) => setFs({ comp_year_built_tolerance: v ?? 15 })} />
+                <NumInput label="Comp Radius (miles)" value={filterState.comp_radius_miles} onChange={(v) => setFs({ comp_radius_miles: v ?? 1.5 })} />
+                <NumInput label="Comp Year Built Tolerance" value={filterState.comp_year_built_tolerance} onChange={(v) => setFs({ comp_year_built_tolerance: v ?? 10 })} />
               </Section>
 
               <Section title="Output">
