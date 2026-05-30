@@ -76,7 +76,7 @@ mqi_qualified_at once Phase 4 query-time filter is live.
 | Parcels with sales | ~27,000 | ~68,007 |
 | Total sale records | 126,304 | 152,909 |
 | Source | escpa_cama | srcpa_parcelcard |
-| Notes | instrument_type populated, qualification_code NULL | 57,987 parcels truncated at 2 sales — item 124 |
+| Notes | instrument_type populated, qualification_code NULL | Full history run active (item 124) — srcpa_parcel rows being written, instrument_type backfill in progress |
 
 ## Historical POC Baseline (Escambia only — superseded 2026-05-02)
 Retained as reference for backfill completeness verification.
@@ -102,7 +102,7 @@ Retained as reference for backfill completeness verification.
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa complete. Escambia live run active (~18,448 enriched, soft-block rate limiting in progress). |
-| 17 | PARTIAL | arv_calculator.py refactor | Santa Rosa re-run pending (item 125 — tot_lvg_area corrected, instrument_type backfill pending). Escambia --force run pending CAMA completion. |
+| 17 | PARTIAL | arv_calculator.py refactor | Santa Rosa re-run pending (item 125 — tot_lvg_area corrected, item 124 in progress). Escambia --force run pending CAMA completion. |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
 | 20 | PENDING | Daily scheduler | Windows Task Scheduler → master runner script |
 | 21 | PENDING | Zestimate integration | RapidAPI wrapper, rate-limited |
@@ -115,7 +115,7 @@ Retained as reference for backfill completeness verification.
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
 | 116 | PENDING | bed_bath_source enforcement in parser layer — confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing — ready to implement when prioritized. | — |
-| 124 | PENDING | Santa Rosa full sale history scraper — srcpa.gov/parcel endpoint. Permanent pipeline, quarterly cadence. Backfills instrument_type on existing rows via DO UPDATE. File: real_invest_fl/ingest/sales/santa_rosa_sales.py. | Design locked — ready to implement. |
+| 124 | IN PROGRESS | Santa Rosa full sale history scraper — parcelview.srcpa.gov endpoint. Permanent pipeline, quarterly cadence. Backfills instrument_type on existing rows via DO UPDATE. File: real_invest_fl/ingest/sales/santa_rosa_sales.py. | Full run active as of 2026-05-29. Verify on completion, then close item 127. |
 | 125 | PENDING | ARV calculator re-run — both counties with --force. Blocked on: Escambia CAMA completion + item 124 completion. Run once after both complete. | After items 124 + Escambia CAMA complete. |
 | 126 | PENDING | years_since_last_sale — derive from parcel_sale_history at query time for enriched parcels. NAL sale_yr1 NULL for 82%+ SFR in both counties. Design required. | — |
 | 127 | PENDING | Remove parse_sales() from santa_rosa.py parcelcard scraper. Blocked on item 124 verification. | After item 124 verified. |

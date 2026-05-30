@@ -19,7 +19,7 @@ real_invest_fl/ingest/cama_ingest.py  -- retained; do not delete until Escambia 
 # Santa Rosa
 python -m real_invest_fl.ingest.cama.santa_rosa [options]
 
-# Santa Rosa full sale history (item 124 — pending implementation)
+# Santa Rosa full sale history
 python -m real_invest_fl.ingest.sales.santa_rosa_sales [options]
 
 # Escambia
@@ -91,14 +91,14 @@ python scripts/run_escambia_cama.py
 - Sale history captured from same parcelcard page per request.
 - parcel_sale_history populated with up to 2 sales per parcel.
   Parcelcard truncates older records — "... N more" is not scraped.
-  Full history source is srcpa.gov/parcel — see item 124.
+  Full history source is parcelview.srcpa.gov — see item 124.
 - instrument_type not surfaced on parcelcard — always None.
-  instrument_type IS available on srcpa.gov/parcel (full parcel page).
+  instrument_type IS available on parcelview.srcpa.gov (full parcel page).
   santa_rosa_sales.py (item 124) captures it from that endpoint.
 - multi_parcel not surfaced on parcelcard — always False.
 
 Note: parse_sales() in santa_rosa.py captures only 2 sales per parcel
-(parcelcard truncation). Full history available from srcpa.gov/parcel
+(parcelcard truncation). Full history available from parcelview.srcpa.gov
 endpoint. santa_rosa_sales.py (item 124) is the permanent sale history
 source. parse_sales() will be removed from santa_rosa.py after
 santa_rosa_sales.py is verified (item 127).
@@ -115,6 +115,29 @@ santa_rosa_sales.py is verified (item 127).
   raw_cama_json. tot_lvg_area now protected by _NAL_UPSERT_NEVER_OVERWRITE.
 - 9 remaining unenriched SFR parcels are edge cases — not a blocker.
 - 54,453 unenriched parcels are non-SFR dor_uc — correct by design.
+
+### Santa Rosa Sale History Scraper (santa_rosa_sales.py)
+- Source: https://parcelview.srcpa.gov/?parcel={parcel_id}&baseUrl=http://srcpa.gov/
+- srcpa.gov/parcel is a wrapper shell — actual data loads via iframe
+  pointing to parcelview.srcpa.gov. Scraper targets parcelview directly.
+- Server-rendered HTML. Plain httpx GET with browser-mimicking headers.
+  No JavaScript rendering required.
+- Parse target: <div id="salesContainer"> table. Each <td> carries
+  data-cell="<column name>" attribute — used as column selector.
+  No positional index logic.
+- Soft-block detection: id="salesContainer" absent from response body.
+- Not-found detection: salesContainer present, zero <td> data rows.
+- source tag: srcpa_parcel (distinct from srcpa_parcelcard).
+- Upsert: ON CONFLICT updates instrument_type, qualification_code,
+  sale_type, sale_price, multi_parcel, price_per_sqft, source when any
+  differ. sale_date, grantor, grantee are immutable (unique key fields).
+- Does NOT use base.run(). Own lightweight loop with same rate limits
+  as parcelcard scraper: DEFAULT_DELAY=1.0, DEFAULT_DELAY_MAX=3.0,
+  REST_EVERY=500, REST_SECONDS=300.0.
+- Resumability: --resume-from <parcel_id>. Uses >= comparison (inclusive)
+  — safe because upsert is idempotent.
+- Target: all dor_uc = '001' parcels (68,312). No cama_enriched_at gate.
+- Run active as of 2026-05-29.
 
 ## base.py Design Rules (never override)
 
