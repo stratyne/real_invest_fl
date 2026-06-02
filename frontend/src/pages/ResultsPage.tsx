@@ -30,12 +30,9 @@ function fmtFloat(n: number | null | undefined, decimals = 2): string {
 
 function ArvBadge({ source }: { source: string | null }) {
   if (!source) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>
-  const isComp = source === 'COMP'
-  return (
-    <span className={isComp ? 'badge badge--comp' : 'badge badge--jv-fallback'}>
-      {isComp ? 'COMP' : 'JV Fallback'}
-    </span>
-  )
+  if (source === 'COMP') return <span className="badge badge--comp">COMP</span>
+  if (source === 'NAL_COMP') return <span className="badge badge--nal-comp">NAL COMP</span>
+  return <span className="badge badge--jv-fallback">JV Fallback</span>
 }
 
 // ── Property detail drawer ────────────────────────────────────────────────
@@ -113,10 +110,16 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
               <Row label="JV / sqft" value={detail.jv_per_sqft != null ? `$${fmtFloat(detail.jv_per_sqft)}` : '—'} />
               <Row label="ARV Estimate" value={
                 detail.arv_estimate != null
-                  ? <>{fmt(detail.arv_estimate, '$')} <ArvBadge source={detail.latest_listing?.arv_source ?? null} /></>
+                  ? <>
+                      {fmt(detail.arv_estimate, '$')}
+                      {(detail.latest_listing?.arv_source ?? detail.arv_source) &&
+                        <> <ArvBadge source={detail.latest_listing?.arv_source ?? detail.arv_source ?? null} /></>
+                      }
+                    </>
                   : '—'
               } />
               <Row label="ARV Spread" value={fmt(detail.arv_spread, '$')} />
+              <Row label="ARV Source" value={detail.latest_listing?.arv_source ?? detail.arv_source ?? '—'} />
             </DrawerSection>
             <DrawerSection title="Property">
               <Row label="DOR Use Code" value={detail.dor_uc} />
@@ -140,12 +143,23 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
               <Row label="CAMA Enriched" value={detail.cama_enriched_at ? new Date(detail.cama_enriched_at).toLocaleDateString() : 'Not enriched'} />
             </DrawerSection>
             <DrawerSection title="Sale History">
-              <Row label="Sale 1 Date" value={detail.sale_yr1 != null ? `${detail.sale_mo1 ?? '?'}/${detail.sale_yr1}` : '—'} />
-              <Row label="Sale 1 Price" value={fmt(detail.sale_prc1, '$')} />
-              <Row label="Sale 1 Qual" value={detail.qual_cd1} />
-              <Row label="Sale 2 Date" value={detail.sale_yr2 != null ? `${detail.sale_mo2 ?? '?'}/${detail.sale_yr2}` : '—'} />
-              <Row label="Sale 2 Price" value={fmt(detail.sale_prc2, '$')} />
-              <Row label="Years Since Sale" value={detail.years_since_last_sale} />
+              {detail.sale_history.length === 0 ? (
+                <Row label="No sale history" value="—" />
+              ) : (
+                detail.sale_history.map((s, i) => (
+                  <div key={i} style={{ paddingBottom: '8px', borderBottom: i < detail.sale_history.length - 1 ? '1px solid var(--color-border)' : 'none', marginBottom: i < detail.sale_history.length - 1 ? '8px' : 0 }}>
+                    <Row label="Date" value={s.sale_date ?? '—'} />
+                    <Row label="Price" value={s.sale_price != null ? fmt(s.sale_price, '$') : '—'} />
+                    <Row label="Instrument" value={s.instrument_type ?? '—'} />
+                    <Row label="Qual Code" value={s.qualification_code ?? '—'} />
+                    <Row label="Type" value={s.sale_type ?? '—'} />
+                    <Row label="Grantor" value={s.grantor || '—'} />
+                    <Row label="Grantee" value={s.grantee || '—'} />
+                    <Row label="$/sqft" value={s.price_per_sqft != null ? `$${s.price_per_sqft.toFixed(2)}` : '—'} />
+                    <Row label="Source" value={s.source} />
+                  </div>
+                ))
+              )}
             </DrawerSection>
             <DrawerSection title="Ratios">
               <Row label="Imp / Land Ratio" value={detail.improvement_to_land_ratio != null ? fmtFloat(detail.improvement_to_land_ratio, 4) : '—'} />

@@ -3,6 +3,7 @@ import type {
   PaginatedPropertySearchResult,
   PropertyDetail,
   InlineSearchRequest,
+  ParcelLookupResult,
 } from '../types/api'
 
 export async function searchProperties(
@@ -41,5 +42,14 @@ export async function getProperty(
   const res = await client.get<PropertyDetail>(
     `/${countyFips}/properties/${parcelId}`,
   )
+  return res.data
+}
+
+export async function lookupParcel(
+  parcelId: string,
+): Promise<ParcelLookupResult[]> {
+  const res = await client.get<ParcelLookupResult[]>('/properties/lookup', {
+    params: { parcel_id: parcelId },
+  })
   return res.data
 }

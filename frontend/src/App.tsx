@@ -3,6 +3,7 @@ import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import SearchPage from './pages/SearchPage'
 import ResultsPage from './pages/ResultsPage'
+import PropertyDetailPage from './pages/PropertyDetailPage'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const token = localStorage.getItem('access_token')
@@ -36,6 +37,14 @@ export default function App() {
           element={
             <RequireAuth>
               <ResultsPage />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/property/:countyFips/:parcelId"
+          element={
+            <RequireAuth>
+              <PropertyDetailPage />
             </RequireAuth>
           }
         />

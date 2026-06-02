@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 interface AppNavProps {
@@ -6,6 +7,33 @@ interface AppNavProps {
 
 export default function AppNav({ userName }: AppNavProps) {
   const navigate = useNavigate()
+  const [searchInput, setSearchInput] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+
+  async function handleParcelSearch() {
+    const pid = searchInput.trim().toUpperCase()
+    if (!pid) return
+    setSearching(true)
+    setSearchError(null)
+    try {
+      const { lookupParcel } = await import('../api/properties')
+      const results = await lookupParcel(pid)
+      if (results.length === 0) {
+        setSearchError('Not found')
+      } else if (results.length === 1) {
+        setSearchInput('')
+        navigate(`/property/${results[0].county_fips}/${results[0].parcel_id}`)
+      } else {
+        setSearchInput('')
+        navigate(`/property/${results[0].county_fips}/${results[0].parcel_id}`)
+      }
+    } catch {
+      setSearchError('Lookup failed')
+    } finally {
+      setSearching(false)
+    }
+  }
 
   function handleSignOut() {
     localStorage.removeItem('access_token')
@@ -15,25 +43,29 @@ export default function AppNav({ userName }: AppNavProps) {
   return (
     <nav style={s.nav}>
       <div style={s.left}>
-        <span
-          style={s.brand}
-          onClick={() => navigate('/dashboard')}
-          title="Go to Dashboard"
-        >
+        <span style={s.brand} onClick={() => navigate('/dashboard')} title="Go to Dashboard">
           Penstock
         </span>
-        <button style={s.navLink} onClick={() => navigate('/dashboard')}>
-          Dashboard
-        </button>
-        <button style={s.navLink} onClick={() => navigate('/search')}>
-          New Search
-        </button>
+        <button style={s.navLink} onClick={() => navigate('/dashboard')}>Dashboard</button>
+        <button style={s.navLink} onClick={() => navigate('/search')}>New Search</button>
+        <div style={s.searchWrap}>
+          <input
+            style={s.searchInput}
+            value={searchInput}
+            onChange={(e) => { setSearchInput(e.target.value); setSearchError(null) }}
+            onKeyDown={(e) => e.key === 'Enter' && handleParcelSearch()}
+            placeholder="Parcel ID…"
+            disabled={searching}
+          />
+          <button style={s.searchBtn} onClick={handleParcelSearch} disabled={searching || !searchInput.trim()}>
+            {searching ? '…' : '↵'}
+          </button>
+          {searchError && <span style={s.searchError}>{searchError}</span>}
+        </div>
       </div>
       <div style={s.right}>
         {userName && <span style={s.userName}>{userName}</span>}
-        <button style={s.signOutBtn} onClick={handleSignOut}>
-          Sign Out
-        </button>
+        <button style={s.signOutBtn} onClick={handleSignOut}>Sign Out</button>
       </div>
     </nav>
   )
@@ -92,5 +124,40 @@ const s: Record<string, React.CSSProperties> = {
     padding: '5px 12px',
     fontSize: '13px',
     cursor: 'pointer',
+  },
+    searchWrap: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    marginLeft: '8px',
+    position: 'relative' as const,
+  },
+  searchInput: {
+    background: 'var(--color-bg)',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    color: 'var(--color-text)',
+    padding: '5px 10px',
+    fontSize: '12px',
+    width: '180px',
+    outline: 'none',
+  },
+  searchBtn: {
+    background: 'transparent',
+    border: '1px solid var(--color-border)',
+    borderRadius: '6px',
+    color: 'var(--color-text-muted)',
+    padding: '5px 8px',
+    fontSize: '12px',
+    cursor: 'pointer',
+  },
+  searchError: {
+    position: 'absolute' as const,
+    top: '100%',
+    left: 0,
+    fontSize: '11px',
+    color: 'var(--color-danger)',
+    whiteSpace: 'nowrap' as const,
+    paddingTop: '2px',
   },
 }

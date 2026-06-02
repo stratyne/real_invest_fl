@@ -157,6 +157,19 @@ export interface ListingEventSummary {
   listing_url: string | null
 }
 
+export interface SaleHistoryEntry {
+  sale_date: string | null
+  sale_price: number | null
+  instrument_type: string | null
+  qualification_code: string | null
+  sale_type: string | null
+  multi_parcel: boolean
+  grantor: string
+  grantee: string
+  price_per_sqft: number | null
+  source: string
+}
+
 export interface PropertySearchResult {
   county_fips: string
   parcel_id: string
@@ -193,6 +206,8 @@ export interface PaginatedPropertySearchResult {
   total_pages: number
   results: PropertySearchResult[]
 }
+
+export type ParcelLookupResult = PropertySearchResult
 
 export interface PropertyDetail {
   county_fips: string
@@ -239,6 +254,7 @@ export interface PropertyDetail {
   jv_per_sqft: number | null
   arv_estimate: number | null
   arv_spread: number | null
+  arv_source: string | null
   qual_cd1: string | null
   sale_prc1: number | null
   sale_yr1: number | null
@@ -252,4 +268,5 @@ export interface PropertyDetail {
   nal_ingested_at: string | null
   cama_enriched_at: string | null
   latest_listing: ListingEventSummary | null
+  sale_history: SaleHistoryEntry[]
 }

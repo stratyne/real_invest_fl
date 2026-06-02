@@ -1046,6 +1046,110 @@ async def search_properties_inline(
     )
 
 
+@router.get("/properties/lookup", response_model=list[PropertySearchResult])
+async def lookup_property(
+    parcel_id: str = Query(..., description="Parcel ID to look up across accessible counties"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[PropertySearchResult]:
+    """Look up a parcel by ID across all counties the current user has access to.
+
+    Returns all matching properties regardless of county. Superusers search
+    all counties. Regular users are scoped to their granted counties.
+    No filter profile required.
+    """
+    if current_user.is_superuser:
+        county_result = await db.execute(
+            select(Property.county_fips).distinct()
+        )
+        accessible = [r[0] for r in county_result.all()]
+    else:
+        accessible = list(await _get_accessible_fips(current_user, db))
+
+    if not accessible:
+        return []
+
+    # Single query across all accessible counties — parcel_id is unique
+    # within a county but the same string could exist in multiple counties.
+    # In practice this returns 0 or 1 rows for the current 2-county scope.
+    prop_result = await db.execute(
+        select(Property).where(
+            Property.county_fips.in_(accessible),
+            Property.parcel_id == parcel_id,
+        )
+    )
+    props = prop_result.scalars().all()
+
+    if not props:
+        return []
+
+    # Fetch latest listing event for each match in a single query
+    matched_fips = [p.county_fips for p in props]
+    ev_subq = (
+        select(
+            ListingEvent.county_fips,
+            ListingEvent.parcel_id,
+            func.max(ListingEvent.id).label("max_id"),
+        )
+        .where(
+            ListingEvent.county_fips.in_(matched_fips),
+            ListingEvent.parcel_id == parcel_id,
+        )
+        .group_by(ListingEvent.county_fips, ListingEvent.parcel_id)
+        .subquery()
+    )
+    ev_result = await db.execute(
+        select(ListingEvent).join(
+            ev_subq,
+            (ListingEvent.county_fips == ev_subq.c.county_fips)
+            & (ListingEvent.parcel_id == ev_subq.c.parcel_id)
+            & (ListingEvent.id == ev_subq.c.max_id),
+        )
+    )
+    ev_map: dict[str, ListingEvent] = {
+        ev.county_fips: ev for ev in ev_result.scalars().all()
+    }
+
+    out: list[PropertySearchResult] = []
+    for prop in props:
+        ev_full = ev_map.get(prop.county_fips)
+        latest = ListingEventSummary.model_validate(ev_full) if ev_full else None
+        arv_source = ev_full.arv_source if ev_full else None
+        arv_estimate = (ev_full.arv_estimate if ev_full else None) or prop.arv_estimate
+        out.append(
+            PropertySearchResult(
+                county_fips=prop.county_fips,
+                parcel_id=prop.parcel_id,
+                phy_addr1=prop.phy_addr1,
+                phy_city=prop.phy_city,
+                phy_zipcd=prop.phy_zipcd,
+                dor_uc=prop.dor_uc,
+                jv=prop.jv,
+                tot_lvg_area=prop.tot_lvg_area,
+                lnd_sqfoot=prop.lnd_sqfoot,
+                act_yr_blt=prop.act_yr_blt,
+                eff_yr_blt=prop.eff_yr_blt,
+                bedrooms=prop.bedrooms,
+                bathrooms=float(prop.bathrooms) if prop.bathrooms is not None else None,
+                absentee_owner=prop.absentee_owner,
+                imp_qual=prop.imp_qual,
+                years_since_last_sale=prop.years_since_last_sale,
+                improvement_to_land_ratio=float(prop.improvement_to_land_ratio) if prop.improvement_to_land_ratio is not None else None,
+                soh_compression_ratio=float(prop.soh_compression_ratio) if prop.soh_compression_ratio is not None else None,
+                arv_estimate=arv_estimate,
+                arv_spread=prop.arv_spread,
+                jv_per_sqft=float(prop.jv_per_sqft) if prop.jv_per_sqft is not None else None,
+                deal_score=None,
+                arv_source=arv_source,
+                latitude=float(prop.latitude) if prop.latitude is not None else None,
+                longitude=float(prop.longitude) if prop.longitude is not None else None,
+                latest_listing=latest,
+            )
+        )
+
+    return out
+
+
 @router.get("/{county_fips}/properties/{parcel_id}", response_model=PropertyDetail)
 async def get_property(
     county_fips: str = Depends(county_access()),

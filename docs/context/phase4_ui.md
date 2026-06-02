@@ -82,6 +82,14 @@ ACTIVE — Phase 4 in progress. See STATE.md for item status.
   Sign Out accessible from every page. User name displayed in nav right slot.
   ResultsPage uses a page sub-header below AppNav for page-specific actions
   (Edit Filter, result count, Save Filter).  
+- Parcel ID search — global search bar in AppNav. Accepts parcel ID,
+  queries GET /properties/lookup across all accessible counties, navigates
+  to /property/:countyFips/:parcelId on match. Cross-county, no filter
+  profile required.
+- Property detail page — standalone page at /property/:countyFips/:parcelId.
+  Full PropertyDetail response including complete sale_history table,
+  map pin with popup, all CAMA and valuation fields. Deep-linkable.
+  Accessible via parcel ID search and future deep links.
 - Outreach template generation (triggered by user selection)
 - One-click email send with calendar booking link
 - Full outreach log with response tracking
@@ -215,6 +223,7 @@ Edit path which navigates with profileId + countyFips in nav state.
 | GET | /properties | search_properties | Core search route. Accepts filter_profile_id as query param. Loads profile, builds WHERE clauses from filter_criteria across all counties in profile.county_fips, computes deal score at query time, returns results ranked by deal score. Upserts user_profile_prefs after successful fetch. Results include latitude and longitude. |
 | POST | /properties/search | search_properties_inline | Inline search — accepts full filter payload in request body (county_fips list, filter_criteria, deal_score_weights, ARV engine params). No profile written. Access validated against county_fips array. Behaviour otherwise identical to search_properties. Used when executing unsaved filter state. Results include latitude and longitude. |
 | GET | /{county_fips}/properties/{parcel_id} | get_property | Returns full property detail for a single parcel. Includes latest listing_event if present. county_fips path parameter enforced via county_access() dependency. |
+| GET | /properties/lookup | lookup_property | Cross-county parcel lookup by parcel_id. Returns list[PropertySearchResult] scoped to user's accessible counties. No filter profile required. |
 
 #### Listings — /{county_fips}/listings
 | Method | Path | Handler | Description |
