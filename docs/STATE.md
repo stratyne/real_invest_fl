@@ -1,12 +1,12 @@
 # Project Penstock — STATE.md
 # Current project status only. No rationale. No design decisions.
-# Updated: 2026-05-29
+# Updated: 2026-06-02
 
 ## Active Phase
 **Phase 2** (scraping/matching) — core complete, scheduler/output pending.
 **Phase 4** (UI) — active. Deployment complete. Tail items pending.
 Phase 2 and Phase 4 run in parallel.
-Both CAMA runs ACTIVE.
+Escambia CAMA run ACTIVE. Santa Rosa CAMA complete.
 
 ## Phase Summary
 
@@ -17,18 +17,18 @@ Both CAMA runs ACTIVE.
 | 3 | Subscription Sources and CAMA Refresh | NOT STARTED |
 | 4 | UI — FastAPI + React + MapLibre | ACTIVE — dashboard flow complete, map pins live |
 
-**Phase 1 remaining:** CAMA enrichment (Santa Rosa in progress, Escambia in progress).
+**Phase 1 remaining:** CAMA enrichment (Escambia in progress).
 All other Phase 1 work complete.
 
 **Phase 3 scope:** Landvoice, REDX, PropStream modules. Annual NAL/CAMA refresh
 pipeline. Multi-county CAMA architecture (each county PA has its own website —
 no shared scraper possible).
 
-**Phase 2 / Phase 4 parallel:** Both CAMA runs active in background.
+**Phase 2 / Phase 4 parallel:** Escambia CAMA run active in background.
 UI development proceeds in parallel.
 
 ## Migration Chain
-HEAD = n5o6p7q8r9s0 (v0.21) — live and verified
+HEAD = o6p7q8r9s0t1 (v0.22) — live and verified
 
 | Rev | Version | Description |
 |---|---|---|
@@ -52,31 +52,32 @@ HEAD = n5o6p7q8r9s0 (v0.21) — live and verified
 | l3m4n5o6p7q8 | v0.19 | multi-county filter profiles — county_fips VARCHAR(5)[] |
 | m4n5o6p7q8r9 | v0.20 | listing_events workflow_status CHECK constraint |
 | n5o6p7q8r9s0 | v0.21 | add arv_source to properties |
+| o6p7q8r9s0t1 | v0.22 | add sales_history_enriched_at to properties |
 
 **Note:** Ingest refactor (2026-05-02) produced NO migration — code only.
 **Note:** alembic/env.py updated 2026-05-26 to use HOST_SYNC_DATABASE_URL — required for host-side migration runs.
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
 mqi_qualified_at once Phase 4 query-time filter is live.
 
-## Database State (verified 2026-05-29)
+## Database State (verified 2026-06-02)
 
 | County | FIPS | NAL rows | GIS geometry | CAMA enriched | Notes |
 |---|---|---|---|---|---|
-| Escambia | 12033 | 170,561 | 160,264 | ~27,284 | Live CAMA run active. beds/baths/quality absent from parcelcard. ARV run pending. tot_lvg_area protected from NAL re-ingest (CAMA wins). |
-| Santa Rosa | 12113 | 120,500 | 111,036 | ~68,303 | ARV re-run pending (item 125). tot_lvg_area restored from raw_cama_json (67,543 rows corrected). CAMA run complete. |
+| Escambia | 12033 | 170,561 | 160,264 | ~71,586 | Live CAMA run active. beds/baths/quality absent from parcelcard. ARV run pending. tot_lvg_area protected from NAL re-ingest (CAMA wins). |
+| Santa Rosa | 12113 | 120,500 | 111,036 | 68,303 | ARV re-run pending (item 125). CAMA complete. Sale history complete (323,102 records). |
 | All others | — | staged only | staged only | 0 | NAL + GIS files in place |
 
 **Total properties in DB:** 291,061
 
-**parcel_sale_history (verified 2026-05-29):**
+**parcel_sale_history (verified 2026-06-02):**
 
 | Metric | Escambia | Santa Rosa |
 |---|---|---|
 | Enriched parcels | 27,284 | 68,303 |
-| Parcels with sales | ~27,000 | ~68,007 |
-| Total sale records | 126,304 | 152,909 |
-| Source | escpa_cama | srcpa_parcelcard |
-| Notes | instrument_type populated, qualification_code NULL | Full history run active (item 124) — srcpa_parcel rows being written, instrument_type backfill in progress |
+| Parcels with sales | ~27,000 | 68,009 |
+| Total sale records | 126,304 | 323,102 |
+| Source | escpa_cama | srcpa_parcel (286,969) + srcpa_parcelcard (36,133) |
+| Notes | instrument_type populated, qualification_code NULL | Full history complete. instrument_type 99.1% populated. qualification_code: Q 157,771 / U 152,155 / C 11,908 / V 1,268. |
 
 ## Historical POC Baseline (Escambia only — superseded 2026-05-02)
 Retained as reference for backfill completeness verification.
@@ -90,8 +91,8 @@ Retained as reference for backfill completeness verification.
 | Auction.com listings | 11 records | 2026-04-28 initial load |
 | Zillow listings | 218 records | 13 foreclosures + 205 for-sale, 2026-04-28 |
 
-## CAMA Run Status (updated 2026-05-29)
-- **Santa Rosa:** COMPLETE. 68,303 / 68,312 enriched (9 remaining are non-SFR edge cases). Sale history truncated at 2 records per parcel — full history scraper pending (item 124). source tag corrected: srcpa_parcelview → srcpa_parcelcard (35,341 rows updated 2026-05-29).
+## CAMA Run Status (updated 2026-06-02)
+- **Santa Rosa:** COMPLETE. 68,303 / 68,312 enriched (9 remaining are non-SFR edge cases). Full sale history complete via santa_rosa_sales.py (item 124, verified 2026-06-02). Source tags: srcpa_parcel (286,969 rows) + srcpa_parcelcard (36,133 rows, retained). parse_sales() removal pending (item 127).
 - **Escambia:** RUNNING via scripts/run_escambia_cama.py. ~27,284 / 106,372 enriched. Soft-block rate limiting active — wrapper cycling at 420s intervals. beds/baths/cama_quality_code absent from Escambia parcelcard — will remain NULL. Resumable via cama_enriched_at IS NULL.
 
 ## Active Items
@@ -101,8 +102,8 @@ Retained as reference for backfill completeness verification.
 | 1 | PARTIAL | Beds/baths opportunistic population for Escambia County | Bulk source pending — not a blocker |
 | 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
 | 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
-| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa complete. Escambia live run active (~18,448 enriched, soft-block rate limiting in progress). |
-| 17 | PARTIAL | arv_calculator.py refactor | Santa Rosa re-run pending (item 125 — tot_lvg_area corrected, item 124 in progress). Escambia --force run pending CAMA completion. |
+| 16 | IN PROGRESS | CAMA enrichment | Santa Rosa complete. Escambia live run active (71,586 / 106,372 enriched as of 2026-06-02). |
+| 17 | PARTIAL | arv_calculator.py refactor | Santa Rosa blocker resolved (item 124 complete). Escambia CAMA completion remains only blocker. |
 | 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
 | 20 | PENDING | Daily scheduler | Windows Task Scheduler → master runner script |
 | 21 | PENDING | Zestimate integration | RapidAPI wrapper, rate-limited |
@@ -115,10 +116,8 @@ Retained as reference for backfill completeness verification.
 | 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
 | 116 | PENDING | bed_bath_source enforcement in parser layer — confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing — ready to implement when prioritized. | — |
-| 124 | IN PROGRESS | Santa Rosa full sale history scraper — parcelview.srcpa.gov endpoint. Permanent pipeline, quarterly cadence. Backfills instrument_type on existing rows via DO UPDATE. File: real_invest_fl/ingest/sales/santa_rosa_sales.py. | Full run active as of 2026-05-29. Verify on completion, then close item 127. |
-| 125 | PENDING | ARV calculator re-run — both counties with --force. Blocked on: Escambia CAMA completion + item 124 completion. Run once after both complete. | After items 124 + Escambia CAMA complete. |
+| 125 | PENDING | ARV calculator re-run — both counties with --force. Blocked on: Escambia CAMA completion + item 124 completion. Run once after both complete. | Blocked on Escambia CAMA completion only. Item 124 no longer a blocker. |
 | 126 | PENDING | years_since_last_sale — derive from parcel_sale_history at query time for enriched parcels. NAL sale_yr1 NULL for 82%+ SFR in both counties. Design required. | — |
-| 127 | PENDING | Remove parse_sales() from santa_rosa.py parcelcard scraper. Blocked on item 124 verification. | After item 124 verified. |
 | 128 | PENDING | Property detail view — surface full parcel_sale_history in get_property() route. Currently shows NAL-embedded sale fields only (max 2 sales, no instrument_type). | — |
 
 ## Deferred Items
@@ -226,3 +225,5 @@ Retained as reference for backfill completeness verification.
 | 121 | SearchPage Sort By options expanded to match all backend supported_sort_fields — address and tot_lvg_area added. | 2026-05-28 |
 | 122 | absentee_owner population — both counties. SR: 30,063 absentee / 10,490 owner-occupied / 79,947 NULL (OWN_ADDR1 absent or name overflow — see _is_absentee() fix). ESC: 81,628 absentee / 88,921 owner-occupied / 12 NULL. _is_absentee() rewritten: OWN_ADDR1/OWN_ADDR2 fallthrough, digit-leading guard. | 2026-05-29 |
 | 123 | NAL upsert column protection — _NAL_UPSERT_NEVER_OVERWRITE frozenset live. 27 columns protected (26 original + tot_lvg_area). 67,543 SR tot_lvg_area values restored from raw_cama_json after NAL re-ingest overwrote CAMA heated area with NAL effective area. | 2026-05-29 |
+| 124 | Santa Rosa full sale history scraper — parcelview.srcpa.gov. 323,102 records, 68,009 parcels. instrument_type 99.1% populated. | 2026-06-02 |
+| 127 | Remove parse_sales() from santa_rosa.py parcelcard scraper. parse_sales_fn made Optional in base.py. | 2026-06-02 |

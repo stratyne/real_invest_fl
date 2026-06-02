@@ -370,95 +370,6 @@ def parse_building(html: str, parcel_id: str) -> dict:
     return fields
 
 
-def parse_sales(html: str, parcel_id: str) -> list[dict]:
-    """
-    Parse all sale transactions from the Santa Rosa parcelcard page.
-
-    Parcelcard sales section structure (confirmed 2026-05-24):
-        Header row: Book | Page | Date | Q/U | V/I | Price
-        Data rows alternate between:
-            - Transaction row: Book, Page, Date, Q/U, V/I, Price values
-            - Grantor row:  <td>Grantor:</td> <td colspan=5>NAME</td>
-            - Grantee row:  <td>Grantee:</td> <td colspan=5>NAME</td>
-
-    Q/U maps to qualification_code.
-    V/I maps to sale_type.
-    multi_parcel is not surfaced on the parcelcard — always False.
-
-    The sales section is located by finding the <h6> containing "Sales"
-    and traversing to the following <table>.
-
-    Returns list of raw dicts, one per sale.
-    Returns empty list if no sales section or no rows found.
-    """
-    soup = BeautifulSoup(html, "html.parser")
-    sales: list[dict] = []
-
-    # Find the Sales header — <h6> containing "Sales"
-    sales_header = None
-    for h6 in soup.find_all("h6"):
-        if "Sales" in h6.get_text():
-            sales_header = h6
-            break
-
-    if not sales_header:
-        logger.debug("Parcel %s — no Sales section found", parcel_id)
-        return sales
-
-    # The sales table immediately follows the header
-    sales_table = sales_header.find_next("table")
-    if not sales_table:
-        logger.debug("Parcel %s — no sales table found", parcel_id)
-        return sales
-
-    current_sale: Optional[dict] = None
-
-    for row in sales_table.find_all("tr"):
-        cells = row.find_all("td")
-        if not cells:
-            continue  # Header row — all <th>
-
-        first_cell_text = cells[0].get_text(strip=True)
-
-        # Grantor row
-        if first_cell_text.lower().startswith("grantor"):
-            if current_sale is not None:
-                current_sale["grantor"] = (
-                    cells[1].get_text(strip=True) if len(cells) > 1 else ""
-                )
-            continue
-
-        # Grantee row — finalizes the current sale
-        if first_cell_text.lower().startswith("grantee"):
-            if current_sale is not None:
-                current_sale["grantee"] = (
-                    cells[1].get_text(strip=True) if len(cells) > 1 else ""
-                )
-                if current_sale.get("sale_date"):
-                    sales.append(current_sale)
-                current_sale = None
-            continue
-
-        # Transaction row — 6 cells: Book, Page, Date, Q/U, V/I, Price
-        if len(cells) >= 6:
-            current_sale = {
-                "multi_parcel":       "",   # not on parcelcard
-                "sale_date":          cells[2].get_text(strip=True),
-                "sale_price":         cells[5].get_text(strip=True),
-                "instrument_type":    "",   # not on parcelcard
-                "qualification_code": cells[3].get_text(strip=True),
-                "sale_type":          cells[4].get_text(strip=True),
-                "grantor":            "",
-                "grantee":            "",
-            }
-
-    # Flush any dangling sale (no grantee row at end of table)
-    if current_sale is not None and current_sale.get("sale_date"):
-        sales.append(current_sale)
-
-    return sales
-
-
 # ── entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -467,9 +378,8 @@ if __name__ == "__main__":
         source_name=SOURCE_NAME,
         fetch_page_fn=fetch_page,
         parse_building_fn=parse_building,
-        parse_sales_fn=parse_sales,
         headers=HEADERS,
-        target_dor_ucs=["001"],   # Single-family residential
+        target_dor_ucs=["001"],
         default_delay=1.0,
         default_delay_max=3.0,
         rest_every=500,

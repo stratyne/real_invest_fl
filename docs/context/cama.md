@@ -1,6 +1,6 @@
 # Project Penstock — context/cama.md
 # Paste this alongside AGENTS.md when working on CAMA ingest.
-# Last updated: 2026-05-26
+# Last updated: 2026-06-02
 
 ## File Paths
 
@@ -97,11 +97,8 @@ python scripts/run_escambia_cama.py
   santa_rosa_sales.py (item 124) captures it from that endpoint.
 - multi_parcel not surfaced on parcelcard — always False.
 
-Note: parse_sales() in santa_rosa.py captures only 2 sales per parcel
-(parcelcard truncation). Full history available from parcelview.srcpa.gov
-endpoint. santa_rosa_sales.py (item 124) is the permanent sale history
-source. parse_sales() will be removed from santa_rosa.py after
-santa_rosa_sales.py is verified (item 127).
+Note: parse_sales() removed from santa_rosa.py (item 127).
+santa_rosa_sales.py is the permanent sale history source, quarterly cadence.
 
 ### Santa Rosa Run Resumability
 - cama_enriched_at IS NULL filter skips already-processed parcels automatically.
@@ -137,7 +134,9 @@ santa_rosa_sales.py is verified (item 127).
 - Resumability: --resume-from <parcel_id>. Uses >= comparison (inclusive)
   — safe because upsert is idempotent.
 - Target: all dor_uc = '001' parcels (68,312). No cama_enriched_at gate.
-- Run active as of 2026-05-29.
+- Run complete. Verified 2026-06-02. 323,102 records, 68,009 parcels.
+  instrument_type 99.1% populated. qualification_code: Q/U/C/V populated.
+  srcpa_parcelcard rows (36,133) retained — non-overlapping keys.
 
 ## base.py Design Rules (never override)
 

@@ -28,7 +28,7 @@ Standard bootstrap block:
 
 ## Migration Chain
 
-HEAD = n5o6p7q8r9s0 (v0.21) — live and verified
+HEAD = o6p7q8r9s0t1 (v0.22) — live and verified
 
 | Rev | Version | Description |
 |---|---|---|
@@ -52,6 +52,7 @@ HEAD = n5o6p7q8r9s0 (v0.21) — live and verified
 | l3m4n5o6p7q8 | v0.19 | multi-county filter profiles — county_fips VARCHAR(5)[] |
 | m4n5o6p7q8r9 | v0.20 | listing_events workflow_status CHECK constraint |
 | n5o6p7q8r9s0 | v0.21 | add arv_source to properties |
+| o6p7q8r9s0t1 | v0.22 | add sales_history_enriched_at to properties |
 
 ---
 
@@ -94,6 +95,7 @@ HEAD = n5o6p7q8r9s0 (v0.21) — live and verified
     cama_quality_code         VARCHAR(10)
     cama_condition_code       VARCHAR(10)
     cama_enriched_at          TIMESTAMPTZ
+	sales_history_enriched_at TIMESTAMPTZ
     geom                      geometry(Point,4326)
     latitude                  NUMERIC(10,7)
     longitude                 NUMERIC(10,7)

@@ -10,7 +10,7 @@ County-specific modules (escambia.py, santa_rosa.py, etc.) provide:
 
     async fetch_page(client, parcel_id) -> Optional[str] | SOFT_BLOCK
     parse_building(html, parcel_id)    -> dict
-    parse_sales(html, parcel_id)       -> list[dict]
+    parse_sales(html, parcel_id)       -> list[dict]  # optional
 
 This module provides everything else:
     coerce_building()
@@ -34,7 +34,7 @@ Convention: every county module ends with:
             source_name=SOURCE_NAME,
             fetch_page_fn=fetch_page,
             parse_building_fn=parse_building,
-            parse_sales_fn=parse_sales,
+            parse_sales_fn=parse_sales,   # omit if county has dedicated sales scraper
             headers=HEADERS,
             target_dor_ucs=TARGET_DOR_UCS,
             default_delay=DEFAULT_DELAY,
@@ -413,7 +413,6 @@ async def run(
     source_name: str,
     fetch_page_fn: Callable,
     parse_building_fn: Callable,
-    parse_sales_fn: Callable,
     headers: dict,
     target_dor_ucs: list[str],
     limit: Optional[int],
@@ -424,6 +423,7 @@ async def run(
     force: bool,
     rest_every: Optional[int],
     rest_seconds: float,
+    parse_sales_fn: Optional[Callable] = None,    
 ) -> None:
     """
     Main processing loop. Shared across all county CAMA scrapers.
@@ -535,25 +535,26 @@ async def run(
                 counters["cama_written"] += 1
 
                 # ── Sales history ──────────────────────────────────────── #
-                raw_sales = parse_sales_fn(html, pid)
-                tot_lvg_area = coerced.get("tot_lvg_area")
-                coerced_sales = []
+                if parse_sales_fn is not None:
+                    raw_sales = parse_sales_fn(html, pid)
+                    tot_lvg_area = coerced.get("tot_lvg_area")
+                    coerced_sales = []
 
-                for raw_sale in raw_sales:
-                    coerced_sale = coerce_sale(
-                        raw_sale, pid, county_fips, source_name, tot_lvg_area
-                    )
-                    if coerced_sale:
-                        coerced_sales.append(coerced_sale)
+                    for raw_sale in raw_sales:
+                        coerced_sale = coerce_sale(
+                            raw_sale, pid, county_fips, source_name, tot_lvg_area
+                        )
+                        if coerced_sale:
+                            coerced_sales.append(coerced_sale)
 
-                inserted = await write_sales(session, coerced_sales, dry_run)
-                counters["sales_inserted"] += inserted
+                    inserted = await write_sales(session, coerced_sales, dry_run)
+                    counters["sales_inserted"] += inserted
 
-                if raw_sales:
-                    logger.debug(
-                        "Parcel %s — %d sales found, %d inserted",
-                        pid, len(raw_sales), inserted,
-                    )
+                    if raw_sales:
+                        logger.debug(
+                            "Parcel %s — %d sales found, %d inserted",
+                            pid, len(raw_sales), inserted,
+                        )
 
                 # ── Rate limiting ──────────────────────────────────────── #
                 if i < len(parcel_ids):
@@ -612,13 +613,13 @@ def main(
     source_name: str,
     fetch_page_fn: Callable,
     parse_building_fn: Callable,
-    parse_sales_fn: Callable,
     headers: dict,
     target_dor_ucs: list[str],
     default_delay: float,
     default_delay_max: float,
     rest_every: Optional[int],
     rest_seconds: float,
+    parse_sales_fn: Optional[Callable] = None,    
 ) -> None:
     """
     Shared CLI entry point for all county CAMA scrapers.

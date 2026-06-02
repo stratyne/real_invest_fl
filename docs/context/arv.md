@@ -301,11 +301,10 @@ tot_lvg_area corrected: 67,543 rows restored from raw_cama_json —
 NAL re-ingest had overwritten CAMA heated area (2,439 sqft) with NAL
 effective area (2,803 sqft). CAMA wins for tot_lvg_area going forward
 (_NAL_UPSERT_NEVER_OVERWRITE).
-instrument_type: NULL for all parcelcard-sourced rows. Will be
-backfilled by santa_rosa_sales.py (item 124) from srcpa.gov/parcel.
-qualification_code populated: Q / U / C / V.
-parcel_sale_history: 152,909 records, source srcpa_parcelcard.
-57,987 parcels truncated at 2 sales — full history pending item 124.
+instrument_type: 99.1% populated (santa_rosa_sales.py, item 124 complete).
+qualification_code populated: Q 157,771 / U 152,155 / C 11,908 / V 1,268.
+parcel_sale_history: 323,102 records. Sources: srcpa_parcel (286,969) +
+srcpa_parcelcard (36,133). Full history complete. Truncation resolved.
 
 ## Escambia Data State (as of 2026-05-29)
 
