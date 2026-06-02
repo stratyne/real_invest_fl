@@ -117,7 +117,6 @@ Retained as reference for backfill completeness verification.
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
 | 116 | PENDING | bed_bath_source enforcement in parser layer — confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing — ready to implement when prioritized. | — |
 | 125 | PENDING | ARV calculator re-run — both counties with --force. Blocked on: Escambia CAMA completion + item 124 completion. Run once after both complete. | Blocked on Escambia CAMA completion only. Item 124 no longer a blocker. |
-| 126 | PENDING | years_since_last_sale — derive from parcel_sale_history at query time for enriched parcels. NAL sale_yr1 NULL for 82%+ SFR in both counties. Design required. | — |
 
 ## Deferred Items
 
@@ -225,5 +224,6 @@ Retained as reference for backfill completeness verification.
 | 122 | absentee_owner population — both counties. SR: 30,063 absentee / 10,490 owner-occupied / 79,947 NULL (OWN_ADDR1 absent or name overflow — see _is_absentee() fix). ESC: 81,628 absentee / 88,921 owner-occupied / 12 NULL. _is_absentee() rewritten: OWN_ADDR1/OWN_ADDR2 fallthrough, digit-leading guard. | 2026-05-29 |
 | 123 | NAL upsert column protection — _NAL_UPSERT_NEVER_OVERWRITE frozenset live. 27 columns protected (26 original + tot_lvg_area). 67,543 SR tot_lvg_area values restored from raw_cama_json after NAL re-ingest overwrote CAMA heated area with NAL effective area. | 2026-05-29 |
 | 124 | Santa Rosa full sale history scraper — parcelview.srcpa.gov. 323,102 records, 68,009 parcels. instrument_type 99.1% populated. | 2026-06-02 |
+| 126 | years_since_last_sale — backfilled from parcel_sale_history MAX(sale_date) via compute_years_since_last_sale.py. 139,308 rows updated (ESC: 86,818 / SR: 74,589). years_since_last_sale added to _NAL_UPSERT_NEVER_OVERWRITE. NAL mapper retained as ingest-time seed for unenriched parcels. | 2026-06-02 |
 | 127 | Remove parse_sales() from santa_rosa.py parcelcard scraper. parse_sales_fn made Optional in base.py. | 2026-06-02 |
 | 128 | Property detail view — full parcel_sale_history surfaced in get_property(). SaleHistoryEntry schema, sale_history field on PropertyDetail, ordered sale_date DESC. Verified in Swagger (6-row, 40-row, empty cases). | 2026-06-02 |

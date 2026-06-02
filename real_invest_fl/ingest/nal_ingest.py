@@ -318,6 +318,8 @@ _NAL_UPSERT_NEVER_OVERWRITE: frozenset[str] = frozenset({
     "arv_spread",
     "arv_source",
     "jv_per_sqft",
+    # compute_years_since_last_sale.py — PSH-derived value takes precedence
+    "years_since_last_sale",    
     # Listing matcher
     "list_price",
     # Phase 2 scoring — not yet built, protect slots

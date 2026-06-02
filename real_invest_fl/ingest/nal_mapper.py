@@ -203,7 +203,11 @@ def _years_since_last_sale(
 ) -> int | None:
     """
     ASMNT_YR - SALE_YR1
-    Higher values indicate long-term ownership — seller motivation signal.
+    Ingest-time seed only — used for parcels with no parcel_sale_history rows.
+    For enriched parcels, compute_years_since_last_sale.py overwrites this
+    with MAX(sale_date) from parcel_sale_history using AGE(NOW(), sale_date).
+    After that script runs, years_since_last_sale is protected from NAL
+    re-ingest by _NAL_UPSERT_NEVER_OVERWRITE.
     Returns None if either input is missing.
     """
     if asmnt_yr is None or sale_yr1 is None:
