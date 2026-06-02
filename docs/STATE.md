@@ -118,7 +118,6 @@ Retained as reference for backfill completeness verification.
 | 116 | PENDING | bed_bath_source enforcement in parser layer — confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing — ready to implement when prioritized. | — |
 | 125 | PENDING | ARV calculator re-run — both counties with --force. Blocked on: Escambia CAMA completion + item 124 completion. Run once after both complete. | Blocked on Escambia CAMA completion only. Item 124 no longer a blocker. |
 | 126 | PENDING | years_since_last_sale — derive from parcel_sale_history at query time for enriched parcels. NAL sale_yr1 NULL for 82%+ SFR in both counties. Design required. | — |
-| 128 | PENDING | Property detail view — surface full parcel_sale_history in get_property() route. Currently shows NAL-embedded sale fields only (max 2 sales, no instrument_type). | — |
 
 ## Deferred Items
 
@@ -227,3 +226,4 @@ Retained as reference for backfill completeness verification.
 | 123 | NAL upsert column protection — _NAL_UPSERT_NEVER_OVERWRITE frozenset live. 27 columns protected (26 original + tot_lvg_area). 67,543 SR tot_lvg_area values restored from raw_cama_json after NAL re-ingest overwrote CAMA heated area with NAL effective area. | 2026-05-29 |
 | 124 | Santa Rosa full sale history scraper — parcelview.srcpa.gov. 323,102 records, 68,009 parcels. instrument_type 99.1% populated. | 2026-06-02 |
 | 127 | Remove parse_sales() from santa_rosa.py parcelcard scraper. parse_sales_fn made Optional in base.py. | 2026-06-02 |
+| 128 | Property detail view — full parcel_sale_history surfaced in get_property(). SaleHistoryEntry schema, sale_history field on PropertyDetail, ordered sale_date DESC. Verified in Swagger (6-row, 40-row, empty cases). | 2026-06-02 |

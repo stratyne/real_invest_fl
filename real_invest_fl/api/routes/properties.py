@@ -34,6 +34,7 @@ from collections import defaultdict
 from real_invest_fl.api.deps import county_access, get_current_user, get_db
 from real_invest_fl.db.models.filter_profile import FilterProfile
 from real_invest_fl.db.models.listing_event import ListingEvent
+from real_invest_fl.db.models.parcel_sale_history import ParcelSaleHistory
 from real_invest_fl.db.models.property import Property
 from real_invest_fl.db.models.user import User
 from real_invest_fl.db.models.user_profile_prefs import UserProfilePrefs
@@ -209,6 +210,21 @@ class ListingEventSummary(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class SaleHistoryEntry(BaseModel):
+    sale_date: Any | None
+    sale_price: int | None
+    instrument_type: str | None
+    qualification_code: str | None
+    sale_type: str | None
+    multi_parcel: bool
+    grantor: str
+    grantee: str
+    price_per_sqft: float | None
+    source: str
+
+    model_config = {"from_attributes": True}
+
+
 class PropertySearchResult(BaseModel):
     county_fips: str
     parcel_id: str
@@ -306,6 +322,7 @@ class PropertyDetail(BaseModel):
     nal_ingested_at: datetime | None
     cama_enriched_at: datetime | None
     latest_listing: ListingEventSummary | None
+    sale_history: list[SaleHistoryEntry]
 
     model_config = {"from_attributes": True}
 
@@ -1065,6 +1082,31 @@ async def get_property(
     ev: ListingEvent | None = ev_result.scalar_one_or_none()
     latest = ListingEventSummary.model_validate(ev) if ev else None
 
+    psh_result = await db.execute(
+        select(ParcelSaleHistory)
+        .where(
+            ParcelSaleHistory.county_fips == county_fips,
+            ParcelSaleHistory.parcel_id == parcel_id,
+        )
+        .order_by(ParcelSaleHistory.sale_date.desc())
+    )
+    sale_history_rows = psh_result.scalars().all()
+    sale_history = [
+        SaleHistoryEntry(
+            sale_date=row.sale_date,
+            sale_price=row.sale_price,
+            instrument_type=row.instrument_type,
+            qualification_code=row.qualification_code,
+            sale_type=row.sale_type,
+            multi_parcel=row.multi_parcel,
+            grantor=row.grantor,
+            grantee=row.grantee,
+            price_per_sqft=float(row.price_per_sqft) if row.price_per_sqft is not None else None,
+            source=row.source,
+        )
+        for row in sale_history_rows
+    ]
+
     return PropertyDetail(
         county_fips=prop.county_fips,
         parcel_id=prop.parcel_id,
@@ -1123,4 +1165,5 @@ async def get_property(
         nal_ingested_at=prop.nal_ingested_at,
         cama_enriched_at=prop.cama_enriched_at,
         latest_listing=latest,
+        sale_history=sale_history,
     )

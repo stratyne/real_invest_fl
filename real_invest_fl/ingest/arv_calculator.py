@@ -27,7 +27,7 @@ Columns written per parcel:
                     median(sale_prc1 / tot_lvg_area) * subject.tot_lvg_area
                     for NAL spatial fallback path;
                     jv for raw jv floor path
-    arv_source    — 'COMP' or 'JV_FALLBACK'
+    arv_source    — 'COMP', 'NAL_COMP', or 'JV_FALLBACK'
     arv_spread    — arv_estimate - list_price - (tot_lvg_area * rehab_cost)
                     NULL when list_price is NULL or tot_lvg_area is NULL
 
