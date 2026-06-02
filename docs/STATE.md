@@ -129,7 +129,6 @@ Retained as reference for backfill completeness verification.
 | 44 | Skip-trace live integration | BatchData API wrapper, credit/billing model, DNC compliance. Schema scaffold in place (v0.17). Unblock after Phase 4 outreach flow is live. |
 | 91 | Map pins — colored markers by signal tier | Post-deployment polish. Custom Marker children required. |
 | 92 | Map pins — auto-fit bounds to pageResults on page change | Low demo value with single-region data. Revisit when multi-region. |
-| 103 | Local dev environment setup not documented — vite proxy port, docker-compose ports mapping, npm run dev workflow | Will cause repeated confusion when returning to local dev after a gap |
 | 105 | Search architecture — Option A migration (full SQL ORDER BY / LIMIT / OFFSET) | Prerequisite: deal scoring engine (item 19) must be stable enough to express score as a SQL expression. Option C is the correct interim state. |
 | 106 | SalesComp ORM model and sales_comps table exist but have no ingest pipeline and no relationship on Property. Placeholder for FL DOR SDF (item 25). No action until item 25 is prioritized. |
 | 115 | arv_calculator.py Phase 3 scaling — per-parcel spatial query ~120ms/parcel acceptable for 2-county scope. County-wide bulk join attempted and failed at Santa Rosa scale. Revisit at Phase 3 with temp table pre-aggregation or partitioned bulk join. | Phase 3 |
@@ -207,6 +206,7 @@ Retained as reference for backfill completeness verification.
 | 100 | Santa Rosa CAMA scraper — migrate parcelview → parcelcard endpoint; host_database_url fix for host-side scripts | 2026-05-24 |
 | 101 | Escambia CAMA scraper — instrument_type/qualification_code column mapping fix; full reset and restart via unattended wrapper | 2026-05-26 |
 | 102 | Pagination stability fix — added ORDER BY county_fips, parcel_id to both search route DB fetches; added parcel_id tiebreaker to _build_page sort key. Resolves Escambia pagination returning identical records on every page change. | 2026-05-25 |
+| 103 | Local dev environment documented — local_dev.md. API, frontend, deployment, reboot SOP, DB verify pattern. | 2026-06-02 |
 | 104 | Search architecture — Option C hybrid. Lightweight scoring fetch (5 columns) replaces full ORM load for all filtered rows. Full ORM hydration scoped to page slice only (25 rows). Both search routes unified through _execute_search. _build_page eliminated. County-scoped page hydration preserves item 78 fix. | 2026-05-25 |
 | 107 | Column sort — sortable headers in ResultsPage, backend _sort_key for 9 fields, scored.sort() call, max_results cap moved post-sort | 2026-05-26 |
 | 108 | Documentation overhaul — arv.md rewritten (qualification systems reconciled, C code resolved, bed_bath_source hierarchy defined); DECISIONS.md updated (ingest user-agnostic rule, ARV systems, search architecture debt, SalesComp/PropertyValueHistory notes); scrapers.md updated | 2026-05-26 |
