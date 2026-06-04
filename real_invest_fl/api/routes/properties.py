@@ -507,8 +507,11 @@ def _apply_filters(
 
     # absentee_owner
     ao = f.get("absentee_owner", {})
-    if ao.get("required") is not None:
-        stmt = stmt.where(Property.absentee_owner.is_(ao["required"]))
+    ao_required = ao.get("required")
+    if ao_required is True:
+        stmt = stmt.where(Property.absentee_owner == True)
+    elif ao_required is False:
+        stmt = stmt.where(Property.absentee_owner == False)
 
     # homestead_status - homestead = exmpt_01 > 0
     hs = f.get("homestead_status", {})
@@ -681,7 +684,7 @@ async def _execute_search(
     scoring_rows: list[_ScoringRow] = [
         _ScoringRow(*row) for row in scoring_result.all()
     ]
-
+    
     if not scoring_rows:
         return PaginatedPropertySearchResult(
             total=0, page=page, page_size=page_size, total_pages=1, results=[]
