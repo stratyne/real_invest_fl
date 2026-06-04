@@ -83,7 +83,7 @@ const EMPTY_FILTER: FilterState = {
   mkt_ar_codes: [],
   nbrhd_codes: [],
   census_block_groups: [],
-  dor_use_code: [],
+  dor_use_code: [1],
   num_buildings_max: null,
   num_residential_units_max: null,
   just_value_min: null,
