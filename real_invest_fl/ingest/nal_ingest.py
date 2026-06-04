@@ -47,28 +47,40 @@ logger = logging.getLogger(__name__)
 # Helpers                                                              #
 # ------------------------------------------------------------------ #
 
-def _compute_absentee(row: dict) -> bool | None:
+# County-specific mailing address field layout.
+# OWN_ADDR1 and OWN_ADDR2 usage varies by county PA system.
+# This must be verified against raw NAL data for each new county.
+_MAILING_ADDR_FIELD: dict[str, str] = {
+    "12033": "OWN_ADDR1",  # Escambia
+    "12113": "OWN_ADDR2",  # Santa Rosa
+}
+
+
+def _compute_absentee(row: dict, county_fips: str) -> bool | None:
     """
-    Derive absentee owner flag for a NAL row.
+    Derive absentee owner flag for DB storage.
 
-    Returns True if owner mailing address differs from physical address.
-    Returns False if addresses are present and match.
-    Returns None if neither OWN_ADDR1 nor OWN_ADDR2 yields a usable
-    street address - cannot determine residency, store as NULL.
+    Returns True if absentee, False if owner-occupied, None if
+    undeterminable. None stored as NULL -- Option A per DECISIONS.md.
 
-    Option A per DECISIONS.md: NULL when undeterminable.
+    mailing_addr_field is county-specific -- see _MAILING_ADDR_FIELD.
     """
-    own_addr1 = (row.get("OWN_ADDR1") or "").strip()
-    own_addr2 = (row.get("OWN_ADDR2") or "").strip()
+    mailing_addr_field = _MAILING_ADDR_FIELD.get(county_fips, "OWN_ADDR2")
 
-    # If neither field starts with a digit, no usable street address exists
-    if not (
-        (own_addr1 and own_addr1[0].isdigit())
-        or (own_addr2 and own_addr2[0].isdigit())
-    ):
+    own_state = (row.get("OWN_STATE") or "").strip().upper()
+    if own_state and own_state != "FL":
+        return True
+
+    mailing_addr = (row.get(mailing_addr_field) or "").strip().upper()
+    phy_addr     = (row.get("PHY_ADDR1") or "").strip().upper()
+
+    if not mailing_addr or not mailing_addr[0].isdigit():
         return None
 
-    return _compute_absentee_raw(row)
+    if not phy_addr:
+        return None
+
+    return mailing_addr != phy_addr
 
 # ------------------------------------------------------------------ #
 # Host-side DB engine                                                  #
@@ -215,7 +227,7 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
                     mapped = map_nal_row(
                         row=row,
                         county_fips=county_fips,
-                        absentee_owner=_compute_absentee(row),
+                        absentee_owner=_compute_absentee(row, county_fips),
                     )
 
                     if not mapped.get("parcel_id"):

@@ -179,6 +179,10 @@ Each county module must supply:
 3. Determine rate limit empirically (start conservative)
 4. Create real_invest_fl/ingest/cama/{county_snake}.py
 5. Add to COUNTY_REGISTRY in nal_ingest.py and gis_ingest.py
+6. Run enrich_missing_spatial_attrs.py --county-fips {fips} --dor-uc 001
+7. Verify _MAILING_ADDR_FIELD layout from raw NAL data, add to nal_ingest.py and compute_absentee_owner.py
+8. Run compute_absentee_owner.py --county-fips {fips}
+9. Run arv_calculator.py --county-fips {fips}
 
 ## CAMA Properties Columns
 

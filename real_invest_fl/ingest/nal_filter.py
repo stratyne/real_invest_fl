@@ -206,49 +206,38 @@ def _str(val) -> str | None:
     return s if s else None
 
 
-def _is_absentee(row: dict) -> bool:
+def _is_absentee(row: dict, mailing_addr_field: str = "OWN_ADDR2") -> bool:
     """
-    Derive absentee owner flag.
-    True when owner mailing address differs from physical address.
+    Derive absentee owner flag from NAL row data.
 
-    Address resolution order:
-        1. OWN_ADDR1 - used if it starts with a digit (street address).
-        2. OWN_ADDR2 - used if OWN_ADDR1 is a name overflow (does not
-           start with a digit). Covers cases where a long owner name
-           spills OWN_ADDR1 and the actual street address is in OWN_ADDR2.
-        3. Neither usable - return False (undeterminable).
+    Florida PA counties do not use a consistent field layout for owner
+    mailing addresses. The mailing street address may be in OWN_ADDR1
+    or OWN_ADDR2 depending on the county PA system.
 
-    PO Box addresses do not start with a digit and are treated as
-    undeterminable - a PO Box cannot be compared against a situs address.
+    mailing_addr_field must be supplied per county:
+        Escambia (12033):   OWN_ADDR1
+        Santa Rosa (12113): OWN_ADDR2
 
-    Note: _compute_absentee() in nal_ingest.py wraps this function and
-    returns None (rather than False) when no usable mailing address is
-    found, preserving the NULL-when-undeterminable contract for DB storage.
-    This function's False return for the undeterminable case is only
-    reached from evaluate_nal() in the filter evaluator path.
+    Returns True if absentee, False if owner-occupied or undeterminable.
+    Caller _compute_absentee() in nal_ingest.py converts undeterminable
+    to None for DB storage.
+
+    Logic:
+        1. Out-of-state owner -- absentee unconditionally.
+        2. Mailing street starts with a digit -- compare against PHY_ADDR1.
+        3. No usable mailing street -- return False (undeterminable).
     """
-    own_zip  = _str(row.get("OWN_ZIPCD")) or ""
-    phy_addr = _str(row.get("PHY_ADDR1")) or ""
-    phy_zip  = _str(row.get("PHY_ZIPCD")) or ""
+    own_state = (row.get("OWN_STATE") or "").strip().upper()
+    if own_state and own_state != "FL":
+        return True
+
+    phy_addr     = (row.get("PHY_ADDR1") or "").strip().upper()
+    mailing_addr = (row.get(mailing_addr_field) or "").strip().upper()
+
+    if not mailing_addr or not mailing_addr[0].isdigit():
+        return False
 
     if not phy_addr:
         return False
 
-    # Resolve mailing street address - prefer OWN_ADDR1, fall through
-    # to OWN_ADDR2 when OWN_ADDR1 is a name overflow.
-    own_addr1 = _str(row.get("OWN_ADDR1")) or ""
-    own_addr2 = _str(row.get("OWN_ADDR2")) or ""
-
-    if own_addr1 and own_addr1[0].isdigit():
-        mailing_addr = own_addr1
-    elif own_addr2 and own_addr2[0].isdigit():
-        mailing_addr = own_addr2
-        own_zip = _str(row.get("OWN_ZIPCD")) or ""
-    else:
-        # No usable mailing street address found
-        return False
-
-    return (
-        mailing_addr.upper() != phy_addr.upper()
-        or own_zip != phy_zip
-    )
+    return mailing_addr != phy_addr

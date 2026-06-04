@@ -74,6 +74,7 @@ Santa Rosa: complete. 10,701 city + 30,838 ZIP via ST_Within, 208 city via neare
 Escambia: pending (item 133, blocked on item 16).
 All others: pending (item 133, blocked on items 14/15).
 enrich_missing_spatial_attrs.py --dor-uc 001 is a required step in the county onboarding pipeline, to be run after NAL and GIS ingest complete.
+compute_absentee_owner.py --county-fips is a required step in the county onboarding pipeline. OWN_ADDR1 vs OWN_ADDR2 mailing field layout must be verified against raw NAL data for each new county before running. Add county to _MAILING_ADDR_FIELD in both nal_ingest.py and compute_absentee_owner.py.
 
 **parcel_sale_history (verified 2026-06-02):**
 
@@ -123,7 +124,6 @@ Retained as reference for backfill completeness verification.
 | 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper - eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
 | 116 | PENDING | bed_bath_source enforcement in parser layer - confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing - ready to implement when prioritized. | - |
 | 125 | PENDING | ARV calculator re-run - both counties with --force. Blocked on: Escambia CAMA completion + item 124 completion. Run once after both complete. | Blocked on Escambia CAMA completion only. Item 124 no longer a blocker. |
-| 132 | PENDING | Rewrite _is_absentee() from scratch against verified phy_city/phy_zipcd. Re-run absentee_owner for both counties. | Ready to start -- paste current _is_absentee() |
 | 133 | PENDING | Run enrich_missing_spatial_attrs.py as part of county onboarding pipeline for all counties. Escambia blocked on item 16 (CAMA completion). All other counties blocked on items 14/15 (statewide NAL/GIS ingest). | Per county, after NAL + GIS ingest complete. |
 
 ## Deferred Items
@@ -238,3 +238,4 @@ Retained as reference for backfill completeness verification.
 | 129 | Parcel ID search (AppNav global search bar), property detail page (/property/:countyFips/:parcelId), drawer sale history table (full parcel_sale_history), ArvBadge NAL_COMP case, ARV source fallback row, GET /properties/lookup endpoint. | 2026-06-02 |
 | 130 | TIGER reference pipeline -- load_tiger_reference.py. TIGER ZCTA (33,791 rows) and FL places (958 rows) loaded into tiger_zcta and tiger_places PostGIS tables. | 2026-06-04 |
 | 131 | enrich_missing_spatial_attrs.py -- ST_Within spatial join + nearest-neighbor fallback for unincorporated parcels. Santa Rosa SFR: 10,701 city + 30,838 ZIP via ST_Within, 208 city via ST_Distance nearest-neighbor. Zero null-city SFR parcels with geometry remaining. | 2026-06-04 |
+| 132 | absentee_owner recomputed for both counties using corrected logic. OWN_ADDR1 is mailing street for Escambia, OWN_ADDR2 for Santa Rosa -- county-specific field layout confirmed from raw data. _MAILING_ADDR_FIELD registry added to nal_ingest.py and compute_absentee_owner.py. SR: 15,760 absentee / 51,856 owner-occupied / 696 NULL. ESC: 34,121 absentee / 70,570 owner-occupied / 1,681 NULL. | 2026-06-04 |

@@ -152,3 +152,17 @@ Known gaps:
     Backfill via santa_rosa_sales.py - item 124.
     Both counties: sale_yr1 NULL for 82%+ SFR - use parcel_sale_history
     for years_since_last_sale computation, not NAL embedded fields.
+	
+## Annual Maintenance Dependencies
+
+| Task | Trigger | Script |
+|---|---|---|
+| Absentee owner recompute | After each annual NAL re-ingest | compute_absentee_owner.py --county-fips {fips} |
+| ARV re-run | After quarterly sale history update | arv_calculator.py --county-fips {fips} --force |
+| Santa Rosa sale history | Quarterly | santa_rosa_sales.py |
+| Escambia sale history | Quarterly (part of CAMA re-run) | run_escambia_cama.py --force |
+| NAL refresh | Annual (FL DOR release) | nal_ingest.py --county-fips {fips} |
+| CAMA refresh | Annual or as needed | Per-county scraper |
+| enrich_missing_spatial_attrs | Once per county at onboarding -- not recurring | enrich_missing_spatial_attrs.py --county-fips {fips} --dor-uc 001 |
+| compute_absentee_owner | Once per county at onboarding, then after every NAL re-ingest | compute_absentee_owner.py --county-fips {fips} |
+
