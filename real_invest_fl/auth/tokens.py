@@ -1,8 +1,8 @@
 """JWT creation and decode utilities.
 
-sub claim: users.id as string — the single canonical subject identity.
+sub claim: users.id as string - the single canonical subject identity.
 email claim: included as a display hint only. Never used for lookups.
-type claim: 'access' — reserved for future refresh token differentiation.
+type claim: 'access' - reserved for future refresh token differentiation.
 """
 from __future__ import annotations
 from datetime import datetime, timedelta, timezone
@@ -22,7 +22,7 @@ def create_access_token(user_id: int, email: str) -> str:
     """Encode a signed JWT access token.
 
     Args:
-        user_id: The users.id — stored as str in sub.
+        user_id: The users.id - stored as str in sub.
         email:   Stored as display hint only.
 
     Returns:

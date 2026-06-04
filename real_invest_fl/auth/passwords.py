@@ -1,7 +1,7 @@
 """Password hashing utilities using bcrypt directly.
 
 passlib 1.7.x is incompatible with bcrypt 4.0+ (raises ValueError on
-any hash/verify call). We call bcrypt directly instead — it has a
+any hash/verify call). We call bcrypt directly instead - it has a
 stable, minimal API that does not require a wrapper library.
 
 bcrypt silently truncates passwords longer than 72 bytes, which is

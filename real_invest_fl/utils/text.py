@@ -46,7 +46,7 @@ def first_non_empty(*values: str) -> str:
 # ---------------------------------------------------------------------------
 
 # USPS street suffix abbreviation map.
-# NAL phy_addr1 stores abbreviated forms — normalize incoming addresses to match.
+# NAL phy_addr1 stores abbreviated forms - normalize incoming addresses to match.
 # Keys are full forms as they appear in scraped/source data.
 # Values are the canonical NAL abbreviations.
 _STREET_SUFFIX_MAP: dict[str, str] = {
@@ -70,7 +70,7 @@ _STREET_SUFFIX_MAP: dict[str, str] = {
 # Directional words that may appear as the first token of the street name
 # (after the house number) in scraped source data but are absent in NAL.
 # NAL stores abbreviated directionals (N, S, E, W) as part of the street
-# name itself — it does NOT use full words as a leading prefix.
+# name itself - it does NOT use full words as a leading prefix.
 # We contract full-word directionals to their abbreviations so that
 # "NORTH PALAFOX ST" becomes "N PALAFOX ST" to match NAL storage.
 # Single-letter abbreviations are passed through unchanged.
@@ -85,7 +85,7 @@ _DIRECTIONAL_MAP: dict[str, str] = {
     "SOUTHWEST": "SW",
 }
 
-# Unit designator patterns — stripped before digit-letter injection.
+# Unit designator patterns - stripped before digit-letter injection.
 # Two branches: keyword-led designators (word boundary safe) and bare #.
 _UNIT_RE = re.compile(
     r"(?:"
@@ -96,10 +96,10 @@ _UNIT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Digit-to-letter injection — inject space between a digit and a letter
+# Digit-to-letter injection - inject space between a digit and a letter
 # EXCEPT when the letter sequence is an ordinal suffix (ST, ND, RD, TH).
 # Applied after upper-casing so the negative lookahead is case-safe.
-# Digit-to-letter injection — Inject space between digit and letter EXCEPT 
+# Digit-to-letter injection - Inject space between digit and letter EXCEPT 
 # before ordinal suffixes (ST, ND, RD, TH). The lookahead sits between the digit and the letter
 # digit and the letter so it can inspect the full two-character ordinal token.
 _DIGIT_LETTER_RE = re.compile(r"(\d)(?!(?:ST|ND|RD|TH)\b)([A-Z])")
@@ -124,17 +124,17 @@ def normalize_street_address(addr: str, strip_unit: bool = True) -> str:
         1. Collapse whitespace and upper-case
         2. Strip unit designators                     (APT 4, UNIT B, #12, SUITE 2A)
         3. Inject space between digit run and letter  (2301W -> 2301 W)
-           — ordinal suffixes (74TH, 48TH) are excluded from injection
-           — when strip_unit=False, injection is applied only to the
+           - ordinal suffixes (74TH, 48TH) are excluded from injection
+           - when strip_unit=False, injection is applied only to the
              pre-unit portion to avoid corrupting alphanumeric unit values
         4. Collapse whitespace again after injection
         5. Expand street suffix to NAL abbreviation   (ROAD -> RD)
         6. Contract full directional word to abbrev   (NORTH -> N)
-           — only when it is the first token of the street name
+           - only when it is the first token of the street name
 
     Does NOT zero-pad or otherwise modify the house number.
     Does NOT alter single-letter directional abbreviations (N, S, E, W).
-    Thread-safe — no mutable state.
+    Thread-safe - no mutable state.
 
     Args:
         addr: Raw address string from any scraping source.
@@ -161,24 +161,24 @@ def normalize_street_address(addr: str, strip_unit: bool = True) -> str:
     if not addr:
         return ""
 
-    # Step 1 — collapse whitespace and upper-case
+    # Step 1 - collapse whitespace and upper-case
     addr = re.sub(r"\s+", " ", addr.upper().strip())
 
-    # Step 2 — strip unit designators (before digit-letter injection
+    # Step 2 - strip unit designators (before digit-letter injection
     # so that 'SUITE 2A' is consumed whole, not split into '2' and 'A')
     if strip_unit:
         addr = _UNIT_RE.sub("", addr)
         addr = re.sub(r"\s+", " ", addr.strip())
 
-    # Step 3 — inject space between digit and letter, excluding ordinals.
+    # Step 3 - inject space between digit and letter, excluding ordinals.
     # When strip_unit=False the unit designator is still present.
     # Confine injection to the pre-unit portion only so that alphanumeric
     # unit values like '#4A' or 'APT 2B' are not corrupted.
     if strip_unit:
-        # Default path — no unit present, safe to inject across full string
+        # Default path - no unit present, safe to inject across full string
         addr = _DIGIT_LETTER_RE.sub(r"\1 \2", addr)
     else:
-        # Preserve path — find the unit designator boundary and inject
+        # Preserve path - find the unit designator boundary and inject
         # only on the portion before it.
         unit_boundary = _UNIT_RE.search(addr)
         if unit_boundary:
@@ -187,17 +187,17 @@ def normalize_street_address(addr: str, strip_unit: bool = True) -> str:
             pre_unit = _DIGIT_LETTER_RE.sub(r"\1 \2", pre_unit)
             addr = pre_unit + unit_part
         else:
-            # No unit designator found — safe to inject across full string
+            # No unit designator found - safe to inject across full string
             addr = _DIGIT_LETTER_RE.sub(r"\1 \2", addr)
 
-    # Step 4 — collapse whitespace again after injection
+    # Step 4 - collapse whitespace again after injection
     addr = re.sub(r"\s+", " ", addr.strip())
 
-    # Step 5 — expand street suffixes to NAL abbreviations
+    # Step 5 - expand street suffixes to NAL abbreviations
     addr = _SUFFIX_RE.sub(lambda m: _STREET_SUFFIX_MAP[m.group(1)], addr)
     addr = re.sub(r"\s+", " ", addr.strip())
 
-    # Step 6 — contract full directional word that is the first token
+    # Step 6 - contract full directional word that is the first token
     # of the street name (immediately after the house number).
     for full, abbr in _DIRECTIONAL_MAP.items():
         not_another_dir = "(?!" + "|".join(

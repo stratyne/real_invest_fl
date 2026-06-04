@@ -1,4 +1,4 @@
-"""v0.18 — user_profile_prefs
+"""v0.18 - user_profile_prefs
 
 Adds the user_profile_prefs table, which tracks per-user activity
 and preference state for each filter_profile they have run or

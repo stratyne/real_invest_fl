@@ -9,14 +9,14 @@ Technology: Remix/React SSR application, server-rendered HTML.
             No JavaScript rendering required.
 
 Parse target: <div id="salesContainer"> table.
-Each <td> carries data-cell="<column name>" — used as the column
+Each <td> carries data-cell="<column name>" - used as the column
 selector. No positional index logic.
 
 Soft-block detection: id="salesContainer" absent from response body.
 Not-found detection: salesContainer present, zero <td> data cells.
 
 Target: all Santa Rosa SFR parcels (dor_uc = '001'), 68,312 parcels.
-Does NOT gate on cama_enriched_at — sale history completeness is
+Does NOT gate on cama_enriched_at - sale history completeness is
 independent of building enrichment.
 
 Resumability: automatic via sales_history_enriched_at IS NULL filter.
@@ -31,7 +31,7 @@ never updated.
 source tag: srcpa_parcel (distinct from srcpa_parcelcard).
 data_source_status source tag: santa_rosa_sales.
 
-This scraper does NOT use base.run() — it has its own lightweight loop.
+This scraper does NOT use base.run() - it has its own lightweight loop.
 It does NOT call write_cama() or coerce_building().
 It DOES use coerce_sale() from base.py unchanged.
 """
@@ -102,12 +102,12 @@ async def fetch_page(
     try:
         response = await client.get(url, timeout=30.0)
     except (httpx.TimeoutException, httpx.RequestError) as exc:
-        logger.warning("Parcel %s — request error: %s", parcel_id, exc)
+        logger.warning("Parcel %s - request error: %s", parcel_id, exc)
         return None
 
     if response.status_code != 200:
         logger.warning(
-            "Parcel %s — HTTP %d", parcel_id, response.status_code
+            "Parcel %s - HTTP %d", parcel_id, response.status_code
         )
         return None
 
@@ -117,16 +117,16 @@ async def fetch_page(
     # "empty":true and no salesContainer. Distinct from soft-block.
     if '"empty":true' in html and 'id="salesContainer"' not in html:
         logger.warning(
-            "Parcel %s — not found on parcelview.srcpa.gov. Skipping.",
+            "Parcel %s - not found on parcelview.srcpa.gov. Skipping.",
             parcel_id,
         )
         return base.NOT_FOUND
 
     # Soft-block: salesContainer absent but page is not a not-found
-    # response — server is blocking or site structure has changed.
+    # response - server is blocking or site structure has changed.
     if 'id="salesContainer"' not in html:
         logger.error(
-            "Parcel %s — salesContainer absent. Soft-block or site "
+            "Parcel %s - salesContainer absent. Soft-block or site "
             "structural change detected. Stopping run.",
             parcel_id,
         )
@@ -141,7 +141,7 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
     """
     Parse all sale rows from the salesContainer table.
 
-    Column values are read by data-cell attribute name — no positional
+    Column values are read by data-cell attribute name - no positional
     index logic. Book / Page is parsed and discarded (no schema column).
 
     Returns an empty list for parcels with no sale history rows.
@@ -154,18 +154,18 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
     container = soup.find("div", id="salesContainer")
 
     if container is None:
-        logger.warning("Parcel %s — salesContainer not found in parse", parcel_id)
+        logger.warning("Parcel %s - salesContainer not found in parse", parcel_id)
         return []
 
     # Data rows are <tr role="row"> that contain <td> elements.
-    # The header row contains <th> elements — skip it by checking for <td>.
+    # The header row contains <th> elements - skip it by checking for <td>.
     data_rows = [
         tr for tr in container.find_all("tr", role="row")
         if tr.find("td") is not None
     ]
 
     if not data_rows:
-        logger.debug("Parcel %s — no sale history rows", parcel_id)
+        logger.debug("Parcel %s - no sale history rows", parcel_id)
         return []
 
     sales: list[dict] = []
@@ -176,7 +176,7 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
         cell_map: dict[str, str] = {}
         for td in cells:
             col_name = td["data-cell"]
-            # Book / Page: no schema column — discard entirely.
+            # Book / Page: no schema column - discard entirely.
             # Extracting text produces doubled content due to nested
             # <span> and <a> with identical text.
             if col_name == "Book / Page":
@@ -185,7 +185,7 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
 
         if not cell_map.get("Sale Date"):
             logger.debug(
-                "Parcel %s — row missing Sale Date, skipping", parcel_id
+                "Parcel %s - row missing Sale Date, skipping", parcel_id
             )
             continue
 
@@ -200,7 +200,7 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
             "grantee":            cell_map.get("Grantee", ""),
         })
 
-    logger.debug("Parcel %s — parsed %d sale rows", parcel_id, len(sales))
+    logger.debug("Parcel %s - parsed %d sale rows", parcel_id, len(sales))
     return sales
 
 
@@ -219,10 +219,10 @@ async def fetch_all_parcels(
     derivation.
 
     When force=False (default), skips parcels where
-    sales_history_enriched_at IS NOT NULL — these have already been
+    sales_history_enriched_at IS NOT NULL - these have already been
     fully processed by a previous run.
 
-    When force=True, fetches all parcels regardless of stamp — used
+    When force=True, fetches all parcels regardless of stamp - used
     for quarterly refresh runs to pick up new sales on all parcels.
     """
     uc_placeholders = ", ".join(f"'{uc}'" for uc in TARGET_DOR_UCS)
@@ -258,14 +258,14 @@ async def write_sales_upsert(
     """
     Upsert sale history rows into parcel_sale_history.
 
-    ON CONFLICT (uq_psh_county_parcel_sale) — key is
+    ON CONFLICT (uq_psh_county_parcel_sale) - key is
     (county_fips, parcel_id, sale_date, grantor, grantee).
 
     Mutable fields updated on conflict when any differ:
         instrument_type, qualification_code, sale_type, sale_price,
         multi_parcel, price_per_sqft, source, scraped_at.
 
-    scraped_at is always updated on conflict — it reflects the most
+    scraped_at is always updated on conflict - it reflects the most
     recent scrape that touched the row, regardless of whether data
     changed.
 
@@ -332,7 +332,7 @@ async def stamp_parcel(
     Stamp sales_history_enriched_at on the properties row for this
     parcel after successful processing.
 
-    Written regardless of whether the parcel had any sale rows —
+    Written regardless of whether the parcel had any sale rows -
     a parcel with no sales is still fully processed and should be
     excluded from future runs unless --force is passed.
     """
@@ -367,7 +367,7 @@ async def update_data_source_status(
     county_fips = '12113'.
     status: 'SUCCESS' | 'PARTIAL' | 'FAILED'.
 
-    Called once at the end of every run — soft-block stops report
+    Called once at the end of every run - soft-block stops report
     PARTIAL, clean completions report SUCCESS.
     """
     if dry_run:
@@ -474,7 +474,7 @@ async def run(
             logger.info(
                 "Found %d Santa Rosa SFR parcels to process%s",
                 len(parcels),
-                " (force mode — all parcels)" if force else "",
+                " (force mode - all parcels)" if force else "",
             )
 
     if not parcels:
@@ -504,7 +504,7 @@ async def run(
             now = datetime.now(timezone.utc)
 
             for i, (pid, tot_lvg_area) in enumerate(parcels, start=1):
-                logger.info("Processing %d/%d — parcel %s", i, total, pid)
+                logger.info("Processing %d/%d - parcel %s", i, total, pid)
 
                 html = await fetch_page(client, pid)
 
@@ -513,7 +513,7 @@ async def run(
                     soft_blocked = True
                     logger.error(
                         "Soft block on parcel %s at position %d/%d. "
-                        "Re-run without --resume-from — automatic "
+                        "Re-run without --resume-from - automatic "
                         "resumption via sales_history_enriched_at.",
                         pid, i, total,
                     )
@@ -521,7 +521,7 @@ async def run(
 
                 if html is base.NOT_FOUND or html == base.NOT_FOUND:
                     counters["not_found"] += 1
-                    logger.warning("Parcel %s — not found, stamping and continuing.", pid)
+                    logger.warning("Parcel %s - not found, stamping and continuing.", pid)
                     await stamp_parcel(session, pid, now, dry_run)
                     if i < total:
                         await asyncio.sleep(random.uniform(delay, delay_max))
@@ -539,7 +539,7 @@ async def run(
 
                 if not raw_sales:
                     counters["not_found"] += 1
-                    logger.debug("Parcel %s — no sale rows found", pid)
+                    logger.debug("Parcel %s - no sale rows found", pid)
                 else:
                     coerced_sales: list[dict] = []
                     for raw_sale in raw_sales:
@@ -559,14 +559,14 @@ async def run(
                     counters["sales_affected"] += affected
 
                     logger.debug(
-                        "Parcel %s — %d raw / %d coerced / %d upserted",
+                        "Parcel %s - %d raw / %d coerced / %d upserted",
                         pid,
                         len(raw_sales),
                         len(coerced_sales),
                         affected,
                     )
 
-                # Stamp this parcel as fully processed — skipped on next
+                # Stamp this parcel as fully processed - skipped on next
                 # run unless --force is passed.
                 await stamp_parcel(session, pid, now, dry_run)
 
@@ -576,7 +576,7 @@ async def run(
 
                     if REST_EVERY and i % REST_EVERY == 0:
                         logger.info(
-                            "Reached parcel %d — resting %.1fs.",
+                            "Reached parcel %d - resting %.1fs.",
                             i, REST_SECONDS,
                         )
                         await asyncio.sleep(REST_SECONDS)

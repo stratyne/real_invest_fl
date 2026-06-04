@@ -1,5 +1,5 @@
 """
-DataSourceStatus — live status board for all ingest sources.
+DataSourceStatus - live status board for all ingest sources.
 
 One row per (source, county_fips) pair. Updated in-place on every
 ingest run via upsert in source_status.update_source_status().
@@ -32,7 +32,7 @@ class DataSourceStatus(Base):
     source: Mapped[str] = mapped_column(
         String(100), primary_key=True, nullable=False
     )
-    # Matches listing_events.source exactly — e.g. 'escambia_clerk_taxsale'
+    # Matches listing_events.source exactly - e.g. 'escambia_clerk_taxsale'
 
     county_fips: Mapped[str] = mapped_column(
         String(5), primary_key=True, nullable=False
@@ -44,7 +44,7 @@ class DataSourceStatus(Base):
     display_name: Mapped[str] = mapped_column(
         String(200), nullable=False
     )
-    # Human-readable label for UI — supplied by caller, e.g.
+    # Human-readable label for UI - supplied by caller, e.g.
     # "Escambia Clerk – Tax Deed"
 
     # ------------------------------------------------------------------ #

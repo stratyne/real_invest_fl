@@ -10,7 +10,7 @@ For parcels with parcel_sale_history rows, computes:
 For parcels with no parcel_sale_history rows, the existing
 NAL-derived value (asmnt_yr - sale_yr1) is left unchanged.
 
-Safe to re-run — idempotent. Always uses current date so values
+Safe to re-run - idempotent. Always uses current date so values
 stay accurate on each run.
 
 Usage:

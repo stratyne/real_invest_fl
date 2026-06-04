@@ -1,5 +1,5 @@
 """
-UserCountyAccess — join table granting a user access to a county.
+UserCountyAccess - join table granting a user access to a county.
 
 Superusers bypass this table entirely (enforced in the dependency layer).
 Regular users must have a row here for each county they may access.

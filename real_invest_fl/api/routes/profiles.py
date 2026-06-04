@@ -1,13 +1,13 @@
 """
-Filter profile routes — profile management for multi-county investment filters.
+Filter profile routes - profile management for multi-county investment filters.
 
-GET    /{county_fips}/profiles                        — list system + own profiles
+GET    /{county_fips}/profiles                        - list system + own profiles
        visible to the user for the given county.
-POST   /{county_fips}/profiles                        — create a new user-owned profile.
-POST   /{county_fips}/profiles/{profile_id}/clone     — clone any visible profile.
-PATCH  /{county_fips}/profiles/{profile_id}           — update a user-owned profile.
-DELETE /{county_fips}/profiles/{profile_id}           — delete a user-owned profile.
-PATCH  /{county_fips}/profiles/{profile_id}/favorite  — toggle is_favorite on
+POST   /{county_fips}/profiles                        - create a new user-owned profile.
+POST   /{county_fips}/profiles/{profile_id}/clone     - clone any visible profile.
+PATCH  /{county_fips}/profiles/{profile_id}           - update a user-owned profile.
+DELETE /{county_fips}/profiles/{profile_id}           - delete a user-owned profile.
+PATCH  /{county_fips}/profiles/{profile_id}/favorite  - toggle is_favorite on
        user_profile_prefs for (current_user.id, profile_id).
 """
 from __future__ import annotations
@@ -121,7 +121,7 @@ async def _get_accessible_fips(
 ) -> set[str]:
     """Return the set of county FIPS the current user can access.
 
-    Superusers get an empty set — callers must check is_superuser first
+    Superusers get an empty set - callers must check is_superuser first
     and bypass this result entirely.
     """
     from real_invest_fl.db.models.user_county_access import UserCountyAccess

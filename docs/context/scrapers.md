@@ -1,4 +1,4 @@
-# Project Penstock — context/scrapers.md
+# Project Penstock - context/scrapers.md
 # Paste this alongside AGENTS.md when working on scrapers, listing sources,
 # address normalization, or parcel matching.
 # Last updated: 2026-05-04
@@ -27,28 +27,28 @@ real_invest_fl/ingest/staging_parsers/
   zillow_parser.py             -- COMPLETE
 
 real_invest_fl/utils/
-  parcel_id.py                 -- normalize_parcel_id() — do NOT call in scrapers
+  parcel_id.py                 -- normalize_parcel_id() - do NOT call in scrapers
   robots.py
   text.py                      -- normalize_street_address()
   
 - Parser-layer bed/bath confidence hierarchy: defined in DECISIONS.md and
-  context/arv.md. Not yet implemented in code — implementation is part of
+  context/arv.md. Not yet implemented in code - implementation is part of
   item 17 scope.
 
 ## Scraper Source Tiers
 
 | Tier | Sources | Approach | Status |
 |---|---|---|---|
-| 1 — Government direct | Escambia Clerk tax deed, lis pendens, foreclosures | Live scrape or file-drop | Tax deed complete; others file-drop |
-| 2 — Public aggregators | Auction.com, HUD Home Store | Playwright + rate limiting | Auction.com COMPLETE |
-| 3 — Free listing sources | Craigslist FSBO | requests + BS4 | DEFERRED indefinitely |
-| 4 — Commercial platforms | Zillow (RapidAPI live), Redfin, Realtor.com | Paid API / vendor proxy | DEFERRED |
+| 1 - Government direct | Escambia Clerk tax deed, lis pendens, foreclosures | Live scrape or file-drop | Tax deed complete; others file-drop |
+| 2 - Public aggregators | Auction.com, HUD Home Store | Playwright + rate limiting | Auction.com COMPLETE |
+| 3 - Free listing sources | Craigslist FSBO | requests + BS4 | DEFERRED indefinitely |
+| 4 - Commercial platforms | Zillow (RapidAPI live), Redfin, Realtor.com | Paid API / vendor proxy | DEFERRED |
 
 **Zillow note:** Two distinct integrations exist and must not be confused:
-- Zillow file-drop staging parser (`zillow_parser.py`) — COMPLETE. Accepts
+- Zillow file-drop staging parser (`zillow_parser.py`) - COMPLETE. Accepts
   manually exported Zillow CSVs dropped into `data/staging/zillow/`. In
   production use. This is NOT a live scraper.
-- Zillow RapidAPI live integration — DEFERRED. Tier 4. Approved POC approach
+- Zillow RapidAPI live integration - DEFERRED. Tier 4. Approved POC approach
   when live integration is prioritized. Requires paid RapidAPI wrapper,
   rate-limited. Not yet started.
 
@@ -59,16 +59,16 @@ normalize_street_address() in real_invest_fl/utils/text.py
 - Transformations (in order):
   1. Upper-case
   2. Unit strip (runs BEFORE digit-letter injection)
-  3. Digit-letter injection — regex: (\d)(?!(?:ST|ND|RD|TH)\b)([A-Z])
+  3. Digit-letter injection - regex: (\d)(?!(?:ST|ND|RD|TH)\b)([A-Z])
      Excludes ordinal suffixes: 74TH, 48TH pass through unchanged
   4. Suffix abbreviation
   5. Directional contraction
 - strip_unit=False: preserves unit designators for Level 2 lookup
 - strip_unit=True (default): strips units, used for dedup key
-- `#` unit designator has no leading \b anchor — `#` is not a word char
+- `#` unit designator has no leading \b anchor - `#` is not a word char
 - listing_matcher._normalize_address() delegates to normalize_street_address()
 
-Address matching — three-level fallback in listing_matcher.py:
+Address matching - three-level fallback in listing_matcher.py:
   Level 1: exact match
   Level 2: unit suffix normalization (#4A → 4A)
   Level 3: street prefix match with MULTI-UNIT review flag
@@ -85,7 +85,7 @@ Library: rapidfuzz v3.14.5
 ## Parcel ID Rules in Scrapers
 
 - Strip non-alphanumeric, uppercase, NO zero-padding
-- Do NOT call normalize_parcel_id() — it zero-pads to 18 and will break the join
+- Do NOT call normalize_parcel_id() - it zero-pads to 18 and will break the join
 - Use raw strip+uppercase only
 
 ## Windows / Python Platform Note
@@ -98,26 +98,26 @@ names from Escambia Clerk pages.
 ## bed_bath_source Confidence Hierarchy
 
 Never overwrite an existing beds/baths value with a lower-confidence source.
-Logic lives in the parser layer — not in listing_matcher, not in base_scraper.
+Logic lives in the parser layer - not in listing_matcher, not in base_scraper.
 
 Confidence order (highest to lowest):
 
-1. cama        — scraped directly from county PA parcelcard. Most authoritative
-                 by definition — same source the PA uses for assessed value.
-2. county_clerk — direct county government source. Reserved for future county
+1. cama        - scraped directly from county PA parcelcard. Most authoritative
+                 by definition - same source the PA uses for assessed value.
+2. county_clerk - direct county government source. Reserved for future county
                   sources that surface building characteristics (e.g. permit
                   records, county assessor supplemental data). Current county
                   clerk sources (lis pendens, foreclosure, tax deed) are legal
-                  event records and do NOT carry beds/baths — they will never
+                  event records and do NOT carry beds/baths - they will never
                   write to bed_bath_source.
-3. zillow_staging — Zillow file-drop CSV. MLS-sourced, agent-entered, good
+3. zillow_staging - Zillow file-drop CSV. MLS-sourced, agent-entered, good
                     quality but secondhand.
-3. auction_com  — GraphQL API. Asset manager-entered. Equal confidence to
+3. auction_com  - GraphQL API. Asset manager-entered. Equal confidence to
                   zillow_staging. total_bedrooms=0 / total_bathrooms=0 are
-                  missing-data sentinels and must be treated as None — never
+                  missing-data sentinels and must be treated as None - never
                   written to the DB.
-4. manual       — Human-entered. Lowest confidence. No current write workflow
-                  — reserved for future use.
+4. manual       - Human-entered. Lowest confidence. No current write workflow
+                  - reserved for future use.
 
 If incoming source confidence equals existing source, overwrite
 (fresher data from same source is acceptable).
@@ -130,7 +130,7 @@ equivalent to zillow_staging/auction_com until verified otherwise.
 ## Per-Scraper Notes
 
 ### auction_com.py
-- _normalize_street() is intentionally minimal — digit-letter injection and
+- _normalize_street() is intentionally minimal - digit-letter injection and
   upper/collapse only. Do not expand it.
 - GraphQL API: POST https://graph.auction.com/graphql
 - No auth required. x-cid header must be fresh UUID per request.
@@ -148,7 +148,7 @@ equivalent to zillow_staging/auction_com until verified otherwise.
 - Date list: https://public.escambiaclerk.com/taxsale/taxsaledates.asp
 - Per-date: https://public.escambiaclerk.com/taxsale/taxsaleMobile.asp?saledate=M/D/YYYY
 - saledate format: M/D/YYYY, no zero-padding, no percent-encoding.
-  Build URL as string — NEVER use requests params dict for this.
+  Build URL as string - NEVER use requests params dict for this.
 - Table selector: soup.find("table", attrs={"bgcolor": "#0054A6"})
 - Columns: Clerk File #, Account, Certificate Number, Reference (parcel ID),
   Sales Date, Status, Opening Bid Amount, Legal Description,
@@ -165,7 +165,7 @@ Run commands:
 
 ### zillow_parser.py (staging)
 - Accepts mixed listing types. listing_type and signal_type derived from
-  specs line suffix — not hardcoded.
+  specs line suffix - not hardcoded.
 - _extract_street() uses strip_unit=False
 - _normalize_address() uses strip_unit=True (dedup key only)
 - _extract_zip() anchors to end of string: \b(\d{5})\s*$
@@ -193,7 +193,7 @@ Shared upsert helper: real_invest_fl/ingest/source_status.py
   URL: https://lienhub.com/county/escambia/certsale/main
        ?unique_id=41C54840429511F1A2F69948A6B8334F
        &use_this=print_advertised_list
-- LienExpress: redirects to LienHub — not a standalone source.
+- LienExpress: redirects to LienHub - not a standalone source.
 
 ### Government Auction
 - Escambia County Surplus Auctions: zero listings at investigation date. Monitor.
@@ -205,14 +205,14 @@ Shared upsert helper: real_invest_fl/ingest/source_status.py
 - Tier 1 sources (RealForeclose, RealTaxDeed, LandmarkWeb): robots.txt blocks
   live scraping. File-drop parsers are the approved pattern.
 - public.escambiaclerk.com: generic crawlers permitted; ClaudeBot blocked by name.
-  Behind Cloudflare — Playwright required.
+  Behind Cloudflare - Playwright required.
   
-### Tier 3 — Free Listing Sources
+### Tier 3 - Free Listing Sources
 - Craigslist FSBO: technically feasible, messy data, deferred indefinitely.
 - Facebook Marketplace: login required, TOS risk, manual-only. No scraper path.
 
-### Tier 4 — Commercial Platforms
+### Tier 4 - Commercial Platforms
 - Zillow: good data quality, anti-scraping posture is the obstacle.
   RapidAPI wrapper is the approved POC approach. Deferred to Tier 4.
-- Redfin, Realtor.com, Homes.com: deferred — no investigation conducted yet.
+- Redfin, Realtor.com, Homes.com: deferred - no investigation conducted yet.
 

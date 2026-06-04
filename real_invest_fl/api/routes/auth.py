@@ -1,9 +1,9 @@
 """
-Auth routes — login and current-user profile only.
+Auth routes - login and current-user profile only.
 
-POST /auth/token  — OAuth2 password flow login, returns access token.
-GET  /auth/me     — Returns the current authenticated user's profile.
-PATCH /auth/me    — Updates full_name, calendar_link, and/or password.
+POST /auth/token  - OAuth2 password flow login, returns access token.
+GET  /auth/me     - Returns the current authenticated user's profile.
+PATCH /auth/me    - Updates full_name, calendar_link, and/or password.
 
 Deferred to Phase 4: password reset, email verification,
 user self-registration, user management endpoints.
@@ -52,7 +52,7 @@ class UserProfile(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    """Partial update — only supplied fields are written.
+    """Partial update - only supplied fields are written.
 
     All fields are optional. An empty payload is a no-op.
     email, is_active, and is_superuser are not user-editable via this route.
@@ -137,7 +137,7 @@ async def update_me(
     Only full_name, calendar_link, and password may be changed here.
     Supplying a field as null explicitly clears it (full_name, calendar_link).
     Omitting a field entirely leaves it unchanged.
-    An empty payload body is a no-op — current profile is returned unchanged.
+    An empty payload body is a no-op - current profile is returned unchanged.
     """
     updated_fields: list[str] = []
 

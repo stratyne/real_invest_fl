@@ -19,17 +19,17 @@ const PAGE_SIZE = 25
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function fmt(n: number | null | undefined, prefix = ''): string {
-  if (n == null) return '—'
+  if (n == null) return '-'
   return prefix + n.toLocaleString()
 }
 
 function fmtFloat(n: number | null | undefined, decimals = 2): string {
-  if (n == null) return '—'
+  if (n == null) return '-'
   return n.toFixed(decimals)
 }
 
 function ArvBadge({ source }: { source: string | null }) {
-  if (!source) return <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+  if (!source) return <span style={{ color: 'var(--color-text-muted)' }}>-</span>
   if (source === 'COMP') return <span className="badge badge--comp">COMP</span>
   if (source === 'NAL_COMP') return <span className="badge badge--nal-comp">NAL COMP</span>
   return <span className="badge badge--jv-fallback">JV Fallback</span>
@@ -50,7 +50,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={drawerStyles.row}>
       <span style={drawerStyles.rowLabel}>{label}</span>
-      <span style={drawerStyles.rowValue}>{value ?? '—'}</span>
+      <span style={drawerStyles.rowValue}>{value ?? '-'}</span>
     </div>
   )
 }
@@ -95,19 +95,19 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
               </button>
             )}
             <p style={drawerStyles.address}>
-              {detail.phy_addr1 ?? '—'}<br />
-              {detail.phy_city ?? '—'}, FL {detail.phy_zipcd ?? '—'}
+              {detail.phy_addr1 ?? '-'}<br />
+              {detail.phy_city ?? '-'}, FL {detail.phy_zipcd ?? '-'}
             </p>
             <DrawerSection title="Ownership">
               <Row label="Owner" value={detail.own_name} />
               <Row label="Mailing" value={[detail.own_addr1, detail.own_city, detail.own_state, detail.own_zipcd].filter(Boolean).join(', ')} />
-              <Row label="Absentee" value={detail.absentee_owner == null ? '—' : detail.absentee_owner ? 'Yes' : 'No'} />
+              <Row label="Absentee" value={detail.absentee_owner == null ? '-' : detail.absentee_owner ? 'Yes' : 'No'} />
             </DrawerSection>
             <DrawerSection title="Valuation">
               <Row label="Just Value" value={fmt(detail.jv, '$')} />
               <Row label="Assessed Value" value={fmt(detail.av_nsd, '$')} />
               <Row label="Land Value" value={fmt(detail.lnd_val, '$')} />
-              <Row label="JV / sqft" value={detail.jv_per_sqft != null ? `$${fmtFloat(detail.jv_per_sqft)}` : '—'} />
+              <Row label="JV / sqft" value={detail.jv_per_sqft != null ? `$${fmtFloat(detail.jv_per_sqft)}` : '-'} />
               <Row label="ARV Estimate" value={
                 detail.arv_estimate != null
                   ? <>
@@ -116,17 +116,17 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
                         <> <ArvBadge source={detail.latest_listing?.arv_source ?? detail.arv_source ?? null} /></>
                       }
                     </>
-                  : '—'
+                  : '-'
               } />
               <Row label="ARV Spread" value={fmt(detail.arv_spread, '$')} />
-              <Row label="ARV Source" value={detail.latest_listing?.arv_source ?? detail.arv_source ?? '—'} />
+              <Row label="ARV Source" value={detail.latest_listing?.arv_source ?? detail.arv_source ?? '-'} />
             </DrawerSection>
             <DrawerSection title="Property">
               <Row label="DOR Use Code" value={detail.dor_uc} />
               <Row label="Year Built" value={detail.act_yr_blt} />
               <Row label="Eff. Year Built" value={detail.eff_yr_blt} />
-              <Row label="Living Area" value={detail.tot_lvg_area != null ? `${detail.tot_lvg_area.toLocaleString()} sqft` : '—'} />
-              <Row label="Lot Size" value={detail.lnd_sqfoot != null ? `${detail.lnd_sqfoot.toLocaleString()} sqft` : '—'} />
+              <Row label="Living Area" value={detail.tot_lvg_area != null ? `${detail.tot_lvg_area.toLocaleString()} sqft` : '-'} />
+              <Row label="Lot Size" value={detail.lnd_sqfoot != null ? `${detail.lnd_sqfoot.toLocaleString()} sqft` : '-'} />
               <Row label="Bedrooms" value={detail.bedrooms} />
               <Row label="Bathrooms" value={detail.bathrooms} />
               <Row label="Buildings" value={detail.no_buldng} />
@@ -144,26 +144,26 @@ function PropertyDrawer({ countyFips, parcelId, onClose, onLocate }: DrawerProps
             </DrawerSection>
             <DrawerSection title="Sale History">
               {detail.sale_history.length === 0 ? (
-                <Row label="No sale history" value="—" />
+                <Row label="No sale history" value="-" />
               ) : (
                 detail.sale_history.map((s, i) => (
                   <div key={i} style={{ paddingBottom: '8px', borderBottom: i < detail.sale_history.length - 1 ? '1px solid var(--color-border)' : 'none', marginBottom: i < detail.sale_history.length - 1 ? '8px' : 0 }}>
-                    <Row label="Date" value={s.sale_date ?? '—'} />
-                    <Row label="Price" value={s.sale_price != null ? fmt(s.sale_price, '$') : '—'} />
-                    <Row label="Instrument" value={s.instrument_type ?? '—'} />
-                    <Row label="Qual Code" value={s.qualification_code ?? '—'} />
-                    <Row label="Type" value={s.sale_type ?? '—'} />
-                    <Row label="Grantor" value={s.grantor || '—'} />
-                    <Row label="Grantee" value={s.grantee || '—'} />
-                    <Row label="$/sqft" value={s.price_per_sqft != null ? `$${s.price_per_sqft.toFixed(2)}` : '—'} />
+                    <Row label="Date" value={s.sale_date ?? '-'} />
+                    <Row label="Price" value={s.sale_price != null ? fmt(s.sale_price, '$') : '-'} />
+                    <Row label="Instrument" value={s.instrument_type ?? '-'} />
+                    <Row label="Qual Code" value={s.qualification_code ?? '-'} />
+                    <Row label="Type" value={s.sale_type ?? '-'} />
+                    <Row label="Grantor" value={s.grantor || '-'} />
+                    <Row label="Grantee" value={s.grantee || '-'} />
+                    <Row label="$/sqft" value={s.price_per_sqft != null ? `$${s.price_per_sqft.toFixed(2)}` : '-'} />
                     <Row label="Source" value={s.source} />
                   </div>
                 ))
               )}
             </DrawerSection>
             <DrawerSection title="Ratios">
-              <Row label="Imp / Land Ratio" value={detail.improvement_to_land_ratio != null ? fmtFloat(detail.improvement_to_land_ratio, 4) : '—'} />
-              <Row label="SOH Compression" value={detail.soh_compression_ratio != null ? fmtFloat(detail.soh_compression_ratio, 4) : '—'} />
+              <Row label="Imp / Land Ratio" value={detail.improvement_to_land_ratio != null ? fmtFloat(detail.improvement_to_land_ratio, 4) : '-'} />
+              <Row label="SOH Compression" value={detail.soh_compression_ratio != null ? fmtFloat(detail.soh_compression_ratio, 4) : '-'} />
             </DrawerSection>
             {detail.latest_listing && (
               <DrawerSection title="Latest Signal">
@@ -290,7 +290,7 @@ export default function ResultsPage() {
   const [sortField, setSortField] = useState<string>(filterState?.sort_by_field ?? 'deal_score')
   const [sortDirection, setSortDirection] = useState<'ASC' | 'DESC'>((filterState?.sort_by_direction as 'ASC' | 'DESC') ?? 'DESC')
 
-  // We need the user for the nav bar — fetch it
+  // We need the user for the nav bar - fetch it
   const [userName, setUserName] = useState<string | undefined>(undefined)
   useEffect(() => {
     import('../api/auth').then(({ getMe }) => {
@@ -406,7 +406,7 @@ export default function ResultsPage() {
           {!loading && (
             <span style={pageStyles.resultCount}>
               {total.toLocaleString()} result{total !== 1 ? 's' : ''}
-              {totalPages > 1 && ` — page ${page} of ${totalPages}`}
+              {totalPages > 1 && ` - page ${page} of ${totalPages}`}
             </span>
           )}
         </div>
@@ -482,25 +482,25 @@ export default function ResultsPage() {
                         onClick={() => setSelectedResult(r)}
                       >
                         <td style={pageStyles.td}>
-                          <div style={pageStyles.addrLine1}>{r.phy_addr1 ?? '—'}</div>
-                          <div style={pageStyles.addrLine2}>{r.phy_city ?? '—'}, {r.phy_zipcd ?? '—'}</div>
+                          <div style={pageStyles.addrLine1}>{r.phy_addr1 ?? '-'}</div>
+                          <div style={pageStyles.addrLine2}>{r.phy_city ?? '-'}, {r.phy_zipcd ?? '-'}</div>
                         </td>
                         <td style={pageStyles.td}>{fmt(r.jv, '$')}</td>
                         <td style={pageStyles.td}>{fmt(r.arv_estimate, '$')}</td>
                         <td style={pageStyles.td}><ArvBadge source={r.arv_source} /></td>
                         <td style={pageStyles.td}>{fmt(r.arv_spread, '$')}</td>
-                        <td style={pageStyles.td}>{r.tot_lvg_area != null ? r.tot_lvg_area.toLocaleString() : '—'}</td>
-                        <td style={pageStyles.td}>{r.act_yr_blt ?? '—'}</td>
+                        <td style={pageStyles.td}>{r.tot_lvg_area != null ? r.tot_lvg_area.toLocaleString() : '-'}</td>
+                        <td style={pageStyles.td}>{r.act_yr_blt ?? '-'}</td>
                         <td style={pageStyles.td}>
                           {r.deal_score != null
                             ? <span style={{ color: 'var(--color-success)', fontWeight: 600 }}>{(r.deal_score * 100).toFixed(1)}</span>
-                            : <span style={{ color: 'var(--color-text-muted)' }}>—</span>
+                            : <span style={{ color: 'var(--color-text-muted)' }}>-</span>
                           }
                         </td>
                         <td style={pageStyles.td}>
                           {r.latest_listing
                             ? <span style={pageStyles.tierBadge}>T{r.latest_listing.signal_tier} {r.latest_listing.signal_type ?? ''}</span>
-                            : '—'
+                            : '-'
                           }
                         </td>
                       </tr>

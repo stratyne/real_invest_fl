@@ -7,7 +7,7 @@ Fetches active listings from the Auction.com GraphQL API
 (https://graph.auction.com/graphql) and inserts matched records
 into listing_events.
 
-Transport: requests (plain HTTP POST — no browser required).
+Transport: requests (plain HTTP POST - no browser required).
 The GraphQL endpoint is a standard JSON API. Playwright was used
 only during the one-time investigation to intercept the network
 traffic and identify the query structure. The production scraper
@@ -22,9 +22,9 @@ Filtering:
 
 Parcel matching:
     Three-level address fallback identical to zillow_parser.py:
-        Level 1 — Exact normalized street + ZIP
-        Level 2 — Unit suffix normalization (#4A -> 4A, APT -> bare unit)
-        Level 3 — Street prefix LIKE match, single result or REVIEW flag
+        Level 1 - Exact normalized street + ZIP
+        Level 2 - Unit suffix normalization (#4A -> 4A, APT -> bare unit)
+        Level 3 - Street prefix LIKE match, single result or REVIEW flag
 
 Deduplication:
     listing_id (Auction.com's internal ID) stored in mls_number.
@@ -88,14 +88,14 @@ SIGNAL_TIER   = 2
 SOURCE_NAME   = "auction_com"
 API_URL       = "https://graph.auction.com/graphql"
 
-# Escambia County FL centroid — used by the API for radius search
+# Escambia County FL centroid - used by the API for radius search
 GEO_LOCATION  = "30.6389408,-87.3413599"
 
 # Polite delay between retries (seconds)
 REQUEST_TIMEOUT  = 30
 REQUEST_DELAY    = 3.0
 
-# Sentinel value — Auction.com uses 0 for missing bed/bath/year data
+# Sentinel value - Auction.com uses 0 for missing bed/bath/year data
 MISSING_SENTINEL = 0
 
 # ── GraphQL query (verbatim from browser network capture 2026-04-28) ───────
@@ -310,7 +310,7 @@ def _is_escambia_fl(listing: dict) -> bool:
     """
     Return True only if the listing is in Escambia County, Florida.
     The 50-mile radius search returns Alabama Escambia County and
-    adjacent FL/AL counties — filter them all out here.
+    adjacent FL/AL counties - filter them all out here.
     """
     sp = listing.get("seller_property") or {}
     state  = (sp.get("country_primary_subdivision") or "").upper().strip()
@@ -369,9 +369,9 @@ def _parse_auction_date(listing: dict) -> Optional[date]:
     except Exception:
         return None
 
-# Street suffix abbreviation map — expand NAL-style abbreviations
+# Street suffix abbreviation map - expand NAL-style abbreviations
 # OR contract verbose source strings to match NAL
-# NAL uses abbreviated forms — we normalize incoming to match NAL
+# NAL uses abbreviated forms - we normalize incoming to match NAL
 _STREET_SUFFIX_MAP = {
     "ROAD":      "RD",
     "STREET":    "ST",
@@ -489,7 +489,7 @@ def run(engine=None) -> dict:
     )
 
     if not fl_listings:
-        logger.info("No Escambia FL listings found — nothing to insert.")
+        logger.info("No Escambia FL listings found - nothing to insert.")
         return stats
 
     today = date.today()
@@ -501,13 +501,13 @@ def run(engine=None) -> dict:
         for listing in fl_listings:
             listing_id = str(listing.get("listing_id", "")).strip()
             if not listing_id:
-                logger.warning("Listing with no listing_id — skipping")
+                logger.warning("Listing with no listing_id - skipping")
                 stats["unmatched"] += 1
                 continue
 
             # ── Dedup ─────────────────────────────────────────────── #
             if listing_id in existing_ids:
-                logger.debug("Duplicate listing_id=%s — skipping", listing_id)
+                logger.debug("Duplicate listing_id=%s - skipping", listing_id)
                 stats["skipped"] += 1
                 continue
 
@@ -522,7 +522,7 @@ def run(engine=None) -> dict:
                 continue
 
             # ── Parcel match ──────────────────────────────────────── #
-            # street_norm is the output of _normalize_street() — partially
+            # street_norm is the output of _normalize_street() - partially
             # normalized (uppercased, digit-letter injected, whitespace
             # collapsed). lookup_parcel_by_address() accepts raw or partially
             # normalized input and applies canonical normalization internally.

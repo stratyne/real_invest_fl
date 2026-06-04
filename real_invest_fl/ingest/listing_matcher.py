@@ -1,12 +1,12 @@
 """
 real_invest_fl/ingest/listing_matcher.py
 ------------------------------------------
-Phase 2 — Listing feed → parcel lookup → listing_events.
+Phase 2 - Listing feed → parcel lookup → listing_events.
 
 Orchestrates the full daily scrape-and-match cycle:
 
     1. Load all enabled scrapers from real_invest_fl.scrapers.*
-    2. Run each scraper — collect ScrapedListing records
+    2. Run each scraper - collect ScrapedListing records
     3. Normalize each scraped address via address_to_parcel()
     4. Look up the matched parcel in the properties table
     5. Compute derived financial fields (price_per_sqft, arv_spread)
@@ -17,7 +17,7 @@ Address matching strategy:
     Primary:   Exact match on normalized phy_addr1 + phy_zipcd
     Secondary: Fuzzy match using rapidfuzz on street address
                (threshold configurable via FUZZY_MATCH_THRESHOLD)
-    Fallback:  Log as unmatched — never insert a record with no parcel_id
+    Fallback:  Log as unmatched - never insert a record with no parcel_id
 
 Usage:
     python -m real_invest_fl.ingest.listing_matcher [--dry-run] [--source NAME]
@@ -57,7 +57,7 @@ from real_invest_fl.db.models.listing_event import ListingEvent  # noqa: E402
 from real_invest_fl.scrapers.base_scraper import BaseScraper, ScrapedListing  # noqa: E402
 # NOTE: normalize_parcel_id zero-pads to 18 chars. properties.parcel_id is
 # stored as 16 chars. Do NOT call normalize_parcel_id() in any address-based
-# matching path — it will produce a padded ID that fails the join.
+# matching path - it will produce a padded ID that fails the join.
 from real_invest_fl.utils.parcel_id import normalize_parcel_id   # noqa: E402
 from real_invest_fl.utils.text import (                          # noqa: E402
     clean_text,
@@ -76,10 +76,10 @@ logging.basicConfig(
 logger = logging.getLogger("listing_matcher")
 
 # ── constants ─────────────────────────────────────────────────────────────────
-COUNTY_FIPS           = "12033"   # Escambia County — Phase 1 POC
+COUNTY_FIPS           = "12033"   # Escambia County - Phase 1 POC
 FUZZY_MATCH_THRESHOLD = 88        # rapidfuzz score threshold (0-100)
 
-# Unit designator pattern — used inside lookup_parcel_by_address() to
+# Unit designator pattern - used inside lookup_parcel_by_address() to
 # extract the unit value from the unit-preserved normalized form for
 # Level 2 matching. Mirrors the _UNIT_RE in text.py but returns groups.
 _UNIT_EXTRACT_RE = re.compile(
@@ -94,7 +94,7 @@ def _discover_scrapers() -> list[type[BaseScraper]]:
     """
     Auto-discover all BaseScraper subclasses in real_invest_fl.scrapers.
     Returns a list of scraper classes (not instances).
-    Skips any module that fails to import — logs the error and continues.
+    Skips any module that fails to import - logs the error and continues.
     """
     import real_invest_fl.scrapers as scrapers_pkg
 
@@ -142,7 +142,7 @@ def lookup_parcel_by_address(
     the properties table.
 
     Accepts the street-only portion in raw or partially normalized form.
-    This function owns canonical normalization for matching — callers must
+    This function owns canonical normalization for matching - callers must
     extract the street portion before the first comma but are not required
     to pre-normalize beyond that.
 
@@ -150,13 +150,13 @@ def lookup_parcel_by_address(
     No SQL branch queries across county boundaries.
 
     Three-level fallback:
-        Level 1 — Exact match on normalize_street_address(street_input,
+        Level 1 - Exact match on normalize_street_address(street_input,
                    strip_unit=True) + county_fips, with zip then without.
-        Level 2 — Unit suffix normalization. If a unit designator is
+        Level 2 - Unit suffix normalization. If a unit designator is
                    detected in the strip_unit=False form, the base and
                    unit value are recombined as "{base} {unit}" and
                    matched with county_fips, with zip then without.
-        Level 3 — LIKE prefix on house number + first two street tokens
+        Level 3 - LIKE prefix on house number + first two street tokens
                    extracted from the unit-stripped form. Single result
                    returned; multiple results emit [REVIEW] MULTI-UNIT
                    to stdout and return None.
@@ -209,7 +209,7 @@ def lookup_parcel_by_address(
 
     zip_code = (zip_code or "").strip() or None
 
-    # ── Level 1 — Exact match ─────────────────────────────────────────── #
+    # ── Level 1 - Exact match ─────────────────────────────────────────── #
     if zip_code:
         row = _fetch_one(
             "UPPER(TRIM(phy_addr1)) = :street AND phy_zipcd = :zip",
@@ -225,7 +225,7 @@ def lookup_parcel_by_address(
     if row:
         return _row_to_dict(row)
 
-    # ── Level 2 — Unit suffix normalization ───────────────────────────── #
+    # ── Level 2 - Unit suffix normalization ───────────────────────────── #
     unit_match = _UNIT_EXTRACT_RE.search(street_with_unit)
     if unit_match:
         base = unit_match.group(1).strip()
@@ -251,7 +251,7 @@ def lookup_parcel_by_address(
     else:
         base_street = street_norm
 
-    # ── Level 3 — Street prefix LIKE ─────────────────────────────────── #
+    # ── Level 3 - Street prefix LIKE ─────────────────────────────────── #
     prefix_match = re.match(r"^(\d+\s+\S+(?:\s+\S+)?)", base_street)
     if prefix_match:
         prefix = prefix_match.group(1).strip()
@@ -273,9 +273,9 @@ def lookup_parcel_by_address(
         if len(rows) > 1:
             parcel_ids = ", ".join(r.parcel_id for r in rows)
             print(
-                f"[REVIEW] MULTI-UNIT — {len(rows)} parcels match "
-                f"'{prefix}%' ZIP={zip_code} — "
-                f"parcels: {parcel_ids} — manual selection required"
+                f"[REVIEW] MULTI-UNIT - {len(rows)} parcels match "
+                f"'{prefix}%' ZIP={zip_code} - "
+                f"parcels: {parcel_ids} - manual selection required"
             )
 
     return None
@@ -298,7 +298,7 @@ def enrich_bed_bath(
     Enforces null-only population via COALESCE and a WHERE guard.
     Never overwrites an existing non-NULL value regardless of source.
 
-    TODO: confidence hierarchy enforcement — item 17.
+    TODO: confidence hierarchy enforcement - item 17.
     When implemented, this function will accept a source_confidence
     parameter and only overwrite existing values if the incoming source
     ranks higher in the bed_bath_source confidence hierarchy defined in
@@ -393,7 +393,7 @@ async def _build_address_index(session: AsyncSession) -> dict[str, dict]:
             "tot_lvg_area": row.tot_lvg_area,
         }
 
-    logger.info("Address index built — %d entries", len(index))
+    logger.info("Address index built - %d entries", len(index))
     return index
 
 
@@ -434,7 +434,7 @@ def _lookup_parcel_from_index(
             return choices.get(matched_key)
 
     except ImportError:
-        logger.debug("rapidfuzz not installed — fuzzy matching unavailable")
+        logger.debug("rapidfuzz not installed - fuzzy matching unavailable")
 
     return None
 
@@ -449,7 +449,7 @@ def _derive_financials(
     Compute derived financial fields for the listing_events record.
     Returns a dict of fields to merge into the insert payload.
 
-    arv_source is 'JV_FALLBACK' — jv is used as ARV proxy until the
+    arv_source is 'JV_FALLBACK' - jv is used as ARV proxy until the
     comp-based ARV engine (item 17) is complete.
     """
     arv_estimate  = parcel.get("arv_estimate") or parcel.get("jv")
@@ -490,7 +490,7 @@ async def run_matching_cycle(
     """
     t_start = time.time()
 
-    # ── Step 1 — Discover scrapers ─────────────────────────────────────── #
+    # ── Step 1 - Discover scrapers ─────────────────────────────────────── #
     scraper_classes = _discover_scrapers()
 
     if source_filter:
@@ -504,7 +504,7 @@ async def run_matching_cycle(
             )
             return
 
-    # ── Step 2 — Run scrapers ──────────────────────────────────────────── #
+    # ── Step 2 - Run scrapers ──────────────────────────────────────────── #
     all_listings: list[ScrapedListing] = []
     scrapers_run = 0
     scrapers_skipped = 0
@@ -529,10 +529,10 @@ async def run_matching_cycle(
     )
 
     if not all_listings:
-        logger.info("No listings to match — exiting.")
+        logger.info("No listings to match - exiting.")
         return
 
-    # ── Steps 3-5 — Match and insert ──────────────────────────────────── #
+    # ── Steps 3-5 - Match and insert ──────────────────────────────────── #
     async with AsyncSessionLocal() as session:
         address_index = await _build_address_index(session)
 

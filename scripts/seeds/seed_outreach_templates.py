@@ -5,7 +5,7 @@ Inserts two system-owned templates (user_id IS NULL):
     - System Default Email  (EMAIL)
     - System Default Letter (LETTER)
 
-Idempotent — safe to run multiple times.
+Idempotent - safe to run multiple times.
 ON CONFLICT (template_name) WHERE user_id IS NULL DO NOTHING
 uq_ot_system_name partial unique index.
 
@@ -26,7 +26,7 @@ from config.settings import settings
 # Template definitions                                                          #
 # --------------------------------------------------------------------------- #
 
-EMAIL_SUBJECT = "Your property at {{ property_address }} — quick question"
+EMAIL_SUBJECT = "Your property at {{ property_address }} - quick question"
 
 EMAIL_BODY = """\
 Hi {{ owner_name }},
@@ -36,7 +36,7 @@ in the {{ property_city }} area. I came across your property at
 {{ property_address }}, {{ property_city }}, FL {{ property_zip }}
 and wanted to reach out directly.
 
-I'm not here with a hard pitch — I'd simply like to learn a bit more
+I'm not here with a hard pitch - I'd simply like to learn a bit more
 about your situation and find out whether selling might be something
 you'd consider, either now or down the road.
 
@@ -105,13 +105,13 @@ TEMPLATES = [
         "template_name":    "System Default Email",
         "description":      (
             "System-owned email template for initial outreach. "
-            "Private investor tone. Opens dialog — no hard pitch. "
+            "Private investor tone. Opens dialog - no hard pitch. "
             "Requires users.calendar_link for best results."
         ),
         "template_type":    "EMAIL",
         "subject_template": EMAIL_SUBJECT,
         "body_template":    EMAIL_BODY,
-        "county_fips":      None,   # global — available across all counties
+        "county_fips":      None,   # global - available across all counties
         "is_active":        True,
     },
     {
@@ -119,13 +119,13 @@ TEMPLATES = [
         "description":      (
             "System-owned letter template for initial outreach. "
             "Formal full-block format. Private investor tone. "
-            "Opens dialog — no hard pitch. "
+            "Opens dialog - no hard pitch. "
             "Printed and mailed to owner mailing address."
         ),
         "template_type":    "LETTER",
         "subject_template": None,   # LETTER has no subject line
         "body_template":    LETTER_BODY,
-        "county_fips":      None,   # global — available across all counties
+        "county_fips":      None,   # global - available across all counties
         "is_active":        True,
     },
 ]
@@ -178,7 +178,7 @@ def main() -> None:
                 print(f"Inserted template '{tmpl['template_name']}'.")
             else:
                 print(
-                    f"Template '{tmpl['template_name']}' already exists — skipped."
+                    f"Template '{tmpl['template_name']}' already exists - skipped."
                 )
 
     print("seed_outreach_templates complete.")

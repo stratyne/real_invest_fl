@@ -6,7 +6,7 @@ Create Date: 2026-04-27
 
 Adds four ARV and listing columns to the properties table:
     - jv_per_sqft         : Just Value per square foot (JV / tot_lvg_area)
-    - arv_estimate        : ARV proxy — mirrors jv now, replaceable by SDF comp engine later
+    - arv_estimate        : ARV proxy - mirrors jv now, replaceable by SDF comp engine later
     - arv_spread          : arv_estimate minus list_price (populated in Phase 2)
     - list_price          : Scraped list price from Phase 2 listing events
 """

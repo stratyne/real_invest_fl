@@ -1,4 +1,4 @@
-# Project Penstock — context/auth.md
+# Project Penstock - context/auth.md
 # Paste this alongside AGENTS.md when working on auth, users, seeds,
 # or Phase 4 access control.
 # Last updated: 2026-05-04
@@ -32,9 +32,9 @@ scripts/seeds/
 
 - JWT HS256 via PyJWT
 - sub = users.id as string
-- email in token payload is display hint only — NEVER used for identity lookup
+- email in token payload is display hint only - NEVER used for identity lookup
 - Token payload: sub, email, type="access", iat, exp
-- Password hashing: bcrypt direct (passlib dropped — incompatible with bcrypt 4.0+)
+- Password hashing: bcrypt direct (passlib dropped - incompatible with bcrypt 4.0+)
 - get_current_user: decodes JWT → extracts user id → loads User from DB
   raises 401 on failure or inactive user
 - require_county_access: superuser bypass → checks user_county_access for
@@ -48,17 +48,17 @@ scripts/seeds/
 - Subscription tiers: single county, regional bundle, statewide, enterprise
 - First bundle: Pensacola Metro = Escambia (12033) + Santa Rosa (12113)
 - User-county authorization: user_county_access join table
-- County access enforced via require_county_access dependency — not at
+- County access enforced via require_county_access dependency - not at
   the application layer
 - Multi-user from day one. No single-admin stub acceptable.
 
 ## Seed Scripts
 
-### seed_superuser.py (BLOCKER — item 11)
+### seed_superuser.py (BLOCKER - item 11)
 Creates the first superuser account. Must run before any Phase 4 auth
 testing can occur. Superuser bypasses all county access checks.
 
-### seed_bundles.py (BLOCKER — item 12)
+### seed_bundles.py (BLOCKER - item 12)
 Seeds the Pensacola Metro subscription bundle:
   - bundle_name: "Pensacola Metro"
   - Counties: Escambia (12033) + Santa Rosa (12113)

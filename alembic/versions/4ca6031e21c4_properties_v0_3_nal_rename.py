@@ -1,4 +1,4 @@
-"""properties table v0.3 — rename to NAL field names, drop situs_state,
+"""properties table v0.3 - rename to NAL field names, drop situs_state,
    add new columns from NAL audit
 
 Revision ID: 4ca6031e21c4
@@ -18,7 +18,7 @@ depends_on = None
 def upgrade() -> None:
 
     # ------------------------------------------------------------------ #
-    # SECTION 1 — Drop indexes that reference columns being renamed       #
+    # SECTION 1 - Drop indexes that reference columns being renamed       #
     # ------------------------------------------------------------------ #
     op.drop_index('ix_properties_dor_use_code',  table_name='properties')
     op.drop_index('ix_properties_zip_code',       table_name='properties')
@@ -27,12 +27,12 @@ def upgrade() -> None:
     op.drop_index('ix_properties_const_class',    table_name='properties')
 
     # ------------------------------------------------------------------ #
-    # SECTION 2 — Drop situs_state column                                 #
+    # SECTION 2 - Drop situs_state column                                 #
     # ------------------------------------------------------------------ #
     op.drop_column('properties', 'situs_state')
 
     # ------------------------------------------------------------------ #
-    # SECTION 3 — Rename existing columns to NAL field names              #
+    # SECTION 3 - Rename existing columns to NAL field names              #
     # ------------------------------------------------------------------ #
     op.alter_column('properties', 'dor_county_no',         new_column_name='co_no')
     op.alter_column('properties', 'assessment_year',       new_column_name='asmnt_yr')
@@ -60,11 +60,11 @@ def upgrade() -> None:
     op.alter_column('properties', 'parcel_id_normalized',  new_column_name='state_par_id')
 
     # ------------------------------------------------------------------ #
-    # SECTION 4 — Add new columns                                         #
-    # All nullable — no existing rows, no defaults required               #
+    # SECTION 4 - Add new columns                                         #
+    # All nullable - no existing rows, no defaults required               #
     # ------------------------------------------------------------------ #
 
-    # Columns confirmed missing from live schema — add rather than rename
+    # Columns confirmed missing from live schema - add rather than rename
     op.add_column('properties', sa.Column('imp_qual',      sa.Integer(),          nullable=True))
     op.add_column('properties', sa.Column('spec_feat_val', sa.Integer(),          nullable=True))
 
@@ -75,7 +75,7 @@ def upgrade() -> None:
     op.add_column('properties', sa.Column('lnd_val',       sa.Integer(),          nullable=True))
     op.add_column('properties', sa.Column('exmpt_01',      sa.Integer(),          nullable=True))
 
-    # Embedded sale history — Sale 1
+    # Embedded sale history - Sale 1
     op.add_column('properties', sa.Column('multi_par_sal1', sa.String(length=1),  nullable=True))
     op.add_column('properties', sa.Column('qual_cd1',        sa.String(length=2),  nullable=True))
     op.add_column('properties', sa.Column('vi_cd1',          sa.String(length=1),  nullable=True))
@@ -84,7 +84,7 @@ def upgrade() -> None:
     op.add_column('properties', sa.Column('sale_mo1',        sa.Integer(),          nullable=True))
     op.add_column('properties', sa.Column('sal_chng_cd1',    sa.String(length=1),  nullable=True))
 
-    # Embedded sale history — Sale 2
+    # Embedded sale history - Sale 2
     op.add_column('properties', sa.Column('multi_par_sal2', sa.String(length=1),  nullable=True))
     op.add_column('properties', sa.Column('qual_cd2',        sa.String(length=2),  nullable=True))
     op.add_column('properties', sa.Column('vi_cd2',          sa.String(length=1),  nullable=True))
@@ -113,12 +113,12 @@ def upgrade() -> None:
     op.add_column('properties', sa.Column('sec',             sa.String(length=3),  nullable=True))
 
     # Data quality and longitudinal tracking
-    # DT_LAST_INSPT: MMYY format — leading zeros meaningful, stored as String
+    # DT_LAST_INSPT: MMYY format - leading zeros meaningful, stored as String
     op.add_column('properties', sa.Column('dt_last_inspt',   sa.String(length=4),  nullable=True))
     op.add_column('properties', sa.Column('alt_key',         sa.String(length=26), nullable=True))
     op.add_column('properties', sa.Column('s_legal',         sa.String(length=30), nullable=True))
 
-    # Derived / computed — populated during Stage 1 ingest
+    # Derived / computed - populated during Stage 1 ingest
     op.add_column('properties', sa.Column('improvement_to_land_ratio',
                                           sa.Numeric(precision=8, scale=4),        nullable=True))
     op.add_column('properties', sa.Column('soh_compression_ratio',
@@ -127,7 +127,7 @@ def upgrade() -> None:
                                           sa.Integer(),                            nullable=True))
 
     # ------------------------------------------------------------------ #
-    # SECTION 5 — Recreate renamed indexes and create new indexes         #
+    # SECTION 5 - Recreate renamed indexes and create new indexes         #
     # ------------------------------------------------------------------ #
     op.create_index('ix_properties_act_yr_blt',   'properties', ['act_yr_blt'],   unique=False)
     op.create_index('ix_properties_const_class',  'properties', ['const_class'],  unique=False)

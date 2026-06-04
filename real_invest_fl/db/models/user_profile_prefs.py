@@ -1,15 +1,15 @@
 """
-UserProfilePrefs — per-user activity and preference state for a filter profile.
+UserProfilePrefs - per-user activity and preference state for a filter profile.
 
 Tracks whether the user has favorited a profile, when they last ran it,
 how many results it returned, and how many times they have run it total.
 
 Used by:
-  routes/dashboard.py  — get_dashboard (favorite profiles + recent activity)
-  routes/profiles.py   — toggle_favorite
-  routes/properties.py — search_properties (upsert on run)
+  routes/dashboard.py  - get_dashboard (favorite profiles + recent activity)
+  routes/profiles.py   - toggle_favorite
+  routes/properties.py - search_properties (upsert on run)
 
-One row per (user_id, profile_id) pair — enforced by uq_upp_user_profile.
+One row per (user_id, profile_id) pair - enforced by uq_upp_user_profile.
 """
 from __future__ import annotations
 from datetime import datetime

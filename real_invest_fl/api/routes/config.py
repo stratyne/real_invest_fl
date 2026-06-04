@@ -1,8 +1,8 @@
 """
-Config routes — county metadata management. Superuser only.
+Config routes - county metadata management. Superuser only.
 
-GET   /config/counties              — list all counties including inactive.
-PATCH /config/counties/{county_fips} — update county metadata.
+GET   /config/counties              - list all counties including inactive.
+PATCH /config/counties/{county_fips} - update county metadata.
 
 All routes in this module require is_superuser. Regular users receive 403.
 """
@@ -90,7 +90,7 @@ async def update_county(
 ) -> CountyAdminResponse:
     """Update county metadata. Superuser only.
 
-    Only fields present in the request body are updated — omitted fields
+    Only fields present in the request body are updated - omitted fields
     are left unchanged. county_fips, county_name, dor_county_no, and
     state_abbr are immutable via this endpoint.
     """

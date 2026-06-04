@@ -1,5 +1,5 @@
 """
-Properties routes — profile-driven multi-county search and single-parcel detail.
+Properties routes - profile-driven multi-county search and single-parcel detail.
 
 GET /properties
     Loads the specified filter profile, validates access to all counties
@@ -7,7 +7,7 @@ GET /properties
     computes deal score, returns a single page of results ranked by deal
     score descending (or the configured sort field).
 
-    Architecture — Option C hybrid:
+    Architecture - Option C hybrid:
     1. SQL fetches scoring columns only (lightweight) for all filtered rows.
     2. SQL fetches latest listing_event scoring columns for those parcels.
     3. Python scores, filters, sorts the full ID list.
@@ -89,7 +89,7 @@ def _address_sort_key(addr: str | None, reverse: bool) -> tuple:
     addresses that produce identical parsed components still have a
     deterministic stable order.
     """
-    # Null sentinel — '~' sorts after all uppercase ASCII (nulls-last ASC).
+    # Null sentinel - '~' sorts after all uppercase ASCII (nulls-last ASC).
     # On DESC (reverse=True) '~' would float to the front, so use '' instead
     # (sorts before all real data, which reverse=True pushes to the back).
     if not addr:
@@ -100,7 +100,7 @@ def _address_sort_key(addr: str | None, reverse: bool) -> tuple:
     m = _HOUSE_NUM_RE.match(normalized)
 
     if not m:
-        # No leading house number — treat entire string as street name.
+        # No leading house number - treat entire string as street name.
         return (normalized, '', '', 0, normalized)
 
     house_num = int(m.group(1))
@@ -123,7 +123,7 @@ def _address_sort_key(addr: str | None, reverse: bool) -> tuple:
         street_suffix = rest[-1]
         street_name = ' '.join(rest[:-1])
     else:
-        # Single token — treat as street name, no suffix extractable
+        # Single token - treat as street name, no suffix extractable
         street_suffix = ''
         street_name = rest[0]
 
@@ -328,7 +328,7 @@ class PropertyDetail(BaseModel):
 
 
 class InlineSearchRequest(BaseModel):
-    """Inline search payload — no profile is written.
+    """Inline search payload - no profile is written.
 
     county_fips: list of FIPS codes the search spans. User must have
     access to all of them.
@@ -359,7 +359,7 @@ def _apply_filters(
     """Apply filter_criteria dimensions as WHERE clauses.
 
     Only non-null filter values are applied. Null values mean the
-    dimension is unconstrained — no WHERE clause added.
+    dimension is unconstrained - no WHERE clause added.
     Returns the augmented select statement.
     """
     f = filters
@@ -510,7 +510,7 @@ def _apply_filters(
     if ao.get("required") is not None:
         stmt = stmt.where(Property.absentee_owner.is_(ao["required"]))
 
-    # homestead_status — homestead = exmpt_01 > 0
+    # homestead_status - homestead = exmpt_01 > 0
     hs = f.get("homestead_status", {})
     if hs.get("required") is True:
         stmt = stmt.where(Property.exmpt_01 > 0)
@@ -524,7 +524,7 @@ def _apply_filters(
     if osd.get("exclude"):
         stmt = stmt.where(Property.own_state_dom.notin_(osd["exclude"]))
 
-    # dor_use_code (include list) — stored as zero-padded 3-digit strings
+    # dor_use_code (include list) - stored as zero-padded 3-digit strings
     duc = f.get("dor_use_code", {})
     if duc.get("include"):
         padded = [str(v).zfill(3) for v in duc["include"]]
@@ -560,12 +560,12 @@ def _apply_filters(
     if fc.get("include"):
         stmt = stmt.where(Property.foundation_type.in_(fc["include"]))
 
-    # prior_sale_qualification (include list — qual_cd1)
+    # prior_sale_qualification (include list - qual_cd1)
     psq = f.get("prior_sale_qualification", {})
     if psq.get("include"):
         stmt = stmt.where(Property.qual_cd1.in_(psq["include"]))
 
-    # par_split_recent — par_splt IS NOT NULL and non-empty
+    # par_split_recent - par_splt IS NOT NULL and non-empty
     psr = f.get("par_split_recent", {})
     if psr.get("required") is True:
         stmt = stmt.where(
@@ -573,7 +573,7 @@ def _apply_filters(
             Property.par_splt != "",
         )
 
-    # min_arv_spread — arv_spread >= value
+    # min_arv_spread - arv_spread >= value
     mas = f.get("min_arv_spread", {})
     if mas.get("value") is not None:
         stmt = stmt.where(Property.arv_spread >= mas["value"])
@@ -590,15 +590,15 @@ def _compute_deal_score(
 ) -> float | None:
     """Compute a normalised deal score in [0.0, 1.0] at query time.
 
-    Operates on lightweight _ScoringRow and _EventScoringRow tuples —
+    Operates on lightweight _ScoringRow and _EventScoringRow tuples -
     not full ORM objects. Returns None if no weights configured or
     required values missing.
 
     Dimensions:
-        arv_spread_score  — arv_spread relative to jv
-        signal_tier_score — inverted signal_tier (1=best)
-        dom_score         — days_on_market (lower = more motivated)
-        absentee_score    — absentee_owner boolean bonus
+        arv_spread_score  - arv_spread relative to jv
+        signal_tier_score - inverted signal_tier (1=best)
+        dom_score         - days_on_market (lower = more motivated)
+        absentee_score    - absentee_owner boolean bonus
     """
     if not weights:
         return None
@@ -636,7 +636,7 @@ def _compute_deal_score(
     return round(score / total_weight, 4)
 
 
-# ── Core search logic — shared by both routes ────────────────────────────
+# ── Core search logic - shared by both routes ────────────────────────────
 
 async def _execute_search(
     profile_counties: list[str],
@@ -650,12 +650,12 @@ async def _execute_search(
 ) -> PaginatedPropertySearchResult:
     """Option C hybrid search.
 
-    Step 1: SQL — fetch scoring columns only for all filtered parcels.
-    Step 2: SQL — fetch latest listing_event scoring columns for those parcels.
-    Step 3: Python — apply event-dependent filters, score, sort full ID list.
-    Step 4: SQL — fetch full Property ORM objects for page slice only.
-    Step 5: SQL — fetch full ListingEvent ORM objects for page slice only.
-    Step 6: Python — build response objects.
+    Step 1: SQL - fetch scoring columns only for all filtered parcels.
+    Step 2: SQL - fetch latest listing_event scoring columns for those parcels.
+    Step 3: Python - apply event-dependent filters, score, sort full ID list.
+    Step 4: SQL - fetch full Property ORM objects for page slice only.
+    Step 5: SQL - fetch full ListingEvent ORM objects for page slice only.
+    Step 6: Python - build response objects.
     """
 
     # ── Step 1: lightweight property scoring fetch ────────────────────
@@ -731,7 +731,7 @@ async def _execute_search(
 
     # ── Step 3: event-dependent filters, scoring, sorting ────────────
 
-    # listing_type filter — requires event
+    # listing_type filter - requires event
     lt = filters.get("listing_types", {})
     if lt.get("include"):
         allowed = set(lt["include"])
@@ -741,7 +741,7 @@ async def _execute_search(
             and ev.listing_type in allowed
         ]
 
-    # days_on_market filter — requires event
+    # days_on_market filter - requires event
     dom = filters.get("days_on_market", {})
     if dom.get("min") is not None or dom.get("max") is not None:
         filtered = []
@@ -833,7 +833,7 @@ async def _execute_search(
 
     scored.sort(key=_sort_key, reverse=reverse)
 
-    # max_results cap — applied after sort so the cap takes the
+    # max_results cap - applied after sort so the cap takes the
     # top-N rows by the requested sort field, not by database order.
     max_res = filters.get("max_results", {})
     limit = max_res.get("value") if max_res else None
@@ -843,7 +843,7 @@ async def _execute_search(
     total = len(scored)
     total_pages = max(1, -(-total // page_size))
 
-    # Page slice — IDs only
+    # Page slice - IDs only
     start = (page - 1) * page_size
     end = start + page_size
     page_slice = scored[start:end]
@@ -855,7 +855,7 @@ async def _execute_search(
         )
 
     # ── Step 4: full Property fetch for page slice only ───────────────
-    # Preserve page order — fetch then re-sort by the scored order.
+    # Preserve page order - fetch then re-sort by the scored order.
     page_keys = [(r.county_fips, r.parcel_id) for r, _, _ in page_slice]
 
     # County-scoped fetches to avoid tuple_ IN StatementTooComplexError
@@ -891,13 +891,13 @@ async def _execute_search(
             if key not in ev_map:
                 ev_map[key] = ev
 
-    # ── Step 6: build response — preserve scored sort order ──────────
+    # ── Step 6: build response - preserve scored sort order ──────────
     out: list[PropertySearchResult] = []
     for scoring_row, ev_scoring, ds in page_slice:
         key = (scoring_row.county_fips, scoring_row.parcel_id)
         prop = prop_map.get(key)
         if prop is None:
-            # Should not happen — parcel passed filter so it exists.
+            # Should not happen - parcel passed filter so it exists.
             # Skip defensively rather than crash.
             continue
 
@@ -963,7 +963,7 @@ async def search_properties(
     Loads the profile, validates county access, applies filter_criteria at
     query time, scores, sorts, and returns one page of results.
 
-    Uses Option C hybrid architecture — lightweight scoring fetch across
+    Uses Option C hybrid architecture - lightweight scoring fetch across
     all filtered rows, full ORM hydration for page slice only.
 
     max_results from filter_criteria is applied before pagination.
@@ -986,7 +986,7 @@ async def search_properties(
         sort_field, sort_direction, db
     )
 
-    # Upsert user_profile_prefs — total count, not page count
+    # Upsert user_profile_prefs - total count, not page count
     await db.execute(
         pg_insert(UserProfilePrefs)
         .values(
@@ -1021,9 +1021,9 @@ async def search_properties_inline(
 
     No filter profile is required and none is written. County access is
     validated. Behaviour is otherwise identical to search_properties.
-    user_profile_prefs is not written — no profile_id is available.
+    user_profile_prefs is not written - no profile_id is available.
 
-    Uses Option C hybrid architecture — lightweight scoring fetch across
+    Uses Option C hybrid architecture - lightweight scoring fetch across
     all filtered rows, full ORM hydration for page slice only.
     """
     profile_counties = list(dict.fromkeys(body.county_fips))
@@ -1069,7 +1069,7 @@ async def lookup_property(
     if not accessible:
         return []
 
-    # Single query across all accessible counties — parcel_id is unique
+    # Single query across all accessible counties - parcel_id is unique
     # within a county but the same string could exist in multiple counties.
     # In practice this returns 0 or 1 rows for the current 2-county scope.
     prop_result = await db.execute(

@@ -1,11 +1,11 @@
 """
-SkipTraceCache — cached skip-trace lookup results per parcel.
+SkipTraceCache - cached skip-trace lookup results per parcel.
 
-One cached result per (county_fips, parcel_id) — uq_stc_county_parcel.
+One cached result per (county_fips, parcel_id) - uq_stc_county_parcel.
 TTL controlled by settings.SKIP_TRACE_CACHE_TTL_DAYS. expires_at is set
 at write time as fetched_at + TTL. ix_stc_expires_at supports cleanup sweeps.
 
-provider records the data source. Default: 'BATCHDATA'. No CHECK constraint —
+provider records the data source. Default: 'BATCHDATA'. No CHECK constraint -
 additional providers may be added without migration.
 
 Live BatchData API integration is deferred (item 44). The skip_trace route
@@ -58,7 +58,7 @@ class SkipTraceCache(Base):
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
-    # No CHECK constraint on provider — additional providers require no migration
+    # No CHECK constraint on provider - additional providers require no migration
     provider: Mapped[str] = mapped_column(
         String(50), nullable=False, default="BATCHDATA"
     )
@@ -72,7 +72,7 @@ class SkipTraceCache(Base):
 
     # ------------------------------------------------------------------ #
     # Relationships                                                        #
-    # Note: SkipTraceCache has no FK to users or properties — it is a     #
+    # Note: SkipTraceCache has no FK to users or properties - it is a     #
     # keyed cache table. Navigation is by (county_fips, parcel_id) lookup #
     # at the service layer, not via ORM relationship.                      #
     # ------------------------------------------------------------------ #

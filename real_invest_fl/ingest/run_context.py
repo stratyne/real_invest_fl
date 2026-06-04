@@ -1,5 +1,5 @@
 """
-IngestRunContext — async context manager for pipeline run lifecycle.
+IngestRunContext - async context manager for pipeline run lifecycle.
 
 Opens an IngestRun record on entry, updates counters during processing,
 closes the record with final status and duration on exit.
@@ -29,10 +29,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Valid increment outcomes — every processed record must resolve to one
+# Valid increment outcomes - every processed record must resolve to one
 IncrementOutcome = Literal["inserted", "updated", "rejected", "skipped"]
 
-# Valid run types — enforced at construction time
+# Valid run types - enforced at construction time
 RUN_TYPES = {"NAL", "CAMA", "GIS", "LISTING", "ZESTIMATE"}
 
 
@@ -57,7 +57,7 @@ class IngestRunContext:
         - Captures error_message and error_traceback
         - Writes all counters accumulated before failure
         - Computes duration_seconds
-        - Commits — the run record is always saved even on failure
+        - Commits - the run record is always saved even on failure
         - Re-raises the exception so the caller sees it
     """
 
@@ -81,14 +81,14 @@ class IngestRunContext:
         self._source_file = source_file
         self._filter_profile_id = filter_profile_id
 
-        # Counters — incremented during processing
+        # Counters - incremented during processing
         self._records_read: int = 0
         self._records_inserted: int = 0
         self._records_updated: int = 0
         self._records_rejected: int = 0
         self._records_skipped: int = 0
 
-        # Rejection reason accumulator — {"reason_code": count}
+        # Rejection reason accumulator - {"reason_code": count}
         self._rejection_summary: dict[str, int] = {}
 
         # Set on __aenter__
@@ -96,7 +96,7 @@ class IngestRunContext:
         self._started_at: datetime | None = None
 
     # ------------------------------------------------------------------ #
-    # Public API — called by pipeline code during processing              #
+    # Public API - called by pipeline code during processing              #
     # ------------------------------------------------------------------ #
 
     def increment(
@@ -127,7 +127,7 @@ class IngestRunContext:
                     self._rejection_summary.get(rejection_reason, 0) + 1
                 )
             else:
-                # Rejection without a reason code is a pipeline bug —
+                # Rejection without a reason code is a pipeline bug -
                 # log it but do not raise so processing continues
                 logger.warning(
                     "increment() called with outcome='rejected' "
@@ -185,7 +185,7 @@ class IngestRunContext:
 
         self._session.add(self._run)
         await self._session.flush()
-        # flush — not commit — so the row is visible within the transaction
+        # flush - not commit - so the row is visible within the transaction
         # but the session stays open for pipeline inserts/updates
 
         logger.info(
@@ -236,7 +236,7 @@ class IngestRunContext:
                 duration,
             )
         else:
-            # Failed — capture error details
+            # Failed - capture error details
             self._run.run_status = "FAILED"
             self._run.error_message = str(exc_val)
             self._run.error_traceback = "".join(
@@ -257,9 +257,9 @@ class IngestRunContext:
                 str(exc_val),
             )
 
-        # Always commit the run record — even on failure
+        # Always commit the run record - even on failure
         # The pipeline caller sees the exception after this commit
         await self._session.commit()
 
-        # Return False — do not suppress the exception
+        # Return False - do not suppress the exception
         return False

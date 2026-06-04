@@ -1,4 +1,4 @@
-"""filter_profiles table v0.4 — replace scalar filter columns with
+"""filter_profiles table v0.4 - replace scalar filter columns with
    filter_criteria JSONB; retain engine/operational config columns
 
 Revision ID: f422169456bd
@@ -18,7 +18,7 @@ depends_on = None
 def upgrade() -> None:
 
     # ------------------------------------------------------------------ #
-    # SECTION 1 — Drop scalar filter dimension columns                    #
+    # SECTION 1 - Drop scalar filter dimension columns                    #
     # ------------------------------------------------------------------ #
     op.drop_column('filter_profiles', 'max_list_price')
     op.drop_column('filter_profiles', 'min_list_price')
@@ -37,7 +37,7 @@ def upgrade() -> None:
     op.drop_column('filter_profiles', 'disallowed_property_types')
 
     # ------------------------------------------------------------------ #
-    # SECTION 2 — Add filter_criteria JSONB column                        #
+    # SECTION 2 - Add filter_criteria JSONB column                        #
     # ------------------------------------------------------------------ #
     op.add_column('filter_profiles',
         sa.Column('filter_criteria',
@@ -45,7 +45,7 @@ def upgrade() -> None:
                   nullable=False,
                   server_default='{}'))
 
-    # Remove server_default after adding — it was only needed to satisfy
+    # Remove server_default after adding - it was only needed to satisfy
     # NOT NULL for the ALTER TABLE. Production rows will always be seeded
     # with a complete filter_criteria document.
     op.alter_column('filter_profiles', 'filter_criteria', server_default=None)

@@ -1,17 +1,17 @@
 """
 Create the demo superuser account and grant Escambia + Santa Rosa access.
 
-Reads credentials from environment variables — never from hardcoded values.
+Reads credentials from environment variables - never from hardcoded values.
 Safe to run multiple times (ON CONFLICT DO NOTHING on email).
-calendar_link is NOT updated on conflict — remove the account and re-run
+calendar_link is NOT updated on conflict - remove the account and re-run
 if the link needs to change.
 
 Required environment variables:
-    DEMO_EMAIL          — the demo account's login email
-    DEMO_PASSWORD       — plaintext password (hashed before storage, never persisted)
+    DEMO_EMAIL          - the demo account's login email
+    DEMO_PASSWORD       - plaintext password (hashed before storage, never persisted)
 
 Optional environment variables:
-    DEMO_CALENDAR_LINK  — Google Calendar Appointment Schedule URL (or any booking link).
+    DEMO_CALENDAR_LINK  - Google Calendar Appointment Schedule URL (or any booking link).
                           Stored as users.calendar_link. NULL if not set.
 
 These may be set in .env temporarily for initial setup, but must be
@@ -23,8 +23,8 @@ Usage:
     Set variables in .env, run the script, then remove them from .env.
 
 County grants seeded:
-    12033 — Escambia
-    12113 — Santa Rosa
+    12033 - Escambia
+    12113 - Santa Rosa
 """
 import sys
 import os
@@ -102,11 +102,11 @@ def main() -> None:
             if calendar_link:
                 print(f"calendar_link set.")
             else:
-                print("WARNING: DEMO_CALENDAR_LINK not set — calendar_link stored as NULL.")
+                print("WARNING: DEMO_CALENDAR_LINK not set - calendar_link stored as NULL.")
                 print("         Outreach emails will render a blank booking link line.")
                 print("         Set DEMO_CALENDAR_LINK and re-seed to fix.")
         else:
-            print(f"Demo account '{email}' already exists — skipped user insert.")
+            print(f"Demo account '{email}' already exists - skipped user insert.")
             print("NOTE: calendar_link was NOT updated. Remove the account and")
             print("      re-run this script if the calendar link needs to change.")
 
@@ -130,7 +130,7 @@ def main() -> None:
             if r.rowcount == 1:
                 print(f"Granted {name} ({fips}) access to '{email}'.")
             else:
-                print(f"{name} ({fips}) access already exists for '{email}' — skipped.")
+                print(f"{name} ({fips}) access already exists for '{email}' - skipped.")
 
     print("seed_demo_account complete.")
 

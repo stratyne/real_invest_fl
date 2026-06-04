@@ -4,7 +4,7 @@ tests/test_listing_matcher_lookup.py
 Tier 1 deterministic tests for listing_matcher.lookup_parcel_by_address()
 and listing_matcher.enrich_bed_bath().
 
-No live database required — all DB interactions are stubbed via
+No live database required - all DB interactions are stubbed via
 unittest.mock. Tests lock the three-level fallback contract, county_fips
 filtering, normalization behavior, and bed/bath enrichment rules.
 
@@ -30,7 +30,7 @@ from real_invest_fl.ingest.listing_matcher import (
 
 
 # ---------------------------------------------------------------------------
-# Helpers — fixture row factory
+# Helpers - fixture row factory
 # ---------------------------------------------------------------------------
 
 def _make_row(parcel_id="0000000000123456", county_fips="12033"):
@@ -60,7 +60,7 @@ def _make_conn(fetchone_return=None, fetchall_return=None):
 
 
 # ---------------------------------------------------------------------------
-# lookup_parcel_by_address — Level 1 exact match
+# lookup_parcel_by_address - Level 1 exact match
 # ---------------------------------------------------------------------------
 
 class TestLevel1ExactMatch:
@@ -127,7 +127,7 @@ class TestLevel1ExactMatch:
         """Level 1 without zip still matches on street alone."""
         row = _make_row()
         # When zip_code is None, the with-zip branch is skipped entirely.
-        # Only one fetchone call is made — the without-zip branch.
+        # Only one fetchone call is made - the without-zip branch.
         conn = MagicMock()
         result_obj = MagicMock()
         result_obj.fetchone.return_value = row
@@ -155,7 +155,7 @@ class TestLevel1ExactMatch:
 
     def test_ordinal_suffix_not_split(self):
         """
-        '905 N 74TH AVE' — no space injected between 7 and 4 or 4 and TH.
+        '905 N 74TH AVE' - no space injected between 7 and 4 or 4 and TH.
         Regression: ordinal-safe lookahead in _DIGIT_LETTER_RE.
         """
         row = _make_row()
@@ -172,7 +172,7 @@ class TestLevel1ExactMatch:
     def test_partially_normalized_input_accepted(self):
         """
         Partially normalized input (from _normalize_street()) is accepted.
-        normalize_street_address() applied internally — idempotent on
+        normalize_street_address() applied internally - idempotent on
         already-uppercased input.
         Regression: Auction.com adapter path correctness.
         """
@@ -180,7 +180,7 @@ class TestLevel1ExactMatch:
         conn = _make_conn(fetchone_return=row)
 
         # Simulates what _normalize_street() produces for '110 Frisco Road':
-        # digit-letter injection + upper — but NOT suffix abbreviation
+        # digit-letter injection + upper - but NOT suffix abbreviation
         partially_normalized = "110 FRISCO ROAD"
         result = lookup_parcel_by_address(conn, partially_normalized, "32534")
 
@@ -211,7 +211,7 @@ class TestLevel1ExactMatch:
 
 
 # ---------------------------------------------------------------------------
-# lookup_parcel_by_address — Level 2 unit normalization
+# lookup_parcel_by_address - Level 2 unit normalization
 # ---------------------------------------------------------------------------
 
 class TestLevel2UnitNormalization:
@@ -297,7 +297,7 @@ class TestLevel2UnitNormalization:
 
 
 # ---------------------------------------------------------------------------
-# lookup_parcel_by_address — Level 3 LIKE prefix
+# lookup_parcel_by_address - Level 3 LIKE prefix
 # ---------------------------------------------------------------------------
 
 class TestLevel3Prefix:
@@ -352,7 +352,7 @@ class TestLevel3Prefix:
         row = _make_row()
         conn = self._conn_all_miss([row])
 
-        # Address with a unit — the LIKE prefix must NOT contain '#' or '4A'
+        # Address with a unit - the LIKE prefix must NOT contain '#' or '4A'
         lookup_parcel_by_address(conn, "4831 Olive Rd #4A", "32514")
 
         # The fetchall call is the Level 3 call
@@ -384,7 +384,7 @@ class TestLevel3Prefix:
     def test_zero_padding_never_applied_to_returned_parcel_id(self):
         """
         The parcel_id in the returned dict is the raw DB value.
-        normalize_parcel_id() is never called — it would pad to 18 chars
+        normalize_parcel_id() is never called - it would pad to 18 chars
         and break the join since properties.parcel_id is 16 chars.
         Regression: zero-padded ID failing subsequent joins.
         """
@@ -527,7 +527,7 @@ class TestEnrichBedBath:
 
 
 # ---------------------------------------------------------------------------
-# normalize_street_address — strip_unit=False path preserved
+# normalize_street_address - strip_unit=False path preserved
 # ---------------------------------------------------------------------------
 
 class TestNormalizeStreetAddressStripUnitFalse:

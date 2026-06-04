@@ -8,11 +8,11 @@ Adds signal classification columns to listing_events table to support
 the Phase 2 hybrid signal-aggregator + traditional listing model.
 
 New columns:
-    signal_tier  — INTEGER  : Priority tier of the signal source
+    signal_tier  - INTEGER  : Priority tier of the signal source
                               1 = Government distress records (highest signal)
                               2 = Bulk public data / government auction portals
                               3 = Commercial listing platforms / FSBO
-    signal_type  — VARCHAR(50) : Semantic type of the signal event
+    signal_type  - VARCHAR(50) : Semantic type of the signal event
                               Examples: foreclosure_sale, tax_deed, lis_pendens,
                               tax_delinquent, fsbo, active_listing,
                               expired_listing, auction, surplus

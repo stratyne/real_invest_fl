@@ -1,4 +1,4 @@
-"""county_zips — add foreign key to counties
+"""county_zips - add foreign key to counties
 
 Revision ID: 25a1f5163f3b
 Revises: 390bc7eab733

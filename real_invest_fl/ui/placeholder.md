@@ -1,6 +1,6 @@
 # UI Framework Decision
 
-**Status:** Deferred — pending pipeline design completion.
+**Status:** Deferred - pending pipeline design completion.
 
 **Options under consideration:**
 - Streamlit (rapid Python-only, good for single-operator dashboard)

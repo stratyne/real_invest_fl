@@ -1,8 +1,8 @@
 """
-User — platform account. Authenticated via JWT (OAuth2 password flow).
+User - platform account. Authenticated via JWT (OAuth2 password flow).
 
 is_superuser bypasses all county access checks in the dependency layer.
-Passwords are stored as bcrypt hashes — never plaintext.
+Passwords are stored as bcrypt hashes - never plaintext.
 """
 from __future__ import annotations
 from datetime import datetime
@@ -21,7 +21,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_superuser: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # v0.17 — any booking service link; snapshotted to outreach_log at generate time
+    # v0.17 - any booking service link; snapshotted to outreach_log at generate time
     calendar_link: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(

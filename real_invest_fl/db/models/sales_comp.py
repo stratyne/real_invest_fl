@@ -1,5 +1,5 @@
 """
-SalesComp — populated from the DOR Sale Data File (SDF).
+SalesComp - populated from the DOR Sale Data File (SDF).
 Powers the internal ARV comp engine; replaces Zestimate as primary signal.
 One row per qualified arm's-length sale.
 """
@@ -26,7 +26,7 @@ class SalesComp(Base):
     sale_price: Mapped[int | None] = mapped_column(Integer)
     sale_date: Mapped[date | None] = mapped_column(Date)
     sale_qualifier: Mapped[str | None] = mapped_column(String(10))
-    # SDF qualifier codes — only arm's-length (qualifier='Q') ingested
+    # SDF qualifier codes - only arm's-length (qualifier='Q') ingested
 
     # Property characteristics at time of sale (joined from NAL)
     dor_use_code: Mapped[str | None] = mapped_column(String(10))

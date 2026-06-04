@@ -1,9 +1,9 @@
 """
-ParcelSaleHistory — full ownership chain per parcel.
+ParcelSaleHistory - full ownership chain per parcel.
 
 One row per recorded sale transaction, sourced from county property
 appraiser websites (e.g. parcelview.srcpa.gov for Santa Rosa).
-Captures every transaction regardless of qualification code —
+Captures every transaction regardless of qualification code -
 arm's-length sales, nominal transfers, foreclosure deeds, quit claims.
 
 This is distinct from sales_comps, which holds SDF-sourced qualified
@@ -17,13 +17,13 @@ ParcelSaleHistory powers:
     - Motivated seller scoring
 
 Dedup key: (county_fips, parcel_id, sale_date, grantor, grantee)
-    OR_BOOK / OR_PAGE are intentionally excluded — they are clerk
+    OR_BOOK / OR_PAGE are intentionally excluded - they are clerk
     recording references with no platform value.
 
 Source coverage:
-    Santa Rosa  — parcelview.srcpa.gov (confirmed working 2026-05-04)
-    Escambia    — escpa.org (pending, site currently down)
-    All others  — Phase 3, per-county PA website
+    Santa Rosa  - parcelview.srcpa.gov (confirmed working 2026-05-04)
+    Escambia    - escpa.org (pending, site currently down)
+    All others  - Phase 3, per-county PA website
 """
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ class ParcelSaleHistory(Base):
     grantee: Mapped[str] = mapped_column(String(300), nullable=False, default="")
 
     # ------------------------------------------------------------------ #
-    # Derived — computed at ingest, not query time                        #
+    # Derived - computed at ingest, not query time                        #
     # ------------------------------------------------------------------ #
     price_per_sqft: Mapped[float | None] = mapped_column(Numeric(8, 2))
     # Populated only when sale_price > 0 and tot_lvg_area is known

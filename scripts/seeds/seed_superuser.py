@@ -1,12 +1,12 @@
 """
 Create the first superuser and grant Escambia County access.
 
-Reads credentials from environment variables — never from hardcoded values.
+Reads credentials from environment variables - never from hardcoded values.
 Safe to run multiple times (ON CONFLICT DO NOTHING on email).
 
 Required environment variables:
-    SUPERUSER_EMAIL     — the superuser's login email
-    SUPERUSER_PASSWORD  — plaintext password (hashed before storage, never persisted)
+    SUPERUSER_EMAIL     - the superuser's login email
+    SUPERUSER_PASSWORD  - plaintext password (hashed before storage, never persisted)
 
 These may be set in .env temporarily for initial setup, but must be
 removed from .env (and .env must never be committed) immediately after.
@@ -17,7 +17,7 @@ Usage:
     Set both variables in .env, run the script, then remove them from .env.
 
 County grants seeded:
-    12033 — Escambia (always granted to superuser)
+    12033 - Escambia (always granted to superuser)
 """
 import sys
 import os
@@ -74,7 +74,7 @@ def main() -> None:
         if result.rowcount == 1:
             print(f"Superuser '{email}' created.")
         else:
-            print(f"Superuser '{email}' already exists — skipped user insert.")
+            print(f"Superuser '{email}' already exists - skipped user insert.")
 
         # Fetch user id
         row = conn.execute(
@@ -95,7 +95,7 @@ def main() -> None:
         if r.rowcount == 1:
             print(f"Granted Escambia ({ESCAMBIA_FIPS}) access to '{email}'.")
         else:
-            print(f"Escambia access already exists for '{email}' — skipped.")
+            print(f"Escambia access already exists for '{email}' - skipped.")
 
     print("seed_superuser complete.")
 

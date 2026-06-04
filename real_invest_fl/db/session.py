@@ -7,6 +7,6 @@ AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_co
 
 
 async def get_db() -> AsyncSession:
-    """FastAPI dependency — yields a DB session per request."""
+    """FastAPI dependency - yields a DB session per request."""
     async with AsyncSessionLocal() as session:
         yield session

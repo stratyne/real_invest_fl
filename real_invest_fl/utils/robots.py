@@ -29,7 +29,7 @@ def can_fetch(url: str, user_agent: str = "*") -> bool:
     """Return True if robots.txt permits fetching the given URL."""
     parser = _get_parser(url)
     if parser is None:
-        return True  # Fail open — log warning already emitted
+        return True  # Fail open - log warning already emitted
     try:
         return parser.can_fetch(user_agent, url)
     except Exception as exc:

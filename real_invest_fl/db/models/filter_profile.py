@@ -1,5 +1,5 @@
 """
-FilterProfile — versioned, named investment filter sets.
+FilterProfile - versioned, named investment filter sets.
 
 filter_criteria stores the complete filter vocabulary document as JSONB.
 This is the single source of truth for all filter dimensions.
@@ -10,8 +10,8 @@ they govern pipeline behaviour, not property selection criteria.
 Uniqueness model:
   System profiles (user_id IS NULL): unique on (profile_name).
   User profiles   (user_id IS NOT NULL): unique on (user_id, profile_name).
-  county_fips is now an array — cannot participate in a PostgreSQL unique
-  index directly. Uniqueness enforced via two partial unique indexes —
+  county_fips is now an array - cannot participate in a PostgreSQL unique
+  index directly. Uniqueness enforced via two partial unique indexes -
   see __table_args__.
 """
 from __future__ import annotations
@@ -57,7 +57,7 @@ class FilterProfile(Base):
     version:      Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
     # ------------------------------------------------------------------ #
-    # Ownership — NULL = system catalog profile                            #
+    # Ownership - NULL = system catalog profile                            #
     # ------------------------------------------------------------------ #
     user_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -66,7 +66,7 @@ class FilterProfile(Base):
     )
 
     # ------------------------------------------------------------------ #
-    # Filter vocabulary — single source of truth                          #
+    # Filter vocabulary - single source of truth                          #
     # ------------------------------------------------------------------ #
     filter_criteria: Mapped[dict] = mapped_column(JSONB, nullable=False)
 

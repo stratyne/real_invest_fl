@@ -1,5 +1,5 @@
 """
-EmailTemplate — versioned outreach email bodies with placeholder variables.
+EmailTemplate - versioned outreach email bodies with placeholder variables.
 """
 from __future__ import annotations
 from datetime import datetime

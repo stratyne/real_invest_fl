@@ -1,5 +1,5 @@
 """
-PropertyValueHistory — append-only log of assessed/just values per parcel/year.
+PropertyValueHistory - append-only log of assessed/just values per parcel/year.
 Never updated; new row inserted each annual NAL refresh.
 """
 from __future__ import annotations

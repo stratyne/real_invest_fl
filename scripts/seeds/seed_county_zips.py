@@ -1,7 +1,7 @@
 """
 Seed the county_zips table for Escambia County by extracting
 distinct ZIP codes from the raw NAL CSV.
-Safe to run multiple times — uses INSERT ... ON CONFLICT DO NOTHING.
+Safe to run multiple times - uses INSERT ... ON CONFLICT DO NOTHING.
 
 Usage:
     python -m scripts.seeds.seed_county_zips

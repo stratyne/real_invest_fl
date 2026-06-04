@@ -8,12 +8,12 @@ import Map, { Marker, Popup } from 'react-map-gl/maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 
 function fmt(n: number | null | undefined, prefix = ''): string {
-  if (n == null) return '—'
+  if (n == null) return '-'
   return prefix + n.toLocaleString()
 }
 
 function fmtFloat(n: number | null | undefined, decimals = 2): string {
-  if (n == null) return '—'
+  if (n == null) return '-'
   return n.toFixed(decimals)
 }
 
@@ -30,7 +30,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={s.row}>
       <span style={s.rowLabel}>{label}</span>
-      <span style={s.rowValue}>{value ?? '—'}</span>
+      <span style={s.rowValue}>{value ?? '-'}</span>
     </div>
   )
 }
@@ -79,33 +79,33 @@ export default function PropertyDetailPage() {
       </div>
       <div style={s.body}>
         <h1 style={s.address}>
-          {detail.phy_addr1 ?? '—'}<br />
-          <span style={s.addressSub}>{detail.phy_city ?? '—'}, FL {detail.phy_zipcd ?? '—'}</span>
+          {detail.phy_addr1 ?? '-'}<br />
+          <span style={s.addressSub}>{detail.phy_city ?? '-'}, FL {detail.phy_zipcd ?? '-'}</span>
         </h1>
 
         <div style={s.grid}>
           <Section title="Ownership">
             <Row label="Owner" value={detail.own_name} />
             <Row label="Mailing" value={[detail.own_addr1, detail.own_city, detail.own_state, detail.own_zipcd].filter(Boolean).join(', ')} />
-            <Row label="Absentee" value={detail.absentee_owner == null ? '—' : detail.absentee_owner ? 'Yes' : 'No'} />
+            <Row label="Absentee" value={detail.absentee_owner == null ? '-' : detail.absentee_owner ? 'Yes' : 'No'} />
           </Section>
 
           <Section title="Valuation">
             <Row label="Just Value" value={fmt(detail.jv, '$')} />
             <Row label="Assessed Value" value={fmt(detail.av_nsd, '$')} />
             <Row label="Land Value" value={fmt(detail.lnd_val, '$')} />
-            <Row label="JV / sqft" value={detail.jv_per_sqft != null ? `$${fmtFloat(detail.jv_per_sqft)}` : '—'} />
+            <Row label="JV / sqft" value={detail.jv_per_sqft != null ? `$${fmtFloat(detail.jv_per_sqft)}` : '-'} />
             <Row label="ARV Estimate" value={fmt(detail.arv_estimate, '$')} />
             <Row label="ARV Spread" value={fmt(detail.arv_spread, '$')} />
-            <Row label="ARV Source" value={detail.latest_listing?.arv_source ?? detail.arv_source ?? '—'} />
+            <Row label="ARV Source" value={detail.latest_listing?.arv_source ?? detail.arv_source ?? '-'} />
           </Section>
 
           <Section title="Property">
             <Row label="DOR Use Code" value={detail.dor_uc} />
             <Row label="Year Built" value={detail.act_yr_blt} />
             <Row label="Eff. Year Built" value={detail.eff_yr_blt} />
-            <Row label="Living Area" value={detail.tot_lvg_area != null ? `${detail.tot_lvg_area.toLocaleString()} sqft` : '—'} />
-            <Row label="Lot Size" value={detail.lnd_sqfoot != null ? `${detail.lnd_sqfoot.toLocaleString()} sqft` : '—'} />
+            <Row label="Living Area" value={detail.tot_lvg_area != null ? `${detail.tot_lvg_area.toLocaleString()} sqft` : '-'} />
+            <Row label="Lot Size" value={detail.lnd_sqfoot != null ? `${detail.lnd_sqfoot.toLocaleString()} sqft` : '-'} />
             <Row label="Bedrooms" value={detail.bedrooms} />
             <Row label="Bathrooms" value={detail.bathrooms} />
             <Row label="Buildings" value={detail.no_buldng} />
@@ -124,8 +124,8 @@ export default function PropertyDetailPage() {
           </Section>
 
           <Section title="Ratios">
-            <Row label="Imp / Land Ratio" value={detail.improvement_to_land_ratio != null ? fmtFloat(detail.improvement_to_land_ratio, 4) : '—'} />
-            <Row label="SOH Compression" value={detail.soh_compression_ratio != null ? fmtFloat(detail.soh_compression_ratio, 4) : '—'} />
+            <Row label="Imp / Land Ratio" value={detail.improvement_to_land_ratio != null ? fmtFloat(detail.improvement_to_land_ratio, 4) : '-'} />
+            <Row label="SOH Compression" value={detail.soh_compression_ratio != null ? fmtFloat(detail.soh_compression_ratio, 4) : '-'} />
             <Row label="Years Since Sale" value={detail.years_since_last_sale} />
           </Section>
 
@@ -175,7 +175,7 @@ export default function PropertyDetailPage() {
         )}      
         <Section title="Sale History">
           {detail.sale_history.length === 0 ? (
-            <Row label="No sale history" value="—" />
+            <Row label="No sale history" value="-" />
           ) : (
             <table style={s.saleTable}>
               <thead>
@@ -188,14 +188,14 @@ export default function PropertyDetailPage() {
               <tbody>
                 {detail.sale_history.map((sale: SaleHistoryEntry, i: number) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <td style={s.saleTd}>{sale.sale_date ?? '—'}</td>
-                    <td style={s.saleTd}>{sale.sale_price != null ? fmt(sale.sale_price, '$') : '—'}</td>
-                    <td style={s.saleTd}>{sale.instrument_type ?? '—'}</td>
-                    <td style={s.saleTd}>{sale.qualification_code ?? '—'}</td>
-                    <td style={s.saleTd}>{sale.sale_type ?? '—'}</td>
-                    <td style={s.saleTd}>{sale.grantor || '—'}</td>
-                    <td style={s.saleTd}>{sale.grantee || '—'}</td>
-                    <td style={s.saleTd}>{sale.price_per_sqft != null ? `$${sale.price_per_sqft.toFixed(2)}` : '—'}</td>
+                    <td style={s.saleTd}>{sale.sale_date ?? '-'}</td>
+                    <td style={s.saleTd}>{sale.sale_price != null ? fmt(sale.sale_price, '$') : '-'}</td>
+                    <td style={s.saleTd}>{sale.instrument_type ?? '-'}</td>
+                    <td style={s.saleTd}>{sale.qualification_code ?? '-'}</td>
+                    <td style={s.saleTd}>{sale.sale_type ?? '-'}</td>
+                    <td style={s.saleTd}>{sale.grantor || '-'}</td>
+                    <td style={s.saleTd}>{sale.grantee || '-'}</td>
+                    <td style={s.saleTd}>{sale.price_per_sqft != null ? `$${sale.price_per_sqft.toFixed(2)}` : '-'}</td>
                     <td style={s.saleTd}>{sale.source}</td>
                   </tr>
                 ))}

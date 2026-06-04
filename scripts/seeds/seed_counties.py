@@ -1,6 +1,6 @@
 """
 Seed the counties table with all 67 Florida counties.
-Safe to run multiple times — uses INSERT ... ON CONFLICT DO NOTHING.
+Safe to run multiple times - uses INSERT ... ON CONFLICT DO NOTHING.
 
 Usage:
     python -m seeds.seed_counties

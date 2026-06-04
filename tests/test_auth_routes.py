@@ -1,6 +1,6 @@
 """
 Integration tests for auth routes using FastAPI TestClient.
-DB is mocked via dependency overrides — no live database required.
+DB is mocked via dependency overrides - no live database required.
 """
 from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock

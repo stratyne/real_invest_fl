@@ -8,7 +8,7 @@ Input:
     Excel files (.xlsx) dropped into data/staging/lis_pendens/
     Exported from: https://dory.escambiaclerk.com/LandmarkWeb
     Search parameters: Doc Type = LIS PENDENS, date range of your choice
-    Recommended cycle: Weekly — export last 10 days, drop file, run parser
+    Recommended cycle: Weekly - export last 10 days, drop file, run parser
 
 Columns expected (from LandmarkWeb export):
     Status, Direct Name, Reverse Name, Record Date, Doc Type,
@@ -19,7 +19,7 @@ Parcel matching strategy:
                s_legal in properties table
     Secondary: SEC/TWP/RGE from Legal field → match against twn/rng/sec
                columns in properties table
-    Fallback:  Log as unmatched — never insert without a parcel_id
+    Fallback:  Log as unmatched - never insert without a parcel_id
 
 Deduplication:
     CFN (Clerk File Number) is the unique key.
@@ -71,7 +71,7 @@ STAGING_DIR     = ROOT / "data" / "staging" / "lis_pendens"
 SIGNAL_TIER     = 1
 SIGNAL_TYPE     = "lis_pendens"
 SOURCE_NAME     = "escambia_landmarkweb"
-FUZZY_THRESHOLD = 72   # Lower than address matching — legal descriptions
+FUZZY_THRESHOLD = 72   # Lower than address matching - legal descriptions
                         # are abbreviated and inconsistent
 
 
@@ -166,12 +166,12 @@ def _build_legal_index(engine) -> tuple[dict, dict]:
     """
     Build two in-memory indexes from the properties table for parcel matching.
 
-    Index 1 — s_legal index:
+    Index 1 - s_legal index:
         Key:   normalized s_legal string
         Value: dict(parcel_id, county_fips, jv, arv_estimate, tot_lvg_area,
                     phy_addr1, phy_zipcd)
 
-    Index 2 — sec/twn/rng index:
+    Index 2 - sec/twn/rng index:
         Key:   "SEC|TWN|RNG" normalized string
         Value: list of parcel dicts (multiple parcels per section is common)
 
@@ -216,7 +216,7 @@ def _build_legal_index(engine) -> tuple[dict, dict]:
             str_index[str_key].append(parcel_data)
 
     logger.info(
-        "Indexes built — legal_index=%d entries str_index=%d keys",
+        "Indexes built - legal_index=%d entries str_index=%d keys",
         len(legal_index), len(str_index),
     )
     return legal_index, str_index
@@ -234,7 +234,7 @@ def _match_parcel(
         1. If LOT + BLK + SUB present: build query string and fuzzy-match
            against s_legal index using rapidfuzz
         2. If SEC + TWP + RGE present: look up str_index
-           (may return multiple parcels — logs ambiguity, returns first)
+           (may return multiple parcels - logs ambiguity, returns first)
         3. Otherwise: return None with reason 'no_legal_data'
 
     Returns:
@@ -248,7 +248,7 @@ def _match_parcel(
     twp = parsed.get("twp")
     rge = parsed.get("rge")
 
-    # ── Strategy 1 — Subdivision fuzzy match ────────────────────────── #
+    # ── Strategy 1 - Subdivision fuzzy match ────────────────────────── #
     if sub:
         lot_norm = lot.replace("/", " ").strip() if lot else ""
         blk_norm = blk.strip() if blk else ""
@@ -279,9 +279,9 @@ def _match_parcel(
                     return legal_index[matched_key], "fuzzy_legal"
 
         except ImportError:
-            logger.warning("rapidfuzz not available — fuzzy matching disabled")
+            logger.warning("rapidfuzz not available - fuzzy matching disabled")
 
-    # ── Strategy 2 — Section/Township/Range match ────────────────────── #
+    # ── Strategy 2 - Section/Township/Range match ────────────────────── #
     if sec and twp and rge:
         twp_norm = re.sub(r"[NS]$", "", twp.strip())
         rge_norm = re.sub(r"[EW]$", "", rge.strip())
@@ -293,7 +293,7 @@ def _match_parcel(
                 return parcels[0], "str"
             else:
                 logger.debug(
-                    "STR match ambiguous — %d parcels for key %s",
+                    "STR match ambiguous - %d parcels for key %s",
                     len(parcels), str_key,
                 )
                 return None, "str_ambiguous"
@@ -391,12 +391,12 @@ def parse_lis_pendens_file(
         try:
             cfn = int(str(row.get("CFN", "")).strip())
         except (ValueError, TypeError):
-            logger.warning("Invalid CFN on row %d — skipping", stats["read"])
+            logger.warning("Invalid CFN on row %d - skipping", stats["read"])
             continue
 
         if cfn in existing_cfns:
             stats["skipped_duplicate"] += 1
-            logger.debug("CFN %d already in DB — skipping", cfn)
+            logger.debug("CFN %d already in DB - skipping", cfn)
             continue
 
         legal_raw   = str(row.get("Legal", "") or "")
@@ -504,7 +504,7 @@ def run_lis_pendens_import(
         files = sorted(STAGING_DIR.glob("*.xlsx")) + sorted(STAGING_DIR.glob("*.xls"))
 
     if not files:
-        logger.info("No Excel files found in %s — nothing to process.", STAGING_DIR)
+        logger.info("No Excel files found in %s - nothing to process.", STAGING_DIR)
         return
 
     logger.info("Found %d file(s) to process", len(files))

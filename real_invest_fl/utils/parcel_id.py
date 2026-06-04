@@ -1,9 +1,9 @@
 """
-Parcel ID normalization — handles format differences between NAL and CAMA exports.
+Parcel ID normalization - handles format differences between NAL and CAMA exports.
 Escambia County NAL uses a numeric string; CAMA may include dashes or spaces.
 Normalization: strip all non-alphanumeric characters, upper-case, zero-pad to 18 chars.
 This strategy is documented here so county-specific variations can be added without
-touching calling code — add a county_fips branch below if a new county deviates.
+touching calling code - add a county_fips branch below if a new county deviates.
 """
 import re
 

@@ -9,18 +9,18 @@ parses the building characteristic fields, and writes results back
 to the properties table.
 
 Writes to:
-    raw_cama_json       — full parsed field dict as JSONB
-    foundation_type     — VARCHAR(100)
-    exterior_wall       — VARCHAR(100)
-    roof_type           — VARCHAR(100)
-    cama_quality_code   — VARCHAR(10)
-    cama_condition_code — VARCHAR(10)
-    bedrooms            — INTEGER
-    bathrooms           — NUMERIC
-    tot_lvg_area        — INTEGER  (CAMA living area overrides NAL if present)
-    act_yr_blt          — INTEGER  (CAMA year built overrides NAL if present)
-    zoning              — VARCHAR(20)
-    cama_enriched_at    — TIMESTAMPTZ
+    raw_cama_json       - full parsed field dict as JSONB
+    foundation_type     - VARCHAR(100)
+    exterior_wall       - VARCHAR(100)
+    roof_type           - VARCHAR(100)
+    cama_quality_code   - VARCHAR(10)
+    cama_condition_code - VARCHAR(10)
+    bedrooms            - INTEGER
+    bathrooms           - NUMERIC
+    tot_lvg_area        - INTEGER  (CAMA living area overrides NAL if present)
+    act_yr_blt          - INTEGER  (CAMA year built overrides NAL if present)
+    zoning              - VARCHAR(20)
+    cama_enriched_at    - TIMESTAMPTZ
 
 Usage:
     python -m real_invest_fl.ingest.cama_ingest [--limit N] [--parcel PARCEL_ID]
@@ -95,7 +95,7 @@ SOFT_BLOCK = "__SOFT_BLOCK__"
 
 # Maps raw ECPA label text → canonical field name
 # Labels are taken directly from the ECPA CAMA detail page HTML.
-# If ECPA changes their labels, update this map — do not change the
+# If ECPA changes their labels, update this map - do not change the
 # canonical field names.
 LABEL_MAP: dict[str, str] = {
     # Year / area
@@ -143,7 +143,7 @@ def parse_cama_html(html: str, parcel_id: str) -> dict:
     - Building header <th> contains: Year Built, Effective Year, Total SF
     - Structural elements are in <span> as <b>FIELD</b>-<i>VALUE</i> pairs
     - Zoning is in the Parcel Information <td> as plain text after a <br/>
-    - Bedrooms and bathrooms are NOT labeled — not available on this page
+    - Bedrooms and bathrooms are NOT labeled - not available on this page
 
     Returns a dict with canonical field names as keys and raw string
     values. Returns an empty dict if the page contains no parseable data.
@@ -152,7 +152,7 @@ def parse_cama_html(html: str, parcel_id: str) -> dict:
     fields: dict[str, str] = {}
 
     # ------------------------------------------------------------------ #
-    # Step 1 — Extract zoning from Parcel Information section             #
+    # Step 1 - Extract zoning from Parcel Information section             #
     # Zoning appears as "R-1AA" after a <br/> following the word "Zoned:" #
     # ------------------------------------------------------------------ #
     map_stats = soup.find(id="ctl00_MasterPlaceHolder_MapBodyStats")
@@ -161,7 +161,7 @@ def parse_cama_html(html: str, parcel_id: str) -> dict:
         for line in text_content.splitlines():
             line = line.strip()
             # Zoning value is a short alphanumeric code on its own line
-            # after "Zoned:" — filter out empty lines and known non-values
+            # after "Zoned:" - filter out empty lines and known non-values
             if line and line not in ("Zoned:", "Approx. Acreage:", "Section Map Id:") \
                     and not line.startswith("CA") \
                     and not re.match(r"^\d+\.\d+$", line) \
@@ -170,12 +170,12 @@ def parse_cama_html(html: str, parcel_id: str) -> dict:
                 break
 
     # ------------------------------------------------------------------ #
-    # Step 2 — Process each building block                                #
+    # Step 2 - Process each building block                                #
     # There may be multiple buildings; we use the first/primary one.      #
     # ------------------------------------------------------------------ #
     building_tables = soup.find(id="ctl00_MasterPlaceHolder_tblBldgs")
     if not building_tables:
-        logger.warning("Parcel %s — no building table found", parcel_id)
+        logger.warning("Parcel %s - no building table found", parcel_id)
         return fields
 
     # Each building is wrapped in an inner <table> with a <th> header
@@ -234,7 +234,7 @@ def parse_cama_html(html: str, parcel_id: str) -> dict:
                 fields["condition_code"] = value_raw
 
     # ------------------------------------------------------------------ #
-    # Step 3 — Extract Total SF from the LightGrey span in tblBldgs      #
+    # Step 3 - Extract Total SF from the LightGrey span in tblBldgs      #
     # The Areas line is in a <span> with background-color:LightGrey,     #
     # not in a <th>. Must be searched separately after the table loop.   #
     # ------------------------------------------------------------------ #
@@ -249,13 +249,13 @@ def parse_cama_html(html: str, parcel_id: str) -> dict:
                     break
                     
     # Stop after we have both year_built and living_area from the
-    # primary building — do not accumulate data from outbuildings
-    # Note: we do NOT break early — we let the loop complete all
+    # primary building - do not accumulate data from outbuildings
+    # Note: we do NOT break early - we let the loop complete all
     # inner tables so the Areas <th> is always reached.
 
     if not fields:
         logger.warning(
-            "Parcel %s — no CAMA fields parsed — page layout may have changed",
+            "Parcel %s - no CAMA fields parsed - page layout may have changed",
             parcel_id,
         )
 
@@ -302,17 +302,17 @@ def coerce_cama_fields(raw: dict, parcel_id: str) -> dict:
     condition    = _clean_str(raw.get("condition_code"), 10)
     zoning       = _clean_str(raw.get("zoning"), 20)
 
-    # Sanity checks — log but do not discard
+    # Sanity checks - log but do not discard
     if year_built and not (1800 <= year_built <= datetime.now().year):
-        logger.warning("Parcel %s — suspicious year_built value: %s", parcel_id, year_built)
+        logger.warning("Parcel %s - suspicious year_built value: %s", parcel_id, year_built)
         year_built = None
 
     if bedrooms and not (0 <= bedrooms <= 20):
-        logger.warning("Parcel %s — suspicious bedrooms value: %s", parcel_id, bedrooms)
+        logger.warning("Parcel %s - suspicious bedrooms value: %s", parcel_id, bedrooms)
         bedrooms = None
 
     if bathrooms and not (0.0 <= bathrooms <= 20.0):
-        logger.warning("Parcel %s — suspicious bathrooms value: %s", parcel_id, bathrooms)
+        logger.warning("Parcel %s - suspicious bathrooms value: %s", parcel_id, bathrooms)
         bathrooms = None
 
     return {
@@ -341,7 +341,7 @@ async def fetch_qualified_parcel_ids(
     (DOR_UC = '1') in Escambia County.
 
     If force=False, skip parcels that already have cama_enriched_at set.
-    DOR UC '1' = Single Family — the only use code with a building to
+    DOR UC '1' = Single Family - the only use code with a building to
     scrape. Vacant, agricultural, and other non-improved parcels are
     excluded.
     """
@@ -382,14 +382,14 @@ async def write_cama_result(
 ) -> None:
     """
     Upsert CAMA fields back onto the properties row for this parcel.
-    Only overwrites a column if the parsed value is not None — never
+    Only overwrites a column if the parsed value is not None - never
     blanks out an existing NAL value with a None from a failed parse.
     """
     if dry_run:
         logger.info("[DRY-RUN] Would write CAMA for %s: %s", parcel_id, coerced)
         return
 
-    # Build SET clause dynamically — only include non-None fields
+    # Build SET clause dynamically - only include non-None fields
     set_parts = []
     params: dict = {"parcel_id": parcel_id, "raw_cama_json": json.dumps(raw_json), "enriched_at": datetime.now(timezone.utc)}
 
@@ -425,7 +425,7 @@ async def fetch_cama_page(
         - HTML string on success
         - SOFT_BLOCK sentinel if the server soft-blocked us (302 to root
           or final response is the ECPA homepage rather than a parcel
-          page). Caller should treat this as "stop the run cleanly" —
+          page). Caller should treat this as "stop the run cleanly" -
           do NOT write anything for this parcel.
         - None on transient/real failure (timeouts, 404, repeated errors)
 
@@ -456,13 +456,13 @@ async def fetch_cama_page(
                         soft_blocked = True
                         break
             if not soft_blocked and resp.status_code == 200:
-                # Final response — must contain real parcel markers.
+                # Final response - must contain real parcel markers.
                 if "Parcel ID:" not in resp.text:
                     soft_blocked = True
 
             if soft_blocked:
                 logger.error(
-                    "Parcel %s — SOFT BLOCK detected (server redirected to "
+                    "Parcel %s - SOFT BLOCK detected (server redirected to "
                     "homepage). Rate limit tripped.",
                     parcel_id,
                 )
@@ -472,7 +472,7 @@ async def fetch_cama_page(
             if resp.status_code == 200:
                 if "General Information" not in resp.text:
                     logger.warning(
-                        "Parcel %s — unexpected page content on attempt %d",
+                        "Parcel %s - unexpected page content on attempt %d",
                         parcel_id, attempt + 1,
                     )
                     await asyncio.sleep(3.0)
@@ -480,25 +480,25 @@ async def fetch_cama_page(
                 return resp.text
 
             elif resp.status_code == 404:
-                logger.warning("Parcel %s — not found (404)", parcel_id)
+                logger.warning("Parcel %s - not found (404)", parcel_id)
                 return None
 
             else:
                 logger.warning(
-                    "Parcel %s — HTTP %s on attempt %d",
+                    "Parcel %s - HTTP %s on attempt %d",
                     parcel_id, resp.status_code, attempt + 1,
                 )
                 await asyncio.sleep(3.0)
                 continue
 
         except httpx.TimeoutException:
-            logger.warning("Parcel %s — timeout on attempt %d", parcel_id, attempt + 1)
+            logger.warning("Parcel %s - timeout on attempt %d", parcel_id, attempt + 1)
             await asyncio.sleep(3.0)
         except httpx.RequestError as exc:
-            logger.warning("Parcel %s — request error: %s", parcel_id, exc)
+            logger.warning("Parcel %s - request error: %s", parcel_id, exc)
             break
 
-    logger.error("Parcel %s — all attempts failed", parcel_id)
+    logger.error("Parcel %s - all attempts failed", parcel_id)
     return None
 
 
@@ -525,7 +525,7 @@ async def run(
             logger.info(
                 "Found %d DOR UC '1' parcels to enrich%s",
                 len(parcel_ids),
-                " (force mode — including already enriched)" if force else "",
+                " (force mode - including already enriched)" if force else "",
             )
 
         if not parcel_ids:
@@ -543,7 +543,7 @@ async def run(
             headers=HEADERS,
         ) as client:
             for i, pid in enumerate(parcel_ids, start=1):
-                logger.info("Processing %d/%d — parcel %s", i, len(parcel_ids), pid)
+                logger.info("Processing %d/%d - parcel %s", i, len(parcel_ids), pid)
 
                 html = await fetch_cama_page(client, pid)
                 if html == SOFT_BLOCK:
@@ -577,7 +577,7 @@ async def run(
 
                 logger.debug("Parcel %s → %s", pid, coerced)
 
-                # Rate limiting with per-parcel jitter — be a good citizen
+                # Rate limiting with per-parcel jitter - be a good citizen
                 if i < len(parcel_ids):
                     sleep_for = random.uniform(delay, delay_max)
                     await asyncio.sleep(sleep_for)
@@ -587,7 +587,7 @@ async def run(
                     if i % 100 == 0:
                         rest_for = random.uniform(240.0, 300.0)
                         logger.info(
-                            "Reached parcel %d — resting %.1fs before continuing.",
+                            "Reached parcel %d - resting %.1fs before continuing.",
                             i, rest_for,
                         )
                         await asyncio.sleep(rest_for)

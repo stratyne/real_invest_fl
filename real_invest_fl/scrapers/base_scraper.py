@@ -39,7 +39,7 @@ from real_invest_fl.utils.robots import can_fetch
 logger = logging.getLogger(__name__)
 
 # User-Agent used for all HTTP requests across all scrapers.
-# Identifies the bot honestly — do not spoof a browser agent.
+# Identifies the bot honestly - do not spoof a browser agent.
 PENSTOCK_UA = (
     "Penstock/1.0 (real estate investment research; "
     "public records only; contact: ops@stratyne.com)"
@@ -56,20 +56,20 @@ class ScrapedListing:
     Standardized listing record produced by every scraper.
 
     Required fields: raw_address, source.
-    All other fields are optional — scrapers populate what is available.
+    All other fields are optional - scrapers populate what is available.
     The matcher resolves raw_address to parcel_id before DB insertion.
     """
-    # Address — required for parcel lookup
+    # Address - required for parcel lookup
     raw_address:     str = ""            # Full address string as scraped
     raw_city:        str = ""
     raw_state:       str = "FL"
     raw_zip:         str = ""
 
-    # Signal classification — set by scraper from class attributes
+    # Signal classification - set by scraper from class attributes
     signal_tier:     int | None = None
     signal_type:     str | None = None
 
-    # Listing metadata — populate what is available
+    # Listing metadata - populate what is available
     listing_type:    str | None = None   # MLS status if known
     list_price:      int | None = None
     list_date:       date | None = None
@@ -82,10 +82,10 @@ class ScrapedListing:
     mls_number:      str | None = None
     source:          str | None = None   # Set from SOURCE_NAME by base class
 
-    # Raw captured data — store everything scraped for auditability
+    # Raw captured data - store everything scraped for auditability
     raw_listing_json: dict = field(default_factory=dict)
 
-    # Scrape timestamp — set automatically by base class post-scrape
+    # Scrape timestamp - set automatically by base class post-scrape
     scraped_at:      datetime | None = None
 
 
@@ -94,16 +94,16 @@ class BaseScraper(ABC):
     Abstract base class for all Penstock source scrapers.
 
     Subclasses must define:
-        SOURCE_NAME  : str   — human-readable source name stored in listing_events.source
-        SIGNAL_TIER  : int   — 1, 2, or 3 per the tier definitions
-        SIGNAL_TYPE  : str   — semantic event type stored in signal_type
-        ENABLED      : bool  — False disables the scraper in the daily run
+        SOURCE_NAME  : str   - human-readable source name stored in listing_events.source
+        SIGNAL_TIER  : int   - 1, 2, or 3 per the tier definitions
+        SIGNAL_TYPE  : str   - semantic event type stored in signal_type
+        ENABLED      : bool  - False disables the scraper in the daily run
 
     Subclasses must implement:
         scrape() -> list[ScrapedListing]
 
     Subclasses may override:
-        delay_range  : tuple[float, float] — (min, max) seconds between requests
+        delay_range  : tuple[float, float] - (min, max) seconds between requests
     """
 
     SOURCE_NAME:  str  = "unknown"
@@ -123,18 +123,18 @@ class BaseScraper(ABC):
         )
 
     # ------------------------------------------------------------------ #
-    # Public interface — called by listing_matcher.py                      #
+    # Public interface - called by listing_matcher.py                      #
     # ------------------------------------------------------------------ #
 
     def run(self) -> list[ScrapedListing]:
         """
         Entry point called by the framework.
         Checks ENABLED, calls scrape(), stamps scraped_at, returns results.
-        Never raises — logs exceptions and returns empty list on failure.
+        Never raises - logs exceptions and returns empty list on failure.
         """
         if not self.ENABLED:
             self.logger.info(
-                "Scraper disabled — skipping | source=%s", self.SOURCE_NAME
+                "Scraper disabled - skipping | source=%s", self.SOURCE_NAME
             )
             return []
 
@@ -166,20 +166,20 @@ class BaseScraper(ABC):
         return results
 
     # ------------------------------------------------------------------ #
-    # Abstract — must be implemented by each source module                 #
+    # Abstract - must be implemented by each source module                 #
     # ------------------------------------------------------------------ #
 
     @abstractmethod
     def scrape(self) -> list[ScrapedListing]:
         """
         Perform the actual scrape and return a list of ScrapedListing records.
-        Do not set source, signal_tier, signal_type, or scraped_at here —
+        Do not set source, signal_tier, signal_type, or scraped_at here -
         run() handles those automatically after scrape() returns.
         """
         ...
 
     # ------------------------------------------------------------------ #
-    # Protected helpers — available to all subclasses                      #
+    # Protected helpers - available to all subclasses                      #
     # ------------------------------------------------------------------ #
 
     def _check_robots(self, url: str) -> bool:
@@ -211,7 +211,7 @@ class BaseScraper(ABC):
         Returns None if robots.txt disallows or fetch_fn raises.
 
         Args:
-            fetch_fn : callable — the actual fetch function (requests.get,
+            fetch_fn : callable - the actual fetch function (requests.get,
                        page.goto, etc.)
             url      : the URL being fetched
             *args, **kwargs passed through to fetch_fn

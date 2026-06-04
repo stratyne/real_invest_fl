@@ -46,7 +46,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logger = logging.getLogger("run_taxdeed_scraper")
 
 # ---------------------------------------------------------------------------
-# Source identity — matches listing_events.source exactly
+# Source identity - matches listing_events.source exactly
 # ---------------------------------------------------------------------------
 _SOURCE       = "escambia_clerk_taxsale"
 _DISPLAY_NAME = "Escambia Clerk \u2013 Tax Deed"
@@ -56,7 +56,7 @@ _COUNTY_FIPS  = "12033"
 def _parse_date_arg(value: str):
     """Parse M/D/YYYY CLI argument to a date object.
 
-    Uses manual integer splitting — avoids the non-portable %-m/%-d/%Y
+    Uses manual integer splitting - avoids the non-portable %-m/%-d/%Y
     strptime flag while correctly handling non-zero-padded input such
     as '5/6/2026'.  Raises argparse.ArgumentTypeError on bad input so
     argparse prints a clean usage message rather than a stack trace.
@@ -107,7 +107,7 @@ def main() -> int:
     engine = create_engine(settings.sync_database_url)
 
     # ------------------------------------------------------------------ #
-    # Step 1 — ingest execution                                           #
+    # Step 1 - ingest execution                                           #
     # Outcome captured independently before any status-table write.       #
     # ------------------------------------------------------------------ #
     ingest_ok = True
@@ -126,9 +126,9 @@ def main() -> int:
         logger.error("Tax deed scraper failed: %s", exc, exc_info=True)
 
     # ------------------------------------------------------------------ #
-    # Step 2 — status-table write (decoupled from ingest outcome)         #
+    # Step 2 - status-table write (decoupled from ingest outcome)         #
     # Failure here is logged as a status update failure only.             #
-    # run() does not return a record count — record_count left as None.   #
+    # run() does not return a record count - record_count left as None.   #
     # ------------------------------------------------------------------ #
     try:
         update_source_status(

@@ -1,4 +1,4 @@
-# Project Penstock — context/cama.md
+# Project Penstock - context/cama.md
 # Paste this alongside AGENTS.md when working on CAMA ingest.
 # Last updated: 2026-06-02
 
@@ -38,12 +38,12 @@ python scripts/run_escambia_cama.py
 - Beds/baths NOT available from ECPA CAMA detail page
 - Sale history IS available and captured from ECPA CAMA detail page. 
   parse_sales() reads the Sales Data table (ctl00_MasterPlaceHolder_SalesCell).
-  Grantor/grantee not available — stored as empty string.
+  Grantor/grantee not available - stored as empty string.
 - Parcel ID format: 16-character no-hyphen string (e.g. 182S303000004001)
-  confirmed from DB. URL format matches directly — no transformation needed.
-- Run via scripts/run_escambia_cama.py for unattended operation — auto-restarts after soft block with 420s wait.
+  confirmed from DB. URL format matches directly - no transformation needed.
+- Run via scripts/run_escambia_cama.py for unattended operation - auto-restarts after soft block with 420s wait.
 - Rate limits: DEFAULT_DELAY=2.0, DEFAULT_DELAY_MAX=5.0, REST_EVERY=None, REST_SECONDS=0.0
-- Search.aspx redirect = parcel absent from ECPA CAMA — logged as warning,
+- Search.aspx redirect = parcel absent from ECPA CAMA - logged as warning,
   cama_enriched_at stamped (excludes from future runs), inter-request delay
   applied, continues run. Returns base.NOT_FOUND sentinel.
 - Sale date parsing: MM/DD/YYYY stored as-is. MM/YYYY normalized to
@@ -53,15 +53,15 @@ python scripts/run_escambia_cama.py
 ## Santa Rosa CAMA Detail
 
 - Source: https://parcelcard.srcpa.gov/?parcel={parcel_id}&baseUrl=http://srcpa.gov/
-- Previous source (parcelview.srcpa.gov) was replaced — site rebuilt as
+- Previous source (parcelview.srcpa.gov) was replaced - site rebuilt as
   Remix/React SSR application. Confirmed 2026-05-24.
 - Server-rendered HTML. No JavaScript, auth, or cookies required.
   Plain httpx GET is sufficient.
 - No robots.txt on srcpa.gov or parcelcard.srcpa.gov.
 - TARGET: dor_uc = '001', 68,312 parcels
 - Status: COMPLETE. 68,303 parcels enriched. Second pass complete (2,265
-  retry parcels). 9 remaining SFR parcels are edge cases — not a blocker.
-  54,453 unenriched parcels are non-SFR dor_uc — will not be scraped.
+  retry parcels). 9 remaining SFR parcels are edge cases - not a blocker.
+  54,453 unenriched parcels are non-SFR dor_uc - will not be scraped.
   No further CAMA runs required until Phase 3 annual refresh pipeline.
 - Rate limits: DEFAULT_DELAY=1.0, DEFAULT_DELAY_MAX=3.0,
   REST_EVERY=500, REST_SECONDS=300.0
@@ -72,14 +72,14 @@ python scripts/run_escambia_cama.py
 
 ### Santa Rosa Page Structure (parcelcard.srcpa.gov)
 - Valid response: window.__remixContext present in body with full parcel data
-- Soft-block signature: window.__remixContext absent entirely — stop run
+- Soft-block signature: window.__remixContext absent entirely - stop run
 - Not-found signature: window.__remixContext present, routes/_index loader
-  data has "empty":true — skip parcel cleanly, continue run
+  data has "empty":true - skip parcel cleanly, continue run
 - Building fields: two-column <td> bold-label/value grid using Tailwind classes.
   Abbreviated labels: extw, RCVR, fndn, Bath, BED, qual
 - Heated area (tot_lvg_area): sourced from remixContext JSON
   path: buildings.units[0].squareFeet.heated
-  HTML summary table (code/actual/heated/effect/rcnld) is unreliable — shows 0
+  HTML summary table (code/actual/heated/effect/rcnld) is unreliable - shows 0
   even for completed buildings. Do not use HTML table for this field.
 - AYB / EYB: sourced from remixContext JSON
   path: buildings.units[0].yearBuilt.{actual,effective}
@@ -90,12 +90,12 @@ python scripts/run_escambia_cama.py
   V/I (sale_type), Price columns.
 - Sale history captured from same parcelcard page per request.
 - parcel_sale_history populated with up to 2 sales per parcel.
-  Parcelcard truncates older records — "... N more" is not scraped.
-  Full history source is parcelview.srcpa.gov — see item 124.
-- instrument_type not surfaced on parcelcard — always None.
+  Parcelcard truncates older records - "... N more" is not scraped.
+  Full history source is parcelview.srcpa.gov - see item 124.
+- instrument_type not surfaced on parcelcard - always None.
   instrument_type IS available on parcelview.srcpa.gov (full parcel page).
   santa_rosa_sales.py (item 124) captures it from that endpoint.
-- multi_parcel not surfaced on parcelcard — always False.
+- multi_parcel not surfaced on parcelcard - always False.
 
 Note: parse_sales() removed from santa_rosa.py (item 127).
 santa_rosa_sales.py is the permanent sale history source, quarterly cadence.
@@ -107,20 +107,20 @@ santa_rosa_sales.py is the permanent sale history source, quarterly cadence.
 
 ### Santa Rosa Data Quality (verified 2026-05-29)
 - 68,303 parcels enriched. Second pass complete.
-- tot_lvg_area corrected for 67,543 parcels — NAL re-ingest had
+- tot_lvg_area corrected for 67,543 parcels - NAL re-ingest had
   overwritten CAMA heated area with NAL effective area. Restored from
   raw_cama_json. tot_lvg_area now protected by _NAL_UPSERT_NEVER_OVERWRITE.
-- 9 remaining unenriched SFR parcels are edge cases — not a blocker.
-- 54,453 unenriched parcels are non-SFR dor_uc — correct by design.
+- 9 remaining unenriched SFR parcels are edge cases - not a blocker.
+- 54,453 unenriched parcels are non-SFR dor_uc - correct by design.
 
 ### Santa Rosa Sale History Scraper (santa_rosa_sales.py)
 - Source: https://parcelview.srcpa.gov/?parcel={parcel_id}&baseUrl=http://srcpa.gov/
-- srcpa.gov/parcel is a wrapper shell — actual data loads via iframe
+- srcpa.gov/parcel is a wrapper shell - actual data loads via iframe
   pointing to parcelview.srcpa.gov. Scraper targets parcelview directly.
 - Server-rendered HTML. Plain httpx GET with browser-mimicking headers.
   No JavaScript rendering required.
 - Parse target: <div id="salesContainer"> table. Each <td> carries
-  data-cell="<column name>" attribute — used as column selector.
+  data-cell="<column name>" attribute - used as column selector.
   No positional index logic.
 - Soft-block detection: id="salesContainer" absent from response body.
 - Not-found detection: salesContainer present, zero <td> data rows.
@@ -132,11 +132,11 @@ santa_rosa_sales.py is the permanent sale history source, quarterly cadence.
   as parcelcard scraper: DEFAULT_DELAY=1.0, DEFAULT_DELAY_MAX=3.0,
   REST_EVERY=500, REST_SECONDS=300.0.
 - Resumability: --resume-from <parcel_id>. Uses >= comparison (inclusive)
-  — safe because upsert is idempotent.
+  - safe because upsert is idempotent.
 - Target: all dor_uc = '001' parcels (68,312). No cama_enriched_at gate.
 - Run complete. Verified 2026-06-02. 323,102 records, 68,009 parcels.
   instrument_type 99.1% populated. qualification_code: Q/U/C/V populated.
-  srcpa_parcelcard rows (36,133) retained — non-overlapping keys.
+  srcpa_parcelcard rows (36,133) retained - non-overlapping keys.
 
 ## base.py Design Rules (never override)
 
@@ -151,9 +151,9 @@ santa_rosa_sales.py is the permanent sale history source, quarterly cadence.
   REST_EVERY (None = no rest pauses), REST_SECONDS
 - target_dor_ucs is county-supplied. Never hardcoded in base.py.
 - Sentinels:
-  - base.SOFT_BLOCK = "__SOFT_BLOCK__" — county fetch_page() returns this
+  - base.SOFT_BLOCK = "__SOFT_BLOCK__" - county fetch_page() returns this
     to stop the run cleanly. Increments failed counter. No DB write.
-  - base.NOT_FOUND = "__NOT_FOUND__" — county fetch_page() returns this
+  - base.NOT_FOUND = "__NOT_FOUND__" - county fetch_page() returns this
     when a parcel is permanently absent from the county PA site (e.g.
     Search.aspx redirect on ECPA). Stamps cama_enriched_at so the parcel
     is excluded from all future runs. Respects inter-request delay.
@@ -162,7 +162,7 @@ santa_rosa_sales.py is the permanent sale history source, quarterly cadence.
     retries exhausted). Increments failed counter. No DB write. Parcel
     remains in queue for next run.
 - base.py uses settings.host_database_url (async) for DB connection.
-  Do not change to settings.database_url — that URL uses the Docker
+  Do not change to settings.database_url - that URL uses the Docker
   service name 'db' and is unreachable from the Windows host.
 
 ## County Module Contract

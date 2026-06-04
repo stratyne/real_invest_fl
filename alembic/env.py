@@ -1,5 +1,5 @@
 """
-Alembic environment — reads SYNC_DATABASE_URL from .env for migrations.
+Alembic environment - reads SYNC_DATABASE_URL from .env for migrations.
 Uses synchronous psycopg2 driver (required by Alembic).
 Async engine (asyncpg) is used only by the FastAPI app at runtime.
 """
@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
-# Load .env from project root — must happen before any model imports
+# Load .env from project root - must happen before any model imports
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Import Base and all models so Alembic can see the full metadata
@@ -20,7 +20,7 @@ import real_invest_fl.db.models  # noqa: E402, F401
 
 config = context.config
 
-# Inject the real database URL from environment — overrides the dummy in alembic.ini
+# Inject the real database URL from environment - overrides the dummy in alembic.ini
 sync_url = os.environ.get("HOST_SYNC_DATABASE_URL")
 if not sync_url:
     raise RuntimeError("HOST_SYNC_DATABASE_URL is not set in .env")

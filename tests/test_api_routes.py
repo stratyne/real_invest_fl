@@ -1,1 +1,1 @@
-"""API route tests — stubs until routes are implemented."""
+"""API route tests - stubs until routes are implemented."""

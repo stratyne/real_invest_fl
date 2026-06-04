@@ -17,9 +17,9 @@ and adjacent <td> cells contain values. There are no data-cell
 attributes or named container divs.
 
 County-specific implementations:
-    fetch_page()      — plain GET with soft-block detection
-    parse_building()  — two-column <td> label/value grid pattern
-    parse_sales()     — Sales section table, interleaved grantor/grantee rows
+    fetch_page()      - plain GET with soft-block detection
+    parse_building()  - two-column <td> label/value grid pattern
+    parse_sales()     - Sales section table, interleaved grantor/grantee rows
 
 Soft-block detection:
     Valid pages contain window.__remixContext with full parcel data.
@@ -127,30 +127,30 @@ async def fetch_page(
             resp = await client.get(url, timeout=20.0)
 
             if resp.status_code == 404:
-                logger.warning("Parcel %s — 404 not found", parcel_id)
+                logger.warning("Parcel %s - 404 not found", parcel_id)
                 return None
 
             if resp.status_code != 200:
                 logger.warning(
-                    "Parcel %s — HTTP %s on attempt %d",
+                    "Parcel %s - HTTP %s on attempt %d",
                     parcel_id, resp.status_code, attempt + 1,
                 )
                 await asyncio.sleep(3.0)
                 continue
 
-            # Soft block: remixContext absent — unexpected server response
+            # Soft block: remixContext absent - unexpected server response
             if "window.__remixContext" not in resp.text:
                 logger.error(
-                    "Parcel %s — soft block or unexpected response "
+                    "Parcel %s - soft block or unexpected response "
                     "(remixContext absent). Stopping run.",
                     parcel_id,
                 )
                 return base.SOFT_BLOCK
 
-            # Parcel not found in SRCPA system — skip cleanly, do not stop run
+            # Parcel not found in SRCPA system - skip cleanly, do not stop run
             if '"empty":true' in resp.text or '"empty": true' in resp.text:
                 logger.warning(
-                    "Parcel %s — not found in SRCPA system (empty:true). Skipping.",
+                    "Parcel %s - not found in SRCPA system (empty:true). Skipping.",
                     parcel_id,
                 )
                 return None
@@ -159,16 +159,16 @@ async def fetch_page(
 
         except httpx.TimeoutException:
             logger.warning(
-                "Parcel %s — timeout on attempt %d", parcel_id, attempt + 1
+                "Parcel %s - timeout on attempt %d", parcel_id, attempt + 1
             )
             await asyncio.sleep(3.0)
         except httpx.RequestError as exc:
             logger.warning(
-                "Parcel %s — request error: %s", parcel_id, exc
+                "Parcel %s - request error: %s", parcel_id, exc
             )
             break
 
-    logger.error("Parcel %s — all attempts failed", parcel_id)
+    logger.error("Parcel %s - all attempts failed", parcel_id)
     return None
 
 
@@ -201,7 +201,7 @@ def _parse_field_grid(soup: BeautifulSoup) -> dict[str, str]:
     "40%", "70%") appear as non-bold <td> cells and are skipped.
 
     Returns dict of {abbreviation: value_text} for all non-empty pairs.
-    # Searches entire document — scoped to known abbreviations via _ABBREV_MAP
+    # Searches entire document - scoped to known abbreviations via _ABBREV_MAP
     # in the caller. AYB/EYB intentionally excluded from _ABBREV_MAP since
     # they are sourced from remixContext JSON in _parse_ayb_eyb_from_context().
     """
@@ -304,7 +304,7 @@ def _parse_zoning_from_context(loader_data: dict) -> Optional[str]:
     Extract zoning code from remixContext.
 
     Path: zonings[0].code
-    The parcelcard HTML has no zoning field — it is only in the JSON.
+    The parcelcard HTML has no zoning field - it is only in the JSON.
     Returns zoning code string, or None if absent.
     """
     try:
@@ -326,7 +326,7 @@ def parse_building(html: str, parcel_id: str) -> dict:
         - Abbreviated labels: extw, RCVR, fndn, Bath, BED, qual
         - Heated area, AYB, EYB, and zoning sourced from
           window.__remixContext JSON (HTML summary table unreliable)
-        - remixContext is present in server-rendered HTML — no JS required
+        - remixContext is present in server-rendered HTML - no JS required
 
     Returns dict with canonical keys matching base.coerce_building()
     input expectations. Returns empty dict if no building fields found.
@@ -345,26 +345,26 @@ def parse_building(html: str, parcel_id: str) -> dict:
         if val:
             fields[canonical] = _strip_code(val)
 
-    # ── Heated area — from remixContext, not HTML table ───────────────── #
+    # ── Heated area - from remixContext, not HTML table ───────────────── #
     heated = _parse_heated_area(loader_data)
     if heated:
         fields["living_area"] = heated
 
-    # ── AYB / EYB — from remixContext ─────────────────────────────────── #
+    # ── AYB / EYB - from remixContext ─────────────────────────────────── #
     ayb, eyb = _parse_ayb_eyb_from_context(loader_data)
     if ayb:
         fields["act_yr_blt"] = ayb
     if eyb:
         fields["eff_yr_blt"] = eyb
 
-    # ── Zoning — from remixContext (not in HTML card) ─────────────────── #
+    # ── Zoning - from remixContext (not in HTML card) ─────────────────── #
     zoning = _parse_zoning_from_context(loader_data)
     if zoning:
         fields["zoning"] = zoning
 
     if not fields:
         logger.warning(
-            "Parcel %s — no building fields parsed from parcelcard", parcel_id
+            "Parcel %s - no building fields parsed from parcelcard", parcel_id
         )
 
     return fields

@@ -1,5 +1,5 @@
 """
-PublicRecordSignal — Phase 2 slot.
+PublicRecordSignal - Phase 2 slot.
 Stores pre-listing motivation signals from public records:
 probate, lis pendens, tax delinquency, divorce, estate filings.
 Schema slot is fully defined now; population deferred to Phase 2.

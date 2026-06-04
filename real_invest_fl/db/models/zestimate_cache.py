@@ -1,5 +1,5 @@
 """
-ZestimateCache — append-only; one row per parcel per fetch.
+ZestimateCache - append-only; one row per parcel per fetch.
 Staleness is checked against filter_profile.zestimate_staleness_days.
 """
 from __future__ import annotations

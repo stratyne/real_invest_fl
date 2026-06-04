@@ -1,10 +1,10 @@
-# Data files — the largest offender, never needed in the image
+# Data files - the largest offender, never needed in the image
 data/
 
-# Secrets — should never be baked into an image
+# Secrets - should never be baked into an image
 secrets/
 
-# Config files — mounted as volumes at runtime
+# Config files - mounted as volumes at runtime
 config/
 
 # Python artifacts
@@ -24,7 +24,7 @@ build/
 venv/
 env/
 
-# Alembic — not needed in the image, migrations run separately
+# Alembic - not needed in the image, migrations run separately
 alembic/
 
 # Tests
@@ -40,7 +40,7 @@ tests/
 .DS_Store
 Thumbs.db
 
-# Env files — never bake secrets into an image
+# Env files - never bake secrets into an image
 .env
 .env.*
 

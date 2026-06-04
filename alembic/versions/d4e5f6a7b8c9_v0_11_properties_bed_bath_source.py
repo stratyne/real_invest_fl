@@ -10,7 +10,7 @@ listing sources (Zillow, Craigslist, etc.) rather than CAMA.
 
 This column is set by any parser or scraper that writes bedrooms/bathrooms
 to the master properties record. It is not overwritten if already populated
-by a higher-confidence source — that logic lives in the parser layer.
+by a higher-confidence source - that logic lives in the parser layer.
 """
 
 from alembic import op

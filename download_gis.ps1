@@ -93,7 +93,7 @@ foreach ($county in $COUNTIES) {
 
     # Skip counties with empty zip list (Escambia, Santa Rosa)
     if ($county.zips.Count -eq 0) {
-        Write-Host "SKIP  $($county.folder) — already staged" -ForegroundColor Yellow
+        Write-Host "SKIP  $($county.folder) - already staged" -ForegroundColor Yellow
         $skipped += $($county.folder)
         continue
     }
@@ -101,7 +101,7 @@ foreach ($county in $COUNTIES) {
     # Skip if any .shp already exists in gis/
     $existing_shp = Get-ChildItem -Path $gis_dir -Filter "*.shp" -ErrorAction SilentlyContinue
     if ($existing_shp) {
-        Write-Host "SKIP  $($county.folder) — .shp already present" -ForegroundColor Yellow
+        Write-Host "SKIP  $($county.folder) - .shp already present" -ForegroundColor Yellow
         $skipped += $($county.folder)
         continue
     }
@@ -117,15 +117,15 @@ foreach ($county in $COUNTIES) {
         $url      = "$BASE_URL/$encoded"
         $zip_dest = "$source_dir\$zip_name"
 
-        Write-Host "DL    $($county.folder) — $zip_name" -ForegroundColor Cyan
+        Write-Host "DL    $($county.folder) - $zip_name" -ForegroundColor Cyan
 
         try {
             Invoke-WebRequest -Uri $url -OutFile $zip_dest -UseBasicParsing
             Expand-Archive -Path $zip_dest -DestinationPath $gis_dir -Force
-            Write-Host "OK    $($county.folder) — $zip_name" -ForegroundColor Green
+            Write-Host "OK    $($county.folder) - $zip_name" -ForegroundColor Green
         }
         catch {
-            Write-Host "FAIL  $($county.folder) — $zip_name — $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "FAIL  $($county.folder) - $zip_name - $($_.Exception.Message)" -ForegroundColor Red
             $county_ok = $false
         }
     }

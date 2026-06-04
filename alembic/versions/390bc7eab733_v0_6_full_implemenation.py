@@ -1,4 +1,4 @@
-"""ingest_runs v0.6 — full implementation
+"""ingest_runs v0.6 - full implementation
 
 Revision ID: 390bc7eab733
 Revises: 5381f80387ed
@@ -17,12 +17,12 @@ depends_on = None
 def upgrade() -> None:
 
     # ------------------------------------------------------------------ #
-    # SECTION 1 — Drop the stubbed ingest_runs table                      #
+    # SECTION 1 - Drop the stubbed ingest_runs table                      #
     # ------------------------------------------------------------------ #
     op.drop_table('ingest_runs')
 
     # ------------------------------------------------------------------ #
-    # SECTION 2 — Recreate ingest_runs fully implemented                  #
+    # SECTION 2 - Recreate ingest_runs fully implemented                  #
     # ------------------------------------------------------------------ #
     op.create_table('ingest_runs',
 
@@ -96,7 +96,7 @@ def upgrade() -> None:
     )
 
     # ------------------------------------------------------------------ #
-    # SECTION 3 — Indexes                                                  #
+    # SECTION 3 - Indexes                                                  #
     # ------------------------------------------------------------------ #
     op.create_index('ix_ingest_runs_county_fips',
                     'ingest_runs', ['county_fips'], unique=False)

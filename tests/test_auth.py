@@ -1,5 +1,5 @@
 """
-Unit tests for auth utilities — passwords.py and tokens.py.
+Unit tests for auth utilities - passwords.py and tokens.py.
 No database required. All tests are pure function calls.
 """
 from datetime import timedelta
@@ -35,7 +35,7 @@ class TestPasswords:
         assert verify_password("", hashed) is False
 
     def test_two_hashes_of_same_password_differ(self):
-        # bcrypt uses random salt — same input must not produce same hash
+        # bcrypt uses random salt - same input must not produce same hash
         hashed1 = hash_password("same-password")
         hashed2 = hash_password("same-password")
         assert hashed1 != hashed2

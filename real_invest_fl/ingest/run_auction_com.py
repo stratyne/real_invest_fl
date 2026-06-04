@@ -44,7 +44,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 logger = logging.getLogger("run_auction_com")
 
 # ---------------------------------------------------------------------------
-# Source identity — source key pulled from scraper's own constant
+# Source identity - source key pulled from scraper's own constant
 # ---------------------------------------------------------------------------
 _DISPLAY_NAME = "Auction.com"
 _COUNTY_FIPS  = "12033"
@@ -72,7 +72,7 @@ def main() -> int:
     args = parse_args()
 
     if args.dry_run:
-        logger.info("DRY-RUN mode — no database writes will occur")
+        logger.info("DRY-RUN mode - no database writes will occur")
         # Dry-run: fetch and match only, log what would be inserted
         # Import internal helpers directly for inspection
         from real_invest_fl.scrapers.auction_com import (
@@ -158,7 +158,7 @@ def main() -> int:
     # ------------------------------------------------------------------ #
     engine = create_engine(settings.sync_database_url, echo=False)
 
-    # Step 1 — ingest execution
+    # Step 1 - ingest execution
     ingest_ok = True
     ingest_exc: Exception | None = None
 
@@ -169,8 +169,8 @@ def main() -> int:
         ingest_exc = exc
         logger.error("Auction.com scraper failed: %s", exc, exc_info=True)
 
-    # Step 2 — status-table write (decoupled from ingest outcome)
-    # run() does not return a record count — record_count left as None.
+    # Step 2 - status-table write (decoupled from ingest outcome)
+    # run() does not return a record count - record_count left as None.
     try:
         update_source_status(
             engine,

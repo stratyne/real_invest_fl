@@ -1,4 +1,4 @@
-"""v0.13 — user/tenant model
+"""v0.13 - user/tenant model
 
 Adds: users, user_county_access, subscription_bundles, bundle_counties.
 Alters: filter_profiles (add user_id, replace global unique constraint
@@ -101,7 +101,7 @@ def upgrade() -> None:
     op.create_index("ix_uca_user_id", "user_county_access", ["user_id"])
 
     # ------------------------------------------------------------------ #
-    # 5. filter_profiles — add user_id, replace uniqueness constraint     #
+    # 5. filter_profiles - add user_id, replace uniqueness constraint     #
     # ------------------------------------------------------------------ #
     # Drop the global unique constraint on profile_name.
     # Verify exact name with:
@@ -138,7 +138,7 @@ def upgrade() -> None:
     )
 
     # ------------------------------------------------------------------ #
-    # 6. outreach_log — add user_id                                        #
+    # 6. outreach_log - add user_id                                        #
     # ------------------------------------------------------------------ #
     op.add_column(
         "outreach_log",
@@ -168,11 +168,11 @@ def downgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
 
-    # outreach_log — remove user_id
+    # outreach_log - remove user_id
     op.drop_constraint("fk_ol_user_id", "outreach_log", type_="foreignkey")
     op.drop_column("outreach_log", "user_id")
 
-    # filter_profiles — remove user_id and partial indexes, restore global unique
+    # filter_profiles - remove user_id and partial indexes, restore global unique
     op.execute("DROP INDEX IF EXISTS uq_fp_user_county_name")
     op.execute("DROP INDEX IF EXISTS uq_fp_system_county_name")
     op.drop_constraint("fk_fp_user_id", "filter_profiles", type_="foreignkey")

@@ -33,7 +33,7 @@ logging.basicConfig(
 logger = logging.getLogger("run_staging_import")
 
 # ---------------------------------------------------------------------------
-# Source metadata — maps CLI source name to (source_key, display_name)
+# Source metadata - maps CLI source name to (source_key, display_name)
 # source_key must match listing_events.source exactly
 # ---------------------------------------------------------------------------
 _SOURCE_META: dict[str, tuple[str, str]] = {
@@ -82,7 +82,7 @@ def main() -> None:
         source_key, display_name = _SOURCE_META[source]
 
         # ---------------------------------------------------------------- #
-        # Step 1 — ingest execution                                         #
+        # Step 1 - ingest execution                                         #
         # Each source runs independently. Failure of one does not stop      #
         # subsequent sources (preserves existing dispatcher behavior).      #
         # ---------------------------------------------------------------- #
@@ -95,7 +95,7 @@ def main() -> None:
                 from real_invest_fl.ingest.staging_parsers.lis_pendens_parser import (
                     run_lis_pendens_import,
                 )
-                # run_lis_pendens_import() returns None — record_count stays None
+                # run_lis_pendens_import() returns None - record_count stays None
                 run_lis_pendens_import(dry_run=args.dry_run, specific_file=args.file)
 
             elif source == "foreclosure":
@@ -130,8 +130,8 @@ def main() -> None:
             )
 
         # ---------------------------------------------------------------- #
-        # Step 2 — status-table write (decoupled from ingest outcome)       #
-        # Skipped entirely on dry-run — dry-run must never write status.    #
+        # Step 2 - status-table write (decoupled from ingest outcome)       #
+        # Skipped entirely on dry-run - dry-run must never write status.    #
         # Failure here is logged as a status update failure only and does   #
         # not affect whether the loop continues to the next source.         #
         # ---------------------------------------------------------------- #

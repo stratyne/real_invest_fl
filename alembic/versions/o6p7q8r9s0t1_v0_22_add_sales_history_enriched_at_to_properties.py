@@ -1,4 +1,4 @@
-"""v0.22 — add sales_history_enriched_at to properties
+"""v0.22 - add sales_history_enriched_at to properties
 
 Revision ID: o6p7q8r9s0t1
 Revises: n5o6p7q8r9s0

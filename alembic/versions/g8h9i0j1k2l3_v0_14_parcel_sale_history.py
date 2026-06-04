@@ -1,4 +1,4 @@
-"""v0.14 — add parcel_sale_history table
+"""v0.14 - add parcel_sale_history table
 
 Revision ID: g8h9i0j1k2l3
 Revises: f7a8b9c0d1e2

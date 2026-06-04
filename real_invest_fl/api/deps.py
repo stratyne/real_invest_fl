@@ -1,8 +1,8 @@
 """
-Shared FastAPI dependencies — DB session, auth, county access enforcement.
+Shared FastAPI dependencies - DB session, auth, county access enforcement.
 
 get_current_user:  validates JWT, returns User ORM object.
-county_access():   factory — returns a dependency that enforces
+county_access():   factory - returns a dependency that enforces
                    user_county_access membership for a county-scoped route.
                    Superusers bypass the check entirely.
 """

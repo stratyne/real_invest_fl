@@ -1,8 +1,8 @@
-# Project Penstock — context/schema.md
+# Project Penstock - context/schema.md
 # Complete current schema reference. Paste alongside AGENTS.md when
 # schema questions arise or when writing migrations, ORM models,
 # or query-time logic.
-# Always current — updated after every migration.
+# Always current - updated after every migration.
 # Last updated: 2026-05-28
 
 ---
@@ -28,11 +28,11 @@ Standard bootstrap block:
 
 ## Migration Chain
 
-HEAD = o6p7q8r9s0t1 (v0.22) — live and verified
+HEAD = o6p7q8r9s0t1 (v0.22) - live and verified
 
 | Rev | Version | Description |
 |---|---|---|
-| 54c4159dbf59 | v0.2 | initial schema — 14 tables |
+| 54c4159dbf59 | v0.2 | initial schema - 14 tables |
 | 4ca6031e21c4 | v0.3 | NAL rename |
 | f422169456bd | v0.4 | replace scalar with JSON filter |
 | 5381f80387ed | v0.5 | zoning, nav_total_assessment, alt_key index |
@@ -49,7 +49,7 @@ HEAD = o6p7q8r9s0t1 (v0.22) — live and verified
 | i0j1k2l3m4n5 | v0.16 | listing_scores table; strip scoring columns from listing_events |
 | j1k2l3m4n5o6 | v0.17 | Phase 4 outreach schema |
 | k2l3m4n5o6p7 | v0.18 | user_profile_prefs |
-| l3m4n5o6p7q8 | v0.19 | multi-county filter profiles — county_fips VARCHAR(5)[] |
+| l3m4n5o6p7q8 | v0.19 | multi-county filter profiles - county_fips VARCHAR(5)[] |
 | m4n5o6p7q8r9 | v0.20 | listing_events workflow_status CHECK constraint |
 | n5o6p7q8r9s0 | v0.21 | add arv_source to properties |
 | o6p7q8r9s0t1 | v0.22 | add sales_history_enriched_at to properties |

@@ -89,7 +89,7 @@ def main() -> None:
                         "body":   resp.text(),
                     })
             except Exception:
-                # Timeout — no more responses arriving
+                # Timeout - no more responses arriving
                 print(f"  No more responses after attempt {attempt + 1}")
                 break
 

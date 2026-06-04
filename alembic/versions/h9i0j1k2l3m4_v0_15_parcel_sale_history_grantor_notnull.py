@@ -1,4 +1,4 @@
-"""v0.15 — parcel_sale_history grantor/grantee NOT NULL DEFAULT ''
+"""v0.15 - parcel_sale_history grantor/grantee NOT NULL DEFAULT ''
 
 NULL grantor/grantee breaks the unique constraint uq_psh_county_parcel_sale
 because PostgreSQL treats NULL != NULL in unique indexes. Coercing to
@@ -18,7 +18,7 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Step 1 — coerce any existing NULLs to empty string
+    # Step 1 - coerce any existing NULLs to empty string
     op.execute(
         "UPDATE parcel_sale_history "
         "SET grantor = '' WHERE grantor IS NULL"
@@ -28,7 +28,7 @@ def upgrade() -> None:
         "SET grantee = '' WHERE grantee IS NULL"
     )
 
-    # Step 2 — alter columns to NOT NULL with default ''
+    # Step 2 - alter columns to NOT NULL with default ''
     op.alter_column(
         "parcel_sale_history", "grantor",
         existing_type=sa.String(300),

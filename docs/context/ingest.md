@@ -1,4 +1,4 @@
-# Project Penstock — context/ingest.md
+# Project Penstock - context/ingest.md
 # Paste this alongside AGENTS.md when working on NAL/GIS ingest pipeline.
 # Last updated: 2026-05-04
 
@@ -34,7 +34,7 @@ Florida DOR specifies use codes as three-digit zero-padded strings.
 Some county NAL files ship unpadded (Escambia: '1', '2', '93').
 nal_mapper.py _dor_uc() normalizes all variants to '001', '002', '093' at ingest.
 
-Escambia backfill (already applied 2026-05-04 — do not re-run):
+Escambia backfill (already applied 2026-05-04 - do not re-run):
   UPDATE properties SET dor_uc = LPAD(TRIM(dor_uc), 3, '0')
   WHERE county_fips = '12033' AND dor_uc IS NOT NULL
   AND LENGTH(TRIM(dor_uc)) < 3;
@@ -43,7 +43,7 @@ Escambia backfill (already applied 2026-05-04 — do not re-run):
 
 - CRS detection is per-county at runtime via gdf.crs
 - COUNTY_REGISTRY stores confirmed CRS for documentation only
-- gdf.crs.to_epsg() is authoritative — not the raw .prj text
+- gdf.crs.to_epsg() is authoritative - not the raw .prj text
 - Santa Rosa confirmed EPSG:2883 (raw .prj text incorrectly suggested EPSG:2881)
 
 ## Florida Bounding Box (centroid sanity checks)
@@ -72,26 +72,26 @@ Standard bootstrap block:
 ## Special Cases
 
 - Miami-Dade: two shapefiles (main + condos)
-- Saint Johns: condos zip contained .dbf only — no .shp, no action required
+- Saint Johns: condos zip contained .dbf only - no .shp, no action required
 
 ## COUNTY_REGISTRY
 
 Currently duplicated in nal_ingest.py and gis_ingest.py.
 Consolidation into a shared module is a pending item (item 18).
-Do not consolidate until explicitly assigned — do not touch during other work.
+Do not consolidate until explicitly assigned - do not touch during other work.
 
 ## Ingest Pipeline Rules (never override)
 
 - Filters are query-time only. NEVER apply filter criteria at ingest time.
   Every parcel from every county NAL is written as-is.
 - --county-fips is a required CLI arg for both nal_ingest.py and gis_ingest.py.
-- mqi_qualified is set to false for all rows at ingest — it is a POC artifact
+- mqi_qualified is set to false for all rows at ingest - it is a POC artifact
   and will be removed in a future migration.
   
 ## Host-Side DB Session Pattern
 
 nal_ingest.py runs on the Windows host, not inside the Docker network.
-settings.database_url uses the Docker service name 'db' as the hostname —
+settings.database_url uses the Docker service name 'db' as the hostname -
 unreachable from the host. nal_ingest.py therefore does NOT import
 AsyncSessionLocal from real_invest_fl.db.session.
 
@@ -105,7 +105,7 @@ the host:
 This is the same pattern used by the CAMA scrapers (cama/base.py).
 Any future host-side ingest script must follow this pattern.
 gis_ingest.py uses the sync pattern (settings.host_sync_database_url)
-and is unaffected — verify before adding any new async session usage
+and is unaffected - verify before adding any new async session usage
 to gis_ingest.py.
 
 ## Staging File-Drop Workflow
@@ -138,17 +138,17 @@ parcel_sale_history is populated by county PA scrapers, not NAL ingest.
 
 Santa Rosa: real_invest_fl/ingest/sales/santa_rosa_sales.py
     Source: https://srcpa.gov/parcel?id={parcel_id}
-    Full sale history — all transactions, instrument_type included.
-    Parcelcard truncates at 2 — do not use for sale history.
+    Full sale history - all transactions, instrument_type included.
+    Parcelcard truncates at 2 - do not use for sale history.
     Quarterly cadence. Resumable via --resume-from {parcel_id}.
 
 Escambia: real_invest_fl/ingest/cama/escambia.py (parse_sales)
     Source: https://www.escpa.org/CAMA/Detail_a.aspx?s={parcel_id}
-    Full sale history — instrument_type populated, qualification_code absent.
+    Full sale history - instrument_type populated, qualification_code absent.
     Runs as part of CAMA enrichment. Quarterly re-scrape via --force.
 
 Known gaps:
     Santa Rosa: 57,987 parcels capped at 2 sales (parcelcard truncation).
-    Backfill via santa_rosa_sales.py — item 124.
-    Both counties: sale_yr1 NULL for 82%+ SFR — use parcel_sale_history
+    Backfill via santa_rosa_sales.py - item 124.
+    Both counties: sale_yr1 NULL for 82%+ SFR - use parcel_sale_history
     for years_since_last_sale computation, not NAL embedded fields.

@@ -1,1 +1,1 @@
-"""Filter evaluation tests — stubs until filter logic is implemented."""
+"""Filter evaluation tests - stubs until filter logic is implemented."""

@@ -1,6 +1,6 @@
 """
-Property — Master Qualified Inventory (MQI).
-Primary key is (county_fips, parcel_id) — composite, county-scoped.
+Property - Master Qualified Inventory (MQI).
+Primary key is (county_fips, parcel_id) - composite, county-scoped.
 NAL fields use DOR field names directly. CAMA fields populated in Stage 2.
 Phase 2 fields (seller_probability_score, permit_count) are nullable
 and will remain NULL until their respective pipeline stages are built.
@@ -40,12 +40,12 @@ class Property(Base):
     county_fips: Mapped[str] = mapped_column(String(5), primary_key=True)
     parcel_id:   Mapped[str] = mapped_column(String(30), primary_key=True)
 
-    # STATE_PAR_ID — DOR-assigned statewide uniform parcel identifier.
+    # STATE_PAR_ID - DOR-assigned statewide uniform parcel identifier.
     # Replaces parcel_id_normalized. Used as cross-county join key.
     state_par_id: Mapped[str | None] = mapped_column(String(18))
 
     # ------------------------------------------------------------------ #
-    # NAL — Parcel identification and classification                       #
+    # NAL - Parcel identification and classification                       #
     # ------------------------------------------------------------------ #
     co_no:    Mapped[int | None] = mapped_column(Integer)   # CO_NO field 1
     asmnt_yr: Mapped[int | None] = mapped_column(Integer)   # ASMNT_YR field 4
@@ -53,19 +53,19 @@ class Property(Base):
     pa_uc:    Mapped[str | None] = mapped_column(String(10))  # PA_UC field 9
 
     # ------------------------------------------------------------------ #
-    # NAL — Value fields                                                   #
+    # NAL - Value fields                                                   #
     # ------------------------------------------------------------------ #
-    jv:      Mapped[int | None] = mapped_column(Integer)  # JV field 11 — Just Value
-    av_nsd:  Mapped[int | None] = mapped_column(Integer)  # AV_NSD field 15 — Non-school assessed value
-    tv_nsd:  Mapped[int | None] = mapped_column(Integer)  # TV_NSD field 17 — Non-school taxable value
-    av_sd:   Mapped[int | None] = mapped_column(Integer)  # AV_SD field 14 — School assessed value
-    tv_sd:   Mapped[int | None] = mapped_column(Integer)  # TV_SD field 16 — School taxable value
-    jv_hmstd: Mapped[int | None] = mapped_column(Integer) # JV_HMSTD field 18 — SOH signal
-    lnd_val:  Mapped[int | None] = mapped_column(Integer) # LND_VAL field 41 — Land value
-    exmpt_01: Mapped[int | None] = mapped_column(Integer) # EXMPT_01 field 110 — Homestead exemption
+    jv:      Mapped[int | None] = mapped_column(Integer)  # JV field 11 - Just Value
+    av_nsd:  Mapped[int | None] = mapped_column(Integer)  # AV_NSD field 15 - Non-school assessed value
+    tv_nsd:  Mapped[int | None] = mapped_column(Integer)  # TV_NSD field 17 - Non-school taxable value
+    av_sd:   Mapped[int | None] = mapped_column(Integer)  # AV_SD field 14 - School assessed value
+    tv_sd:   Mapped[int | None] = mapped_column(Integer)  # TV_SD field 16 - School taxable value
+    jv_hmstd: Mapped[int | None] = mapped_column(Integer) # JV_HMSTD field 18 - SOH signal
+    lnd_val:  Mapped[int | None] = mapped_column(Integer) # LND_VAL field 41 - Land value
+    exmpt_01: Mapped[int | None] = mapped_column(Integer) # EXMPT_01 field 110 - Homestead exemption
 
     # ------------------------------------------------------------------ #
-    # NAL — Parcel change / condition / disaster flags                     #
+    # NAL - Parcel change / condition / disaster flags                     #
     # ------------------------------------------------------------------ #
     nconst_val: Mapped[int | None] = mapped_column(Integer)      # NCONST_VAL field 36
     del_val:    Mapped[int | None] = mapped_column(Integer)      # DEL_VAL field 37
@@ -75,12 +75,12 @@ class Property(Base):
     spass_cd:   Mapped[str | None] = mapped_column(String(1))    # SPASS_CD field 10
 
     # ------------------------------------------------------------------ #
-    # NAL — Land and improvement fields                                    #
+    # NAL - Land and improvement fields                                    #
     # ------------------------------------------------------------------ #
     lnd_sqfoot:   Mapped[int | None] = mapped_column(Integer)  # LND_SQFOOT field 44
-    dt_last_inspt: Mapped[str | None] = mapped_column(String(4)) # DT_LAST_INSPT field 45 — MMYY
+    dt_last_inspt: Mapped[str | None] = mapped_column(String(4)) # DT_LAST_INSPT field 45 - MMYY
     imp_qual:     Mapped[int | None] = mapped_column(Integer)  # IMP_QUAL field 46
-    const_class:  Mapped[int | None] = mapped_column(Integer)  # CONST_CLASS field 47 — blank for SFR
+    const_class:  Mapped[int | None] = mapped_column(Integer)  # CONST_CLASS field 47 - blank for SFR
     eff_yr_blt:   Mapped[int | None] = mapped_column(Integer)  # EFF_YR_BLT field 48
     act_yr_blt:   Mapped[int | None] = mapped_column(Integer)  # ACT_YR_BLT field 49
     tot_lvg_area: Mapped[int | None] = mapped_column(Integer)  # TOT_LVG_AREA field 50
@@ -89,13 +89,13 @@ class Property(Base):
     spec_feat_val: Mapped[int | None] = mapped_column(Integer) # SPEC_FEAT_VAL field 53
 
     # ------------------------------------------------------------------ #
-    # v0.5 additions — zoning, nav_total_assessment                       #
+    # v0.5 additions - zoning, nav_total_assessment                       #
     # ------------------------------------------------------------------ #
     zoning:                Mapped[str | None]   = mapped_column(String(20))
     nav_total_assessment:  Mapped[float | None] = mapped_column(Numeric(12, 2))
 
     # ------------------------------------------------------------------ #
-    # v0.9 additions — computed value fields                              #
+    # v0.9 additions - computed value fields                              #
     # ------------------------------------------------------------------ #
     jv_per_sqft:           Mapped[float | None] = mapped_column(Numeric)
     arv_estimate:          Mapped[int | None]   = mapped_column(Integer)
@@ -104,7 +104,7 @@ class Property(Base):
     list_price:            Mapped[int | None]   = mapped_column(Integer)
 
     # ------------------------------------------------------------------ #
-    # NAL — Embedded sale history (fields 54-73, merged from SDF by DOR)  #
+    # NAL - Embedded sale history (fields 54-73, merged from SDF by DOR)  #
     # Up to two most recent qualifying sales per parcel.                  #
     # For complete sale history use sales_comps table (SDF source).       #
     # ------------------------------------------------------------------ #
@@ -125,7 +125,7 @@ class Property(Base):
     sal_chng_cd2:   Mapped[str | None] = mapped_column(String(1))  # field 73
 
     # ------------------------------------------------------------------ #
-    # NAL — Owner and mailing address (fields 74-80)                      #
+    # NAL - Owner and mailing address (fields 74-80)                      #
     # ------------------------------------------------------------------ #
     own_name:      Mapped[str | None] = mapped_column(String(50))   # OWN_NAME field 74
     own_addr1:     Mapped[str | None] = mapped_column(String(40))   # OWN_ADDR1 field 75
@@ -136,14 +136,14 @@ class Property(Base):
     own_state_dom: Mapped[str | None] = mapped_column(String(2))    # OWN_STATE_DOM field 80
 
     # ------------------------------------------------------------------ #
-    # NAL — Physical / situs address (fields 99-102)                      #
+    # NAL - Physical / situs address (fields 99-102)                      #
     # ------------------------------------------------------------------ #
     phy_addr1: Mapped[str | None] = mapped_column(String(40))  # PHY_ADDR1 field 99
     phy_city:  Mapped[str | None] = mapped_column(String(40))  # PHY_CITY field 101
     phy_zipcd: Mapped[str | None] = mapped_column(String(5))   # PHY_ZIPCD field 102
 
     # ------------------------------------------------------------------ #
-    # NAL — Geographic / location fields                                   #
+    # NAL - Geographic / location fields                                   #
     # ------------------------------------------------------------------ #
     mkt_ar:   Mapped[str | None] = mapped_column(String(3))   # MKT_AR field 91
     nbrhd_cd: Mapped[str | None] = mapped_column(String(10))  # NBRHD_CD field 92
@@ -155,7 +155,7 @@ class Property(Base):
     s_legal:  Mapped[str | None] = mapped_column(String(30))  # S_LEGAL field 88
 
     # ------------------------------------------------------------------ #
-    # Derived — computed during Stage 1 ingest, not raw NAL fields        #
+    # Derived - computed during Stage 1 ingest, not raw NAL fields        #
     # ------------------------------------------------------------------ #
     absentee_owner: Mapped[bool | None] = mapped_column(Boolean)
     # own_addr1/own_zipcd != phy_addr1/phy_zipcd
@@ -164,13 +164,13 @@ class Property(Base):
     # (jv - lnd_val) / lnd_val
 
     soh_compression_ratio: Mapped[float | None] = mapped_column(Numeric(6, 4))
-    # av_nsd / jv — approaches 1.0 when SOH cap is not constraining
+    # av_nsd / jv - approaches 1.0 when SOH cap is not constraining
 
     years_since_last_sale: Mapped[int | None] = mapped_column(Integer)
     # asmnt_yr - sale_yr1
 
     # ------------------------------------------------------------------ #
-    # CAMA — Stage 2 enrichment (nullable until CAMA pipeline runs)       #
+    # CAMA - Stage 2 enrichment (nullable until CAMA pipeline runs)       #
     # ------------------------------------------------------------------ #
     foundation_type:    Mapped[str | None] = mapped_column(String(100))
     exterior_wall:      Mapped[str | None] = mapped_column(String(100))
@@ -183,7 +183,7 @@ class Property(Base):
     cama_enriched_at:   Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # ------------------------------------------------------------------ #
-    # Geometry (PostGIS) — centroid POINT from GIS shapefile              #
+    # Geometry (PostGIS) - centroid POINT from GIS shapefile              #
     # ------------------------------------------------------------------ #
     geom:      Mapped[object | None] = mapped_column(
         Geometry(geometry_type="POINT", srid=4326), nullable=True
@@ -201,7 +201,7 @@ class Property(Base):
     # Stage at which parcel was last evaluated: 'NAL', 'CAMA', 'FULL'
 
     # ------------------------------------------------------------------ #
-    # Phase 2 scoring slots — NULL until Phase 2 pipeline is built        #
+    # Phase 2 scoring slots - NULL until Phase 2 pipeline is built        #
     # ------------------------------------------------------------------ #
     seller_probability_score: Mapped[float | None] = mapped_column(Numeric(5, 4))
     seller_score_updated_at:  Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

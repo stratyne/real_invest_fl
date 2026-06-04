@@ -2,10 +2,10 @@
 Seed subscription_bundles and bundle_counties.
 Also activates Santa Rosa County (12113).
 
-Idempotent — safe to run multiple times.
+Idempotent - safe to run multiple times.
 
 Bundles seeded:
-    pensacola_metro — Escambia (12033) + Santa Rosa (12113)
+    pensacola_metro - Escambia (12033) + Santa Rosa (12113)
 
 Usage:
     python scripts/seeds/seed_bundles.py
@@ -22,7 +22,7 @@ from config.settings import settings
 BUNDLES = [
     {
         "bundle_name": "pensacola_metro",
-        "description": "Pensacola Metro area — Escambia and Santa Rosa counties",
+        "description": "Pensacola Metro area - Escambia and Santa Rosa counties",
         "is_active": True,
         "counties": ["12033", "12113"],
     },
@@ -41,7 +41,7 @@ def main() -> None:
         print("Santa Rosa County (12113) activated.")
 
         for bundle in BUNDLES:
-            # Insert bundle — skip if already exists
+            # Insert bundle - skip if already exists
             result = conn.execute(
                 text("""
                     INSERT INTO subscription_bundles (bundle_name, description, is_active)
@@ -57,7 +57,7 @@ def main() -> None:
             if result.rowcount == 1:
                 print(f"Inserted bundle '{bundle['bundle_name']}'.")
             else:
-                print(f"Bundle '{bundle['bundle_name']}' already exists — skipped.")
+                print(f"Bundle '{bundle['bundle_name']}' already exists - skipped.")
 
             # Fetch the bundle id
             row = conn.execute(
@@ -79,7 +79,7 @@ def main() -> None:
                 if r.rowcount == 1:
                     print(f"  Added county {fips} to bundle '{bundle['bundle_name']}'.")
                 else:
-                    print(f"  County {fips} already in bundle '{bundle['bundle_name']}' — skipped.")
+                    print(f"  County {fips} already in bundle '{bundle['bundle_name']}' - skipped.")
 
     print("seed_bundles complete.")
 

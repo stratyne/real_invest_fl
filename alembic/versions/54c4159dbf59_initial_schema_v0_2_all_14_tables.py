@@ -1,4 +1,4 @@
-"""initial schema v0.2 — all 14 tables
+"""initial schema v0.2 - all 14 tables
 
 Revision ID: 54c4159dbf59
 Revises: 

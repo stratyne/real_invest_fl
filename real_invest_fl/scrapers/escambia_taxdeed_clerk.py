@@ -22,8 +22,8 @@ For each scraped row:
     in properties (county_fips='12033').  Rows with no match are skipped and
     counted.
   - Inserts into listing_events using listing_events.parcel_id (VARCHAR, the
-    normalised Reference string directly) — there is no property_id FK column.
-  - Deduplicates on mls_number via WHERE NOT EXISTS — there is no unique
+    normalised Reference string directly) - there is no property_id FK column.
+  - Deduplicates on mls_number via WHERE NOT EXISTS - there is no unique
     constraint on listing_events.mls_number so ON CONFLICT cannot be used.
 
 Schema facts confirmed from \\d listing_events:
@@ -141,7 +141,7 @@ def _parse_sale_date(raw: str) -> Optional[date]:
 
     The live page delivers abbreviated month names: 'May  6 2026', 'Nov 4 2026'.
     %b matches abbreviated months (Jan, Feb, ... Nov, Dec).
-    %B matches full month names (January, February, ...) — never used here.
+    %B matches full month names (January, February, ...) - never used here.
     Collapses multiple spaces before parsing, then zero-pads the day token
     as a fallback for single-digit days on Windows strptime.
     """
@@ -153,7 +153,7 @@ def _parse_sale_date(raw: str) -> Optional[date]:
         except ValueError:
             continue
 
-    # Zero-pad the day token and retry — handles 'Nov 4 2026' -> 'Nov 04 2026'
+    # Zero-pad the day token and retry - handles 'Nov 4 2026' -> 'Nov 04 2026'
     parts = raw.split(" ")
     if len(parts) == 3:
         try:
@@ -187,7 +187,7 @@ def fetch_all_dates(context) -> list[date]:
     page = context.new_page()
     try:
         page.goto(DATES_URL, wait_until="domcontentloaded", timeout=30_000)
-        # The dates list is server-rendered static HTML — no JS wait needed.
+        # The dates list is server-rendered static HTML - no JS wait needed.
         page.wait_for_selector("ul li", timeout=10_000)
         html = page.content()
     finally:
@@ -245,9 +245,9 @@ def parse_detail_page(html: str, sale_date_str: str) -> list[dict]:
     """Parse taxsaleMobile.asp HTML into a list of row dicts.
 
     The page uses a nested table layout:
-      - Outer wrapper table (no distinguishing attrs) — contains title text
-      - Data table (bgcolor='#0054A6') — nested inside outer, contains all rows
-      - Footer table (width='100%') — contains the Count= line
+      - Outer wrapper table (no distinguishing attrs) - contains title text
+      - Data table (bgcolor='#0054A6') - nested inside outer, contains all rows
+      - Footer table (width='100%') - contains the Count= line
 
     soup.find("table") returns the outer wrapper, not the data table, so we
     select the data table explicitly by its bgcolor attribute.
@@ -260,7 +260,7 @@ def parse_detail_page(html: str, sale_date_str: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
 
     # Select the data table by its unique bgcolor attribute.
-    # This is stable — it is hardcoded in the ASP source.
+    # This is stable - it is hardcoded in the ASP source.
     table = soup.find("table", attrs={"bgcolor": "#0054A6"})
     if not table:
         logger.warning("No data table (bgcolor=#0054A6) found for sale date %s", sale_date_str)
@@ -307,7 +307,7 @@ def fetch_detail(context, sale_date: date) -> list[dict]:
 
     The saledate parameter uses literal forward slashes (M/D/YYYY, no
     zero-padding).  The URL is pre-built as a string so Playwright's
-    goto() does not percent-encode the slashes — the ASP server rejects
+    goto() does not percent-encode the slashes - the ASP server rejects
     percent-encoded slashes with a 403.
 
     Waits for TABLE_READY_SELECTOR before capturing HTML so that the
@@ -329,7 +329,7 @@ def fetch_detail(context, sale_date: date) -> list[dict]:
             )
         except PlaywrightTimeoutError:
             logger.info(
-                "Table selector not found for %s — sale date likely has no listings",
+                "Table selector not found for %s - sale date likely has no listings",
                 date_str,
             )
             return []
@@ -354,8 +354,8 @@ PROPERTY_EXISTS_SQL = text(
     """
 )
 
-# Deduplication via WHERE NOT EXISTS — no unique constraint on mls_number.
-# CAST(:raw_listing_json AS jsonb) — never ::jsonb syntax per project spec.
+# Deduplication via WHERE NOT EXISTS - no unique constraint on mls_number.
+# CAST(:raw_listing_json AS jsonb) - never ::jsonb syntax per project spec.
 INSERT_LISTING_EVENT_SQL = text(
     """
     INSERT INTO listing_events (
@@ -424,7 +424,7 @@ def upsert_records(engine, rows: list[dict]) -> tuple[int, int, int]:
             norm_parcel = _normalize_parcel(row.get("reference", ""))
             if not norm_parcel:
                 logger.debug(
-                    "Empty Reference for clerk_file=%s — skipping",
+                    "Empty Reference for clerk_file=%s - skipping",
                     row.get("clerk_file"),
                 )
                 skipped_no_property += 1
@@ -437,7 +437,7 @@ def upsert_records(engine, rows: list[dict]) -> tuple[int, int, int]:
 
             if exists is None:
                 logger.debug(
-                    "No property match: parcel=%s clerk_file=%s — skipping",
+                    "No property match: parcel=%s clerk_file=%s - skipping",
                     norm_parcel, row.get("clerk_file"),
                 )
                 skipped_no_property += 1
@@ -478,7 +478,7 @@ def upsert_records(engine, rows: list[dict]) -> tuple[int, int, int]:
         skipped_duplicate  += skipped_this_batch
         total_inserted     += inserted_this_batch
         logger.info(
-            "Batch %d — inserted=%d  duplicates_skipped=%d  "
+            "Batch %d - inserted=%d  duplicates_skipped=%d  "
             "(running: inserted=%d no_property=%d duplicates=%d)",
             batch_num, inserted_this_batch, skipped_this_batch,
             total_inserted, skipped_no_property, skipped_duplicate,
@@ -551,7 +551,7 @@ def run(
                     raise ValueError(f"Unknown mode: {mode!r}")
 
             if not target_dates:
-                logger.info("No dates to process — exiting.")
+                logger.info("No dates to process - exiting.")
                 return
 
             # ------------------------------------------------------------------
@@ -585,7 +585,7 @@ def run(
                         total_skipped_property += skipped_prop
                         total_skipped_dup      += skipped_dup
                         logger.info(
-                            "Date %s — inserted=%d  skipped_no_property=%d  "
+                            "Date %s - inserted=%d  skipped_no_property=%d  "
                             "skipped_duplicate=%d",
                             sale_date, inserted, skipped_prop, skipped_dup,
                         )
@@ -596,7 +596,7 @@ def run(
                         )
                 else:
                     logger.info(
-                        "Date %s — 0 rows from detail page", sale_date
+                        "Date %s - 0 rows from detail page", sale_date
                     )
 
                 if i < len(target_dates) - 1:
@@ -607,7 +607,7 @@ def run(
             browser.close()
 
     logger.info(
-        "Run complete — total_inserted=%d  skipped_no_property=%d  "
+        "Run complete - total_inserted=%d  skipped_no_property=%d  "
         "skipped_duplicate=%d",
         total_inserted, total_skipped_property, total_skipped_dup,
     )

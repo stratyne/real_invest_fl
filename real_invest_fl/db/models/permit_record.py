@@ -1,5 +1,5 @@
 """
-PermitRecord — Phase 2 slot.
+PermitRecord - Phase 2 slot.
 Populated from Escambia County Building Services per-parcel queries.
 Drives dynamic rehab cost estimation in the scoring engine.
 """

@@ -1,6 +1,6 @@
 # real_invest_fl/ingest/gis_ingest.py
 """
-GIS shapefile ingest pipeline — Stage 3.
+GIS shapefile ingest pipeline - Stage 3.
 
 Reads the parcel shapefile for a given county, reprojects from the
 county's source CRS (read from the .prj file) to EPSG:4326 (WGS84),
@@ -8,12 +8,12 @@ computes the centroid of each parcel polygon, and writes the following
 columns back to the properties table for every parcel that exists in
 both the shapefile and the database:
 
-    geom        — PostGIS POINT geometry in EPSG:4326 (WKT via ST_GeomFromText)
-    latitude    — NUMERIC, centroid latitude (decimal degrees)
-    longitude   — NUMERIC, centroid longitude (decimal degrees)
+    geom        - PostGIS POINT geometry in EPSG:4326 (WKT via ST_GeomFromText)
+    latitude    - NUMERIC, centroid latitude (decimal degrees)
+    longitude   - NUMERIC, centroid longitude (decimal degrees)
 
 Matching is performed on PARCEL_ID (shapefile) = parcel_id (properties).
-Only parcels already present in the properties table are updated —
+Only parcels already present in the properties table are updated -
 no new rows are inserted.
 
 File paths are resolved programmatically from the canonical folder
@@ -73,11 +73,11 @@ logging.basicConfig(
 logger = logging.getLogger("gis_ingest")
 
 # ── constants ─────────────────────────────────────────────────────────────────
-TARGET_CRS    = "EPSG:4326"   # WGS84 — matches properties.geom SRID
+TARGET_CRS    = "EPSG:4326"   # WGS84 - matches properties.geom SRID
 PARCEL_COL    = "PARCEL_ID"   # Shapefile column that maps to properties.parcel_id
 DEFAULT_BATCH = 500
 
-# Florida statewide bounding box — used for centroid sanity check on
+# Florida statewide bounding box - used for centroid sanity check on
 # every county. County-specific bounds are never hardcoded here.
 FL_LAT_MIN, FL_LAT_MAX = 24.4, 31.1
 FL_LON_MIN, FL_LON_MAX = -87.65, -80.0
@@ -92,12 +92,12 @@ _COUNTIES_DIR = ROOT / "data" / "raw" / "counties"
 
 # Maps FIPS → (display_name, expected_source_crs).
 # Most Florida county shapefiles use EPSG:2883 (FL West State Plane, feet).
-# Counties in the North or East zones use different EPSG codes — these are
+# Counties in the North or East zones use different EPSG codes - these are
 # recorded here as the confirmed CRS read from each county's .prj file.
 # The CRS stored here is documentation only. The actual reprojection always
 # uses gdf.crs as detected from the .prj at runtime.
 COUNTY_REGISTRY: dict[str, tuple[str, str]] = {
-    "12033": ("Escambia",   "EPSG:2883"),   # FL West — confirmed
+    "12033": ("Escambia",   "EPSG:2883"),   # FL West - confirmed
     "12113": ("Santa Rosa", "EPSG:2883"),   # confirmed from gdf.crs.to_epsg()
 }
 
@@ -168,7 +168,7 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
     """
     t_start = time.time()
 
-    # ── Step 1 — Resolve path ─────────────────────────────────────────────── #
+    # ── Step 1 - Resolve path ─────────────────────────────────────────────── #
     shp_path = _resolve_shp_path(county_fips)
     _county_name, expected_crs = COUNTY_REGISTRY[county_fips]   # unpack here too
 
@@ -178,18 +178,18 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
         shp_path,
     )
 
-    # ── Step 2 — Load shapefile ───────────────────────────────────────────── #
+    # ── Step 2 - Load shapefile ───────────────────────────────────────────── #
     if not shp_path.exists():
-        logger.error("Shapefile not found at %s — aborting", shp_path)
+        logger.error("Shapefile not found at %s - aborting", shp_path)
         sys.exit(1)
 
     gdf = gpd.read_file(shp_path, engine="pyogrio")
-    logger.info("Shapefile loaded — %d features, CRS: %s", len(gdf), gdf.crs)
+    logger.info("Shapefile loaded - %d features, CRS: %s", len(gdf), gdf.crs)
 
-    # ── Step 3 — Detect and validate source CRS ───────────────────────────── #
+    # ── Step 3 - Detect and validate source CRS ───────────────────────────── #
     if gdf.crs is None:
         logger.warning(
-            "Shapefile has no CRS embedded — falling back to %s. "
+            "Shapefile has no CRS embedded - falling back to %s. "
             "Verify this is correct for county_fips=%s before proceeding.",
             expected_crs,
             county_fips,
@@ -213,7 +213,7 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
             source_crs_str, county_fips,
         )
 
-    # ── Step 4 — Compute centroids in projected CRS ───────────────────────── #
+    # ── Step 4 - Compute centroids in projected CRS ───────────────────────── #
     # Centroids must be computed BEFORE reprojecting to a geographic CRS
     # (EPSG:4326). Computing centroids in a projected CRS (feet/meters) is
     # mathematically correct. Computing in a geographic CRS (degrees)
@@ -224,11 +224,11 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
     null_geom = gdf["centroid_proj"].isnull().sum()
     if null_geom > 0:
         logger.warning(
-            "%d features have null geometry — they will be skipped", null_geom
+            "%d features have null geometry - they will be skipped", null_geom
         )
         gdf = gdf[gdf["centroid_proj"].notnull()].copy()
 
-    # ── Step 5 — Reproject centroids to WGS84 ────────────────────────────── #
+    # ── Step 5 - Reproject centroids to WGS84 ────────────────────────────── #
     centroids_proj = gpd.GeoSeries(gdf["centroid_proj"], crs=gdf.crs)
     centroids_wgs84 = centroids_proj.to_crs(TARGET_CRS)
     gdf["centroid"] = centroids_wgs84
@@ -238,7 +238,7 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
 
     logger.info("Centroids reprojected to %s", TARGET_CRS)
 
-    # ── Step 6 — Florida statewide bounding box sanity check ─────────────── #
+    # ── Step 6 - Florida statewide bounding box sanity check ─────────────── #
     # These bounds apply to every Florida county, not any single one.
     bad_lat = (
         (gdf["latitude"] < FL_LAT_MIN) | (gdf["latitude"] > FL_LAT_MAX)
@@ -259,7 +259,7 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
             "bounds (%.1f – %.1f). Verify shapefile and CRS.",
             county_fips, bad_lon, FL_LON_MIN, FL_LON_MAX,
         )
-    # ── Step 6 diagnostic — log outlier parcel IDs (temporary) ──────────── #
+    # ── Step 6 diagnostic - log outlier parcel IDs (temporary) ──────────── #
     if bad_lat > 0 or bad_lon > 0:
         outliers = gdf[
             (gdf["latitude"]  < FL_LAT_MIN) | (gdf["latitude"]  > FL_LAT_MAX) |
@@ -271,7 +271,7 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
                 row[PARCEL_COL], row["latitude"], row["longitude"],
             )
 
-    # ── Step 7 — Load DB parcel IDs for this county ───────────────────────── #
+    # ── Step 7 - Load DB parcel IDs for this county ───────────────────────── #
     logger.info("Connecting to database...")
     db_engine = create_engine(settings.sync_database_url, echo=False)
 
@@ -288,7 +288,7 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
         county_fips,
     )
 
-    # ── Step 8 — Inner-join shapefile to DB parcels ───────────────────────── #
+    # ── Step 8 - Inner-join shapefile to DB parcels ───────────────────────── #
     gdf[PARCEL_COL] = gdf[PARCEL_COL].astype(str).str.strip()
     matched = gdf[gdf[PARCEL_COL].isin(db_parcel_ids)].copy()
     unmatched_count = len(gdf) - len(matched)
@@ -302,13 +302,13 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
     if matched.empty:
         logger.error(
             "No shapefile parcels matched any DB parcel for "
-            "county_fips=%s — aborting",
+            "county_fips=%s - aborting",
             county_fips,
         )
         sys.exit(1)
 
     # Build the update payload
-    # WKT for PostGIS: POINT(lon lat) — note X=longitude, Y=latitude
+    # WKT for PostGIS: POINT(lon lat) - note X=longitude, Y=latitude
     matched = matched.copy()
     matched["geom_wkt"] = matched["centroid"].apply(
         lambda pt: f"POINT({pt.x} {pt.y})"
@@ -333,13 +333,13 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
         logger.info("[DRY-RUN] No data written to database.")
         return
 
-    # ── Step 9 — Batch update ─────────────────────────────────────────────── #
+    # ── Step 9 - Batch update ─────────────────────────────────────────────── #
     rows_list = update_rows.to_dict(orient="records")
     total_batches = (len(rows_list) + batch_size - 1) // batch_size
     total_updated = 0
 
     logger.info(
-        "Writing to database in %d batches of up to %d rows — "
+        "Writing to database in %d batches of up to %d rows - "
         "each batch commits independently...",
         total_batches,
         batch_size,
@@ -362,7 +362,7 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
         for r in batch:
             r["county_fips"] = county_fips
 
-        # Each batch is its own transaction — released immediately after commit.
+        # Each batch is its own transaction - released immediately after commit.
         # This prevents long-held locks from blocking concurrent writers.
         with db_engine.begin() as conn:
             conn.execute(update_sql, batch)
@@ -372,11 +372,11 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
             elapsed = time.time() - t_start
             pct = total_updated / len(rows_list) * 100
             logger.info(
-                "Batch %d/%d — %d rows written (%.1f%%) — %.1fs elapsed",
+                "Batch %d/%d - %d rows written (%.1f%%) - %.1fs elapsed",
                 batch_num, total_batches, total_updated, pct, elapsed,
             )
 
-    # ── Step 10 — Summary ────────────────────────────────────────────────── #
+    # ── Step 10 - Summary ────────────────────────────────────────────────── #
     elapsed = time.time() - t_start
     logger.info(
         "GIS ingest complete | county_fips=%s matched=%d updated=%d "
@@ -389,7 +389,7 @@ def run_gis_ingest(county_fips: str, dry_run: bool, batch_size: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Penstock GIS shapefile ingest pipeline — Stage 3."
+        description="Penstock GIS shapefile ingest pipeline - Stage 3."
     )
     parser.add_argument(
         "--county-fips",

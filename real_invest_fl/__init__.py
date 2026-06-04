@@ -1,1 +1,1 @@
-"""real_invest_fl — Florida investment property discovery platform."""
+"""real_invest_fl - Florida investment property discovery platform."""

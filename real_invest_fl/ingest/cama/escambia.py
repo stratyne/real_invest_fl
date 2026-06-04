@@ -6,11 +6,11 @@ CAMA + sale history scraper for Escambia County, FL.
 Data source: https://www.escpa.org/CAMA/Detail_a.aspx?s={parcel_id}
 
 County-specific implementations:
-    fetch_page()      — ECPA ASP.NET detail page, rate-limit aware
-    parse_building()  — ECPA-specific HTML structure
-    parse_sales()     — ECPA Sales Data table: Date, Book, Page, Price,
+    fetch_page()      - ECPA ASP.NET detail page, rate-limit aware
+    parse_building()  - ECPA-specific HTML structure
+    parse_sales()     - ECPA Sales Data table: Date, Book, Page, Price,
                         Type, Multi Parcel. Grantor/Grantee not surfaced
-                        on this page — written as empty strings per schema
+                        on this page - written as empty strings per schema
                         default. sale history written to parcel_sale_history.
 
 ECPA rate limiting:
@@ -88,7 +88,7 @@ async def fetch_page(
 
     Returns:
         HTML string on success.
-        base.SOFT_BLOCK sentinel on soft-block — caller stops the run.
+        base.SOFT_BLOCK sentinel on soft-block - caller stops the run.
         None on transient failure (timeout, HTTP error, retries exhausted).
     """
     url = CAMA_URL.format(parcel_id=parcel_id)
@@ -109,13 +109,13 @@ async def fetch_page(
                         soft_blocked = True
                         break
 
-            # Not found: redirect to Search.aspx — parcel absent from ECPA CAMA
+            # Not found: redirect to Search.aspx - parcel absent from ECPA CAMA
             if resp.history:
                 for h in resp.history:
                     loc = h.headers.get("location", "").lower()
                     if "/cama/search.aspx" in loc:
                         logger.warning(
-                            "Parcel %s — not found in ECPA CAMA "
+                            "Parcel %s - not found in ECPA CAMA "
                             "(Search.aspx redirect). Skipping.",
                             parcel_id,
                         )
@@ -128,7 +128,7 @@ async def fetch_page(
 
             if soft_blocked:
                 logger.error(
-                    "Parcel %s — ECPA soft block detected. "
+                    "Parcel %s - ECPA soft block detected. "
                     "Rate limit tripped. Wait ~3 minutes.",
                     parcel_id,
                 )
@@ -137,7 +137,7 @@ async def fetch_page(
             if resp.status_code == 200:
                 if "General Information" not in resp.text:
                     logger.warning(
-                        "Parcel %s — unexpected page content on attempt %d",
+                        "Parcel %s - unexpected page content on attempt %d",
                         parcel_id, attempt + 1,
                     )
                     await asyncio.sleep(3.0)
@@ -145,27 +145,27 @@ async def fetch_page(
                 return resp.text
 
             if resp.status_code == 404:
-                logger.warning("Parcel %s — not found (404)", parcel_id)
+                logger.warning("Parcel %s - not found (404)", parcel_id)
                 return None
 
             logger.warning(
-                "Parcel %s — HTTP %s on attempt %d",
+                "Parcel %s - HTTP %s on attempt %d",
                 parcel_id, resp.status_code, attempt + 1,
             )
             await asyncio.sleep(3.0)
 
         except httpx.TimeoutException:
             logger.warning(
-                "Parcel %s — timeout on attempt %d", parcel_id, attempt + 1
+                "Parcel %s - timeout on attempt %d", parcel_id, attempt + 1
             )
             await asyncio.sleep(3.0)
         except httpx.RequestError as exc:
             logger.warning(
-                "Parcel %s — request error: %s", parcel_id, exc
+                "Parcel %s - request error: %s", parcel_id, exc
             )
             break
 
-    logger.error("Parcel %s — all attempts failed", parcel_id)
+    logger.error("Parcel %s - all attempts failed", parcel_id)
     return None
 
 
@@ -224,7 +224,7 @@ def parse_building(html: str, parcel_id: str) -> dict:
     # ── Building table ────────────────────────────────────────────────── #
     building_tables = soup.find(id="ctl00_MasterPlaceHolder_tblBldgs")
     if not building_tables:
-        logger.warning("Parcel %s — no building table found", parcel_id)
+        logger.warning("Parcel %s - no building table found", parcel_id)
         return fields
 
     inner_tables = building_tables.find_all("table", recursive=True)
@@ -310,7 +310,7 @@ def parse_building(html: str, parcel_id: str) -> dict:
 
     if not fields:
         logger.warning(
-            "Parcel %s — no CAMA fields parsed from ECPA page", parcel_id
+            "Parcel %s - no CAMA fields parsed from ECPA page", parcel_id
         )
 
     return fields
@@ -321,22 +321,22 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
     Parse sale history from the ECPA CAMA detail page.
 
     ECPA Sales Data table structure (confirmed live 2026-05-25):
-        Row 0: <th> — "Sales Data" section header (colspan=7, no data)
-        Row 1: <td> — Column headers: Sale Date | Book | Page | Value |
+        Row 0: <th> - "Sales Data" section header (colspan=7, no data)
+        Row 1: <td> - Column headers: Sale Date | Book | Page | Value |
                        Type | Multi Parcel | Records
-        Row 2+: <td> — One transaction per row
-        Last row: <td> — Footer attribution (Official Records Inquiry...)
+        Row 2+: <td> - One transaction per row
+        Last row: <td> - Footer attribution (Official Records Inquiry...)
 
     Fields captured:
-        sale_date          — Sale Date column (MM/DD/YYYY or MM/YYYY)
-        sale_price         — Value column ($NNN,NNN — stripped to integer)
-        instrument_type    — Type column (WD/QC/CT/OT/CJ/SC etc.)
-        multi_parcel       — Multi Parcel column (Y = True, N = False)
+        sale_date          - Sale Date column (MM/DD/YYYY or MM/YYYY)
+        sale_price         - Value column ($NNN,NNN - stripped to integer)
+        instrument_type    - Type column (WD/QC/CT/OT/CJ/SC etc.)
+        multi_parcel       - Multi Parcel column (Y = True, N = False)
 
     Fields NOT surfaced on this page (written as empty per schema default):
-        grantor, grantee        — only accessible via Clerk link, not inline
-        qualification_code      — not present on ECPA detail page
-        sale_type               — not present on ECPA detail page (I/V
+        grantor, grantee        - only accessible via Clerk link, not inline
+        qualification_code      - not present on ECPA detail page
+        sale_type               - not present on ECPA detail page (I/V
                                   improved/vacant classification not exposed)
 
     Note: escambia_taxdeed_clerk.py captures tax deed auction listings
@@ -350,16 +350,16 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     sales: list[dict] = []
 
-    # Locate the Sales Data table via its containing cell ID — more
+    # Locate the Sales Data table via its containing cell ID - more
     # reliable than searching for <th> text across the whole document.
     sales_cell = soup.find(id="ctl00_MasterPlaceHolder_SalesCell")
     if not sales_cell:
-        logger.debug("Parcel %s — no SalesCell found", parcel_id)
+        logger.debug("Parcel %s - no SalesCell found", parcel_id)
         return sales
 
     sales_table = sales_cell.find("table")
     if not sales_table:
-        logger.debug("Parcel %s — no sales table in SalesCell", parcel_id)
+        logger.debug("Parcel %s - no sales table in SalesCell", parcel_id)
         return sales
 
     rows = sales_table.find_all("tr")
@@ -385,7 +385,7 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
 
     if "sale_date" not in col_map:
         logger.warning(
-            "Parcel %s — could not identify Sale Date column in sales table",
+            "Parcel %s - could not identify Sale Date column in sales table",
             parcel_id,
         )
         return sales
@@ -425,7 +425,7 @@ def parse_sales(html: str, parcel_id: str) -> list[dict]:
 
     if sales:
         logger.debug(
-            "Parcel %s — parsed %d sale records", parcel_id, len(sales)
+            "Parcel %s - parsed %d sale records", parcel_id, len(sales)
         )
 
     return sales

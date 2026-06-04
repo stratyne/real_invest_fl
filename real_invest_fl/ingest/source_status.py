@@ -1,5 +1,5 @@
 """
-source_status.py — shared write-path helper for data_source_status.
+source_status.py - shared write-path helper for data_source_status.
 
 Call update_source_status() at the end of every ingest runner (success
 or failure) to keep the UI status board current.
@@ -91,7 +91,7 @@ def update_source_status(
     engine:
         Sync SQLAlchemy engine (settings.sync_database_url).
     source:
-        Source key — must exactly match listing_events.source for this
+        Source key - must exactly match listing_events.source for this
         runner. Supplied by the caller from its own verified constant.
     display_name:
         Human-readable label for the UI status dashboard.
@@ -105,7 +105,7 @@ def update_source_status(
         Records inserted or updated in this run. Pass None if unknown.
     error_message:
         Short error string when status is 'FAILED'. Pass None on
-        SUCCESS — this clears any previously stored error message.
+        SUCCESS - this clears any previously stored error message.
 
     Raises
     ------

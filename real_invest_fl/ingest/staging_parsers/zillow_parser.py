@@ -8,19 +8,19 @@ Input:
     CSV files dropped into data/staging/zillow/
     Created by: copy/paste from Zillow search results into a
     spreadsheet with comma-separation disabled, saved as .csv.
-    Recommended cycle: Weekly — copy current results, drop file, run parser.
+    Recommended cycle: Weekly - copy current results, drop file, run parser.
 
 File format (one value per line, no header):
-    $NNN,NNN.NN          <- price line — marks start of new listing block
+    $NNN,NNN.NN          <- price line - marks start of new listing block
     N bdsN baN,NNN sqftForeclosure  <- specs line
     Street, City, FL ZIP <- address line (first occurrence)
     BROKERAGE NAME       <- agent/brokerage line
     More                 <- discard
     [optional desc line] <- discard
     Save                 <- discard
-                         <- blank line — discard
+                         <- blank line - discard
     Previous photoNext photo  <- discard
-    Street, City, FL ZIP <- address repeated — discard
+    Street, City, FL ZIP <- address repeated - discard
     [next listing starts with $ price line]
 
 Parcel matching strategy:
@@ -90,7 +90,7 @@ SIGNAL_TYPE  = "foreclosure"
 LISTING_TYPE = "foreclosure"
 SOURCE_NAME  = "zillow_staging"
 
-# Lines that are always structural noise — discard unconditionally
+# Lines that are always structural noise - discard unconditionally
 _NOISE_PATTERNS = re.compile(
     r"^(More|Save|Previous photoNext photo|Save this search.*|"
     r".*to get email alerts.*)$",
@@ -109,7 +109,7 @@ def _strip_quotes(line: str) -> str:
 
 
 def _is_price_line(line: str) -> bool:
-    """Return True if line is a price — marks start of a new listing block."""
+    """Return True if line is a price - marks start of a new listing block."""
     return bool(re.match(r"^\$[\d,]+(\.\d{2})?$", line))
 
 
@@ -186,7 +186,7 @@ def _extract_street(address: str) -> str:
     lookup_parcel_by_address() can perform Level 2 unit normalization
     on the strip_unit=False form internally.
 
-    Does NOT strip units or apply digit-letter injection here —
+    Does NOT strip units or apply digit-letter injection here -
     those steps are delegated to lookup_parcel_by_address().
     """
     from real_invest_fl.utils.text import (
@@ -269,7 +269,7 @@ def _extract_record(block: list[str]) -> Optional[dict]:
             break
 
     if specs is None:
-        print(f"[REVIEW] Cannot parse specs from block with price {price_line!r} — "
+        print(f"[REVIEW] Cannot parse specs from block with price {price_line!r} - "
               f"block lines: {block}")
         return None
 
@@ -282,7 +282,7 @@ def _extract_record(block: list[str]) -> Optional[dict]:
             break
 
     if address is None:
-        print(f"[REVIEW] Cannot find address in block with price {price_line!r} — "
+        print(f"[REVIEW] Cannot find address in block with price {price_line!r} - "
               f"block lines: {block}")
         return None
 
@@ -386,7 +386,7 @@ def parse_zillow_file(
 
             if dedup_key in existing_keys:
                 logger.debug(
-                    "Duplicate address+price — skipping: %s @ $%s",
+                    "Duplicate address+price - skipping: %s @ $%s",
                     norm_address, record["list_price"],
                 )
                 stats["skipped"] += 1
@@ -408,8 +408,8 @@ def parse_zillow_file(
 
             stats["matched"] += 1
 
-            # Bed/bath enrichment — null-only guard enforced inside enrich_bed_bath.
-            # TODO: confidence hierarchy enforcement (item 17) — enrich_bed_bath
+            # Bed/bath enrichment - null-only guard enforced inside enrich_bed_bath.
+            # TODO: confidence hierarchy enforcement (item 17) - enrich_bed_bath
             # will be extended to accept source_confidence and compare against
             # the existing bed_bath_source before overwriting.
             if parcel["bedrooms"] is None or parcel["bathrooms"] is None:
@@ -527,7 +527,7 @@ def run_zillow_import(
         files = sorted(STAGING_DIR.glob("*.csv"))
 
     if not files:
-        logger.info("No CSV files found in %s — nothing to process.", STAGING_DIR)
+        logger.info("No CSV files found in %s - nothing to process.", STAGING_DIR)
         return {
             "read": 0, "matched": 0, "inserted": 0,
             "skipped": 0, "unmatched": 0, "enriched": 0,

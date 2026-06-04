@@ -1,5 +1,5 @@
 """
-Tests for real_invest_fl/utils/text.py — normalize_street_address().
+Tests for real_invest_fl/utils/text.py - normalize_street_address().
 
 Real-world cases are taken directly from the Auction.com dry-run
 unmatched set (2026-04-28) and confirmed NAL phy_addr1 values.
@@ -9,7 +9,7 @@ from real_invest_fl.utils.text import normalize_street_address
 
 
 # ---------------------------------------------------------------------------
-# Real-world cases — the three known Auction.com unmatched addresses
+# Real-world cases - the three known Auction.com unmatched addresses
 # and two that were already resolving (regression guard)
 # ---------------------------------------------------------------------------
 
@@ -20,7 +20,7 @@ class TestRealWorldCases:
         assert normalize_street_address("110 FRISCO ROAD") == "110 FRISCO RD"
 
     def test_muldoon_road_suffix(self):
-        """ROAD -> RD suffix abbreviation — second confirmed case."""
+        """ROAD -> RD suffix abbreviation - second confirmed case."""
         assert normalize_street_address("5931 MULDOON ROAD") == "5931 MULDOON RD"
 
     def test_north_highway_directional_and_suffix(self):
@@ -31,30 +31,30 @@ class TestRealWorldCases:
 
         Note: digit-letter injection runs BEFORE suffix map, so '95 A' with a
         space is not affected by the digit-letter rule. The space between 95
-        and A is preserved by NAL — NAL stores '2983 HIGHWAY 95A' with no
+        and A is preserved by NAL - NAL stores '2983 HIGHWAY 95A' with no
         space. We verify the normalizer contracts to match NAL exactly.
         """
         assert normalize_street_address("2983 North Highway 95 A") == "2983 N HWY 95 A"
 
     def test_n_74th_ave_regression(self):
-        """905 N 74th Ave — single-letter directional must NOT be stripped."""
+        """905 N 74th Ave - single-letter directional must NOT be stripped."""
         assert normalize_street_address("905 N 74th Ave") == "905 N 74TH AVE"
 
     def test_n_48th_ave_regression(self):
-        """1118 N 48th Ave — single-letter directional, digit-letter injection."""
+        """1118 N 48th Ave - single-letter directional, digit-letter injection."""
         assert normalize_street_address("1118 N 48th Ave") == "1118 N 48TH AVE"
 
     def test_michigan_ave_unit_regression(self):
         """
-        2301 W Michigan Ave 51 — unit number without designator keyword.
-        The bare trailing '51' is not a unit designator pattern — it stays.
+        2301 W Michigan Ave 51 - unit number without designator keyword.
+        The bare trailing '51' is not a unit designator pattern - it stays.
         This matches NAL phy_addr1 = '2301 W MICHIGAN AVE 51'.
         """
         assert normalize_street_address("2301 W Michigan Ave 51") == "2301 W MICHIGAN AVE 51"
 
 
 # ---------------------------------------------------------------------------
-# Suffix map — one case per suffix entry
+# Suffix map - one case per suffix entry
 # ---------------------------------------------------------------------------
 
 class TestSuffixAbbreviation:
@@ -81,11 +81,11 @@ class TestSuffixAbbreviation:
         assert result == f"{house} OAK {abbr}"
 
     def test_already_abbreviated_suffix_unchanged(self):
-        """RD already abbreviated — must not be double-processed."""
+        """RD already abbreviated - must not be double-processed."""
         assert normalize_street_address("110 FRISCO RD") == "110 FRISCO RD"
 
     def test_suffix_word_boundary_not_partial(self):
-        """STRAND contains no suffix match — must not be abbreviated."""
+        """STRAND contains no suffix match - must not be abbreviated."""
         result = normalize_street_address("123 STRAND BLVD")
         assert result == "123 STRAND BLVD"
 
@@ -111,13 +111,13 @@ class TestDirectionalContraction:
         assert result == f"100 {abbr} OAK ST"
 
     def test_single_letter_directional_unchanged(self):
-        """N, S, E, W already abbreviated — must pass through unchanged."""
+        """N, S, E, W already abbreviated - must pass through unchanged."""
         assert normalize_street_address("100 N OAK ST") == "100 N OAK ST"
 
     def test_directional_in_street_name_not_stripped(self):
         """
         NORTH inside the street name (not after house number) must not
-        be contracted. e.g. '100 OAK NORTH DR' — NORTH is mid-token here.
+        be contracted. e.g. '100 OAK NORTH DR' - NORTH is mid-token here.
         Only the first token of the street name (pos 2) is eligible.
         """
         result = normalize_street_address("100 OAK NORTH DR")
@@ -149,7 +149,7 @@ class TestUnitStripping:
 
     def test_bare_trailing_number_not_stripped(self):
         """
-        '2301 W MICHIGAN AVE 51' — bare number with no designator keyword
+        '2301 W MICHIGAN AVE 51' - bare number with no designator keyword
         must NOT be stripped. This is a NAL-format address where the unit
         number has no prefix keyword.
         """
@@ -167,7 +167,7 @@ class TestDigitLetterInjection:
         assert normalize_street_address("2301W MICHIGAN AVE") == "2301 W MICHIGAN AVE"
 
     def test_digit_letter_no_false_positive(self):
-        """95A in a highway number — space is injected, producing 95 A."""
+        """95A in a highway number - space is injected, producing 95 A."""
         result = normalize_street_address("100 HWY 95A")
         assert result == "100 HWY 95 A"
 
@@ -186,7 +186,7 @@ class TestEdgeCases:
         assert normalize_street_address("") == ""
 
     def test_already_normalized(self):
-        """Idempotent — running twice produces the same result."""
+        """Idempotent - running twice produces the same result."""
         once  = normalize_street_address("110 FRISCO RD")
         twice = normalize_street_address(once)
         assert once == twice

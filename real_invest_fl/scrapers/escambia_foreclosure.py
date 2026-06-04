@@ -1,12 +1,12 @@
 """
 real_invest_fl/scrapers/escambia_foreclosure.py
 -------------------------------------------------
-Tier 1 scraper — Escambia County mortgage foreclosure sales.
+Tier 1 scraper - Escambia County mortgage foreclosure sales.
 
 Source: https://escambia.realforeclose.com
 Operator: RealForeclose (contracted by Escambia County Clerk of Courts)
 Data type: Active mortgage foreclosure auction listings
-Signal tier: 1 (government distress record — highest motivation signal)
+Signal tier: 1 (government distress record - highest motivation signal)
 Signal type: foreclosure_sale
 
 This is a public government portal. No authentication is required.
@@ -17,7 +17,7 @@ are under documented legal and financial pressure to sell.
 Scraping approach:
     - Uses requests + BeautifulSoup (no JavaScript rendering required
       for the listing table on the search results page)
-    - Playwright fallback is noted but not implemented in v1 —
+    - Playwright fallback is noted but not implemented in v1 -
       enable if the site adds JS-rendered content
     - One request per page of results with random delay between pages
     - robots.txt checked before first request
@@ -61,8 +61,8 @@ DEFAULT_PARAMS = {
     "myState":  "FL",
 }
 
-# Page size is controlled by the site — typically 25 per page
-MAX_PAGES = 20   # Safety cap — Escambia rarely has more than 5-10 pages
+# Page size is controlled by the site - typically 25 per page
+MAX_PAGES = 20   # Safety cap - Escambia rarely has more than 5-10 pages
 
 
 class EscambiaForeclosureScraper(BaseScraper):
@@ -71,7 +71,7 @@ class EscambiaForeclosureScraper(BaseScraper):
     escambia.realforeclose.com and returns a list of ScrapedListing records.
 
     Each listing represents a property with an active court-ordered
-    foreclosure auction scheduled — a Tier 1 motivation signal.
+    foreclosure auction scheduled - a Tier 1 motivation signal.
     """
 
     SOURCE_NAME = "escambia_realforeclose"
@@ -101,12 +101,12 @@ class EscambiaForeclosureScraper(BaseScraper):
 
             response = self._safe_fetch(session.get, url, timeout=20)
             if response is None:
-                logger.warning("No response for page %d — stopping pagination", page_num)
+                logger.warning("No response for page %d - stopping pagination", page_num)
                 break
 
             if response.status_code != 200:
                 logger.warning(
-                    "HTTP %d on page %d — stopping pagination",
+                    "HTTP %d on page %d - stopping pagination",
                     response.status_code, page_num,
                 )
                 break
@@ -115,7 +115,7 @@ class EscambiaForeclosureScraper(BaseScraper):
             listings.extend(page_listings)
 
             logger.info(
-                "Page %d — parsed %d listings (total so far: %d)",
+                "Page %d - parsed %d listings (total so far: %d)",
                 page_num, len(page_listings), len(listings),
             )
 
@@ -124,7 +124,7 @@ class EscambiaForeclosureScraper(BaseScraper):
                 break
 
         logger.info(
-            "EscambiaForeclosureScraper complete — %d total listings", len(listings)
+            "EscambiaForeclosureScraper complete - %d total listings", len(listings)
         )
         return listings
 
@@ -138,8 +138,8 @@ class EscambiaForeclosureScraper(BaseScraper):
 
         Returns:
             (listings, has_more)
-            listings  — list of ScrapedListing records parsed from this page
-            has_more  — True if a next page likely exists
+            listings  - list of ScrapedListing records parsed from this page
+            has_more  - True if a next page likely exists
         """
         soup     = BeautifulSoup(html, "html.parser")
         listings: list[ScrapedListing] = []
@@ -149,12 +149,12 @@ class EscambiaForeclosureScraper(BaseScraper):
         auction_items = soup.find_all("div", class_="AUCTION_ITEM")
 
         if not auction_items:
-            # Try table row fallback — some RealForeclose instances use <tr>
+            # Try table row fallback - some RealForeclose instances use <tr>
             auction_items = soup.find_all("tr", class_=re.compile(r"(?i)auction"))
 
         if not auction_items:
             logger.debug(
-                "No AUCTION_ITEM elements found on page %d — "
+                "No AUCTION_ITEM elements found on page %d - "
                 "page may be empty or structure changed",
                 page_num,
             )
@@ -196,7 +196,7 @@ class EscambiaForeclosureScraper(BaseScraper):
                 raw_zip = zip_match.group(0)
 
             if not raw_address:
-                logger.debug("Could not extract address from auction item — skipping")
+                logger.debug("Could not extract address from auction item - skipping")
                 return None
 
             # ── Case number / listing URL ──────────────────────────────── #

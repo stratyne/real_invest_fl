@@ -1,21 +1,21 @@
 """
-OutreachTemplate — versioned Jinja2 outreach message templates.
+OutreachTemplate - versioned Jinja2 outreach message templates.
 
 Mirrors the system/user ownership pattern of FilterProfile exactly.
-System templates: user_id IS NULL — visible to all authorized users,
+System templates: user_id IS NULL - visible to all authorized users,
 not editable or deletable by users.
-User templates: user_id = owner — private, cloneable from system templates.
+User templates: user_id = owner - private, cloneable from system templates.
 
 county_fips nullable: NULL = global template (available across all counties
 the user has access to). Non-NULL = county-scoped template.
 
-template_type domain: EMAIL | LETTER — enforced by CHECK constraint.
+template_type domain: EMAIL | LETTER - enforced by CHECK constraint.
 subject_template is nullable and applies to EMAIL templates only.
 LETTER templates have no subject line.
 
 Partial unique indexes (mirrors filter_profiles pattern):
-  uq_ot_system_name  — UNIQUE (template_name) WHERE user_id IS NULL
-  uq_ot_user_name    — UNIQUE (user_id, template_name) WHERE user_id IS NOT NULL
+  uq_ot_system_name  - UNIQUE (template_name) WHERE user_id IS NULL
+  uq_ot_user_name    - UNIQUE (user_id, template_name) WHERE user_id IS NOT NULL
 """
 from __future__ import annotations
 from datetime import datetime
@@ -58,7 +58,7 @@ class OutreachTemplate(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
 
     # ------------------------------------------------------------------ #
-    # Ownership — NULL = system template                                   #
+    # Ownership - NULL = system template                                   #
     # ------------------------------------------------------------------ #
     user_id: Mapped[int | None] = mapped_column(
         Integer,
@@ -67,7 +67,7 @@ class OutreachTemplate(Base):
     )
 
     # ------------------------------------------------------------------ #
-    # Scope — NULL = global (all counties user has access to)             #
+    # Scope - NULL = global (all counties user has access to)             #
     # ------------------------------------------------------------------ #
     county_fips: Mapped[str | None] = mapped_column(String(5), nullable=True)
 
@@ -78,7 +78,7 @@ class OutreachTemplate(Base):
     description:   Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ------------------------------------------------------------------ #
-    # Template type — EMAIL | LETTER (CHECK constraint above)             #
+    # Template type - EMAIL | LETTER (CHECK constraint above)             #
     # ------------------------------------------------------------------ #
     template_type: Mapped[str] = mapped_column(String(50), nullable=False)
 
@@ -86,7 +86,7 @@ class OutreachTemplate(Base):
     # Content                                                              #
     # ------------------------------------------------------------------ #
     subject_template: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # EMAIL only — NULL for LETTER templates
+    # EMAIL only - NULL for LETTER templates
 
     body_template: Mapped[str] = mapped_column(Text, nullable=False)
 
@@ -118,7 +118,7 @@ class OutreachTemplate(Base):
         "OutreachLog",
         back_populates="template",
         foreign_keys="[OutreachLog.template_id]",
-        # RESTRICT on delete — no cascade. Template cannot be deleted while
+        # RESTRICT on delete - no cascade. Template cannot be deleted while
         # log rows reference it. Enforced at DB level; relationship carries
         # no cascade here to match that intent.
     )

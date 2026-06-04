@@ -1,8 +1,8 @@
 """
-ListingScore — per-user, per-profile scoring result for a listing event.
+ListingScore - per-user, per-profile scoring result for a listing event.
 
 Separated from listing_events deliberately. listing_events is an
-append-only event log — immutable facts about what was scraped and when.
+append-only event log - immutable facts about what was scraped and when.
 ListingScore is the derived, recomputable output of running a user's
 filter profile against those facts.
 
@@ -58,7 +58,7 @@ class ListingScore(Base):
         nullable=False
     )
 
-    # Denormalized for query performance — avoids join to listing_events
+    # Denormalized for query performance - avoids join to listing_events
     # on the most common retrieval pattern (all scores for a user/county)
     county_fips: Mapped[str] = mapped_column(String(5), nullable=False)
 

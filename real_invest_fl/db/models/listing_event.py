@@ -1,9 +1,9 @@
 """
-ListingEvent — append-only record of each scrape event. Immutable
+ListingEvent - append-only record of each scrape event. Immutable
 facts about what was scraped, from what source, and when.
 
 Scoring output (deal_score, passed_filters, filter_rejection_reasons)
-lives in listing_scores — one row per (event, filter_profile).
+lives in listing_scores - one row per (event, filter_profile).
 See listing_score.py.
 
 signal_tier and signal_type support the Phase 2 hybrid signal-aggregator
@@ -11,11 +11,11 @@ signal_tier and signal_type support the Phase 2 hybrid signal-aggregator
 
 signal_tier:
     1 = Government distress records (foreclosure sales, tax deeds,
-        lis pendens, tax delinquency) — highest motivation signal
+        lis pendens, tax delinquency) - highest motivation signal
     2 = Bulk public data / government auction portals (HUD, surplus,
-        tax deed auctions) — high signal, minimal scraping risk
+        tax deed auctions) - high signal, minimal scraping risk
     3 = Commercial listing platforms / FSBO (Zillow, Redfin, Craigslist,
-        Auction.com) — listing confirmation layer
+        Auction.com) - listing confirmation layer
 
 signal_type examples:
     foreclosure_sale | tax_deed | lis_pendens | tax_delinquent |
@@ -47,7 +47,7 @@ class ListingEvent(Base):
     parcel_id:   Mapped[str] = mapped_column(String(30), nullable=False)
 
     # ------------------------------------------------------------------ #
-    # Signal classification — Phase 2 hybrid model                        #
+    # Signal classification - Phase 2 hybrid model                        #
     # ------------------------------------------------------------------ #
     signal_tier: Mapped[int | None] = mapped_column(Integer)
     # 1 = Gov distress | 2 = Gov auction/bulk | 3 = Commercial/FSBO
@@ -61,7 +61,7 @@ class ListingEvent(Base):
     # ------------------------------------------------------------------ #
     listing_type: Mapped[str | None] = mapped_column(String(50))
     # MLS status when available: Active | Pending | Expired | Cancelled
-    # Separate from signal_type — reserved for MLS-sourced classification
+    # Separate from signal_type - reserved for MLS-sourced classification
 
     list_price:         Mapped[int | None]      = mapped_column(Integer)
     list_date:          Mapped[date | None]      = mapped_column(Date)

@@ -1,4 +1,4 @@
-"""v0.20 — add workflow_status CHECK constraint to listing_events
+"""v0.20 - add workflow_status CHECK constraint to listing_events
 
 Revision ID: m4n5o6p7q8r9
 Revises: l3m4n5o6p7q8

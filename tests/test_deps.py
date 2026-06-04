@@ -1,6 +1,6 @@
 """
 Unit tests for FastAPI dependency functions.
-All DB interaction is mocked — no live database required.
+All DB interaction is mocked - no live database required.
 """
 from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock

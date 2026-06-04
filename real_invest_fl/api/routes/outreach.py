@@ -1,17 +1,17 @@
 """
-Outreach routes — generate, send, list, skip_trace.
+Outreach routes - generate, send, list, skip_trace.
 
-POST /{county_fips}/outreach/generate   — render Jinja2 template, write
+POST /{county_fips}/outreach/generate   - render Jinja2 template, write
                                           listing_scores audit row (scoring
                                           columns NULL, version='PENDING'
                                           until item 19 is live), write
                                           DRAFT outreach_log row. Returns
-                                          draft — does not send.
-POST /{county_fips}/outreach/send       — send DRAFT via SendGrid, update
+                                          draft - does not send.
+POST /{county_fips}/outreach/send       - send DRAFT via SendGrid, update
                                           status to SENT or FAILED.
-GET  /{county_fips}/outreach            — list current user's outreach_log
+GET  /{county_fips}/outreach            - list current user's outreach_log
                                           rows for the county.
-POST /{county_fips}/outreach/skip_trace — return cached skip_trace_cache row
+POST /{county_fips}/outreach/skip_trace - return cached skip_trace_cache row
                                           if present and not expired. Returns
                                           501 when BATCHDATA_API_KEY not set.
 
@@ -51,8 +51,8 @@ from real_invest_fl.db.models.user import User
 router = APIRouter(prefix="/{county_fips}/outreach", tags=["outreach"])
 
 # ── Jinja2 environment ────────────────────────────────────────────────────────
-# BaseLoader — templates are strings from DB rows, not files on disk.
-# undefined is default (silent) — missing variables render as empty string,
+# BaseLoader - templates are strings from DB rows, not files on disk.
+# undefined is default (silent) - missing variables render as empty string,
 # which is intentional for optional fields like calendar_link.
 _jinja_env = Environment(loader=BaseLoader(), autoescape=False)
 
@@ -115,7 +115,7 @@ class GenerateResponse(BaseModel):
 
     calendar_link_missing is True when current_user.calendar_link is
     NULL and the selected template is the system EMAIL template. The
-    draft is still written — the UI must surface the warning to the user.
+    draft is still written - the UI must surface the warning to the user.
     """
     draft: OutreachLogResponse | None = None
     warning: str | None = None
@@ -178,12 +178,12 @@ def _build_template_variables(
         # Sender
         "sender_name":  current_user.full_name or "",
         "sender_email": current_user.email,
-        # Booking link — empty string when NULL so Jinja2 {% if %} block
+        # Booking link - empty string when NULL so Jinja2 {% if %} block
         # in LETTER template evaluates falsy cleanly
         "calendar_link": log.calendar_link or "",
-        # CAN-SPAM footer — required for all EMAIL sends
+        # CAN-SPAM footer - required for all EMAIL sends
         "business_address": settings.BUSINESS_ADDRESS,
-        # Date — LETTER header
+        # Date - LETTER header
         "today_date": datetime.now(tz=timezone.utc).strftime("%B %d, %Y"),
     }
 
@@ -265,7 +265,7 @@ async def generate_outreach(
 
     # ── 5. Write listing_scores audit row ─────────────────────────────────────
     # deal_score columns are NULL (version='PENDING') until item 19 is live.
-    # uq_ls_event_profile prevents duplicate rows — only written on first
+    # uq_ls_event_profile prevents duplicate rows - only written on first
     # generate or when force=True (existing row is NOT overwritten on force).
     listing_score: ListingScore | None = existing_score
     if listing_score is None:
@@ -311,7 +311,7 @@ async def generate_outreach(
 
     # ── 8. Calendar link warning flag ─────────────────────────────────────────
     # Warn when user has no calendar_link and selected template is system EMAIL.
-    # Draft is still written — warning is surfaced in response for UI to display.
+    # Draft is still written - warning is surfaced in response for UI to display.
     calendar_link_missing = (
         current_user.calendar_link is None
         and template.user_id is None
@@ -330,9 +330,9 @@ async def generate_outreach(
         # Recipient snapshot from properties
         recipient_name=prop.own_name,
         recipient_email=None,
-        # own_email not on properties — populated from skip_trace_cache only
+        # own_email not on properties - populated from skip_trace_cache only
         recipient_phone=None,
-        # own_phone not on properties — populated from skip_trace_cache only
+        # own_phone not on properties - populated from skip_trace_cache only
         recipient_address1=prop.own_addr1,
         recipient_address2=prop.own_addr2,
         recipient_city=prop.own_city,
@@ -381,7 +381,7 @@ async def send_outreach(
 
     Validates ownership and DRAFT status before sending.
     Updates status to SENT on success, FAILED on error.
-    LETTER template_type is rejected — LETTER output is client-side only
+    LETTER template_type is rejected - LETTER output is client-side only
     (react-to-print). This route is EMAIL only.
     """
     # ── Validate SendGrid is configured ──────────────────────────────────────
@@ -406,23 +406,23 @@ async def send_outreach(
     if log.status != "DRAFT":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Cannot send — current status is {log.status}",
+            detail=f"Cannot send - current status is {log.status}",
         )
     if log.template_type == "LETTER":
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="LETTER templates are rendered client-side. Use the print "
-                   "function in the UI — this endpoint is EMAIL only.",
+                   "function in the UI - this endpoint is EMAIL only.",
         )
     if not log.message_body:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="message_body is empty — regenerate the draft before sending",
+            detail="message_body is empty - regenerate the draft before sending",
         )
     if not log.recipient_email:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="No recipient email address — run skip trace first",
+            detail="No recipient email address - run skip trace first",
         )
 
     # ── Send via SendGrid ─────────────────────────────────────────────────────
@@ -457,7 +457,7 @@ async def list_outreach(
 ) -> list[OutreachLogResponse]:
     """Return outreach_log rows for the county scoped to current_user.
 
-    Superusers see only their own rows — superuser privilege is county
+    Superusers see only their own rows - superuser privilege is county
     access bypass, not data omniscience. Cross-user visibility belongs
     on a separate admin route if ever needed.
     """
@@ -480,7 +480,7 @@ async def skip_trace(
 ) -> SkipTraceCacheResponse:
     """Return cached skip_trace_cache row if present and not expired.
 
-    Returns 501 when BATCHDATA_API_KEY is not configured — live
+    Returns 501 when BATCHDATA_API_KEY is not configured - live
     integration is deferred (item 44). Returns 404 when no non-expired
     cache row exists for the parcel.
     """

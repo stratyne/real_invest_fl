@@ -6,7 +6,7 @@ Shared CAMA + sale history ingest framework.
 County-specific modules (escambia.py, santa_rosa.py, etc.) provide:
     COUNTY_FIPS       str
     SOURCE_NAME       str
-    HEADERS           dict  — HTTP request headers
+    HEADERS           dict  - HTTP request headers
 
     async fetch_page(client, parcel_id) -> Optional[str] | SOFT_BLOCK
     parse_building(html, parcel_id)    -> dict
@@ -23,7 +23,7 @@ This module provides everything else:
 
 County modules call base.main() as their entry point, passing all
 county-specific values including rate-limiting parameters. No
-rate-limiting defaults are assumed in base.py — every county module
+rate-limiting defaults are assumed in base.py - every county module
 must declare its own values explicitly.
 
 Convention: every county module ends with:
@@ -94,8 +94,8 @@ def coerce_building(raw: dict, parcel_id: str) -> tuple[dict, set[str]]:
         quality_code, condition_code
 
     Returns (coerced, null_cols) where:
-        coerced   — dict of column_name → typed value
-        null_cols — set of column names explicitly rejected by a sanity
+        coerced   - dict of column_name → typed value
+        null_cols - set of column names explicitly rejected by a sanity
                     guard; write_cama() will write NULL for these columns
                     regardless of existing DB value.
     """
@@ -131,32 +131,32 @@ def coerce_building(raw: dict, parcel_id: str) -> tuple[dict, set[str]]:
     current_year = datetime.now().year
 
     if act_yr_blt and not (1800 <= act_yr_blt <= current_year):
-        logger.warning("Parcel %s — suspicious act_yr_blt: %s", parcel_id, act_yr_blt)
+        logger.warning("Parcel %s - suspicious act_yr_blt: %s", parcel_id, act_yr_blt)
         act_yr_blt = None
         null_cols.add("act_yr_blt")
 
     if living_area is not None and living_area <= 0:
-        logger.warning("Parcel %s — tot_lvg_area %s <= 0, treating as None", parcel_id, living_area)
+        logger.warning("Parcel %s - tot_lvg_area %s <= 0, treating as None", parcel_id, living_area)
         living_area = None
         null_cols.add("tot_lvg_area")
 
     if bedrooms is not None and bedrooms <= 0:
-        logger.warning("Parcel %s — bedrooms %s <= 0, treating as None", parcel_id, bedrooms)
+        logger.warning("Parcel %s - bedrooms %s <= 0, treating as None", parcel_id, bedrooms)
         bedrooms = None
         null_cols.add("bedrooms")
 
     if bedrooms is not None and not (1 <= bedrooms <= 20):
-        logger.warning("Parcel %s — suspicious bedrooms: %s", parcel_id, bedrooms)
+        logger.warning("Parcel %s - suspicious bedrooms: %s", parcel_id, bedrooms)
         bedrooms = None
         null_cols.add("bedrooms")
 
     if bathrooms is not None and bathrooms <= 0.0:
-        logger.warning("Parcel %s — bathrooms %s <= 0, treating as None", parcel_id, bathrooms)
+        logger.warning("Parcel %s - bathrooms %s <= 0, treating as None", parcel_id, bathrooms)
         bathrooms = None
         null_cols.add("bathrooms")
 
     if bathrooms is not None and not (0.5 <= bathrooms <= 20.0):
-        logger.warning("Parcel %s — suspicious bathrooms: %s", parcel_id, bathrooms)
+        logger.warning("Parcel %s - suspicious bathrooms: %s", parcel_id, bathrooms)
         bathrooms = None
         null_cols.add("bathrooms")
 
@@ -199,7 +199,7 @@ def coerce_sale(
         for fmt in ("%m/%d/%Y", "%m/%Y"):
             try:
                 parsed = datetime.strptime(sale_date_str, fmt)
-                # MM/YYYY has no day component — normalize to first of month
+                # MM/YYYY has no day component - normalize to first of month
                 sale_date = parsed.date().replace(day=1) if fmt == "%m/%Y" \
                     else parsed.date()
                 break
@@ -208,7 +208,7 @@ def coerce_sale(
 
         if sale_date is None:
             logger.debug(
-                "Parcel %s — unparseable sale_date skipped: %s",
+                "Parcel %s - unparseable sale_date skipped: %s",
                 parcel_id, sale_date_str,
             )
             return None
@@ -261,7 +261,7 @@ async def fetch_qualified_parcels(
     Return parcel_id values for parcels matching target_dor_ucs in the
     given county that require CAMA enrichment.
 
-    target_dor_ucs is supplied by the county module — e.g. ['001'] for
+    target_dor_ucs is supplied by the county module - e.g. ['001'] for
     single-family only, or ['001', '002'] to include mobile homes.
 
     Skips parcels where cama_enriched_at IS NOT NULL unless force=True.
@@ -308,13 +308,13 @@ async def write_cama(
     """
     Write CAMA fields back to the properties table for this parcel.
 
-    Only writes non-None values from coerced — never overwrites an
+    Only writes non-None values from coerced - never overwrites an
     existing DB value with None from a failed parse.
 
     Always writes raw_cama_json and cama_enriched_at regardless of
     whether any CAMA fields parsed successfully.
 
-    Explicitly writes NULL for columns in null_cols — these were present
+    Explicitly writes NULL for columns in null_cols - these were present
     in source data but rejected by a sanity guard in coerce_building().
     """
     if dry_run:
@@ -371,7 +371,7 @@ async def write_sales(
 
     Uses INSERT ... ON CONFLICT DO NOTHING against the unique constraint
     uq_psh_county_parcel_sale (county_fips, parcel_id, sale_date,
-    grantor, grantee). Re-running is safe — existing rows are unchanged.
+    grantor, grantee). Re-running is safe - existing rows are unchanged.
 
     Returns count of rows actually inserted (0 on conflict).
     """
@@ -481,14 +481,14 @@ async def run(
             headers=headers,
         ) as client:
             for i, pid in enumerate(parcel_ids, start=1):
-                logger.info("Processing %d/%d — parcel %s", i, len(parcel_ids), pid)
+                logger.info("Processing %d/%d - parcel %s", i, len(parcel_ids), pid)
 
                 html = await fetch_page_fn(client, pid)
 
                 if html is SOFT_BLOCK or html == SOFT_BLOCK:
                     counters["failed"] += 1
                     logger.error(
-                        "Soft block on parcel %s — stopping. "
+                        "Soft block on parcel %s - stopping. "
                         "Wait before re-running.",
                         pid,
                     )
@@ -552,7 +552,7 @@ async def run(
 
                     if raw_sales:
                         logger.debug(
-                            "Parcel %s — %d sales found, %d inserted",
+                            "Parcel %s - %d sales found, %d inserted",
                             pid, len(raw_sales), inserted,
                         )
 
@@ -563,7 +563,7 @@ async def run(
 
                     if rest_every and i % rest_every == 0:
                         logger.info(
-                            "Reached parcel %d — resting %.1fs.",
+                            "Reached parcel %d - resting %.1fs.",
                             i, rest_seconds,
                         )
                         await asyncio.sleep(rest_seconds)
@@ -581,8 +581,8 @@ async def run(
     )
 
     # ── Stamp counties.cama_last_ingested_at ─────────────────────────────
-    # Skipped in dry_run mode — no writes occurred so no stamp is valid.
-    # Stamped even on soft-block stop — partial progress is real progress.
+    # Skipped in dry_run mode - no writes occurred so no stamp is valid.
+    # Stamped even on soft-block stop - partial progress is real progress.
     if not dry_run:
         async with AsyncSessionLocal() as stamp_session:
             await stamp_session.execute(
@@ -625,7 +625,7 @@ def main(
     Shared CLI entry point for all county CAMA scrapers.
 
     All rate-limiting parameters are supplied by the county module.
-    No defaults are assumed here — each county must declare its own
+    No defaults are assumed here - each county must declare its own
     values based on its PA site's behavior and robots.txt directives.
 
     County modules may still be overridden at runtime via CLI flags.

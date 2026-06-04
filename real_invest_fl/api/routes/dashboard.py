@@ -1,5 +1,5 @@
 """
-Dashboard route — profile activity and outreach pipeline status
+Dashboard route - profile activity and outreach pipeline status
 for the current user.
 
 GET /dashboard
@@ -70,10 +70,10 @@ async def get_dashboard(
         is_system = True when filter_profiles.user_id IS NULL.
 
     Outreach pipeline status:
-        drafts_pending      — outreach_log rows WHERE status = 'DRAFT'
-        sent_this_week      — outreach_log rows WHERE status = 'SENT'
+        drafts_pending      - outreach_log rows WHERE status = 'DRAFT'
+        sent_this_week      - outreach_log rows WHERE status = 'SENT'
                               AND sent_at >= now() - 7 days
-        responses_received  — always 0 until inbound webhook implemented
+        responses_received  - always 0 until inbound webhook implemented
                               (item 23, Phase 4 tail)
     """
     # ------------------------------------------------------------------ #
@@ -139,6 +139,6 @@ async def get_dashboard(
         outreach_pipeline=OutreachPipelineStatus(
             drafts_pending=drafts_pending,
             sent_this_week=sent_this_week,
-            responses_received=0,  # item 23 — inbound webhook, Phase 4 tail
+            responses_received=0,  # item 23 - inbound webhook, Phase 4 tail
         ),
     )

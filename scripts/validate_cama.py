@@ -5,17 +5,17 @@ Full dual-county CAMA validation report.
 Covers Escambia (12033) and Santa Rosa (12113).
 
 Checks:
-    1.  Enrichment progress — both counties
-    2.  CAMA field population rates — side-by-side parity
-    3.  Field value sanity — year built, living area, zoning,
-        exterior wall, foundation, roof — both counties
-    4.  eff_yr_blt divergence (remodel indicator) — both counties
-    5.  Sale history coverage — both counties
-    6.  MM/YYYY normalized dates — both counties
-    7.  Sale type breakdown — both counties
-    8.  Arms-length price/sqft sanity — both counties
-    9.  Source verification — both counties
-    10. Parcels with anomalous data — both counties
+    1.  Enrichment progress - both counties
+    2.  CAMA field population rates - side-by-side parity
+    3.  Field value sanity - year built, living area, zoning,
+        exterior wall, foundation, roof - both counties
+    4.  eff_yr_blt divergence (remodel indicator) - both counties
+    5.  Sale history coverage - both counties
+    6.  MM/YYYY normalized dates - both counties
+    7.  Sale type breakdown - both counties
+    8.  Arms-length price/sqft sanity - both counties
+    9.  Source verification - both counties
+    10. Parcels with anomalous data - both counties
 
 Usage:
     python scripts/validate_cama.py
@@ -55,13 +55,13 @@ def run_query(sql: str, params: dict | None = None) -> list[dict]:
 
 def pct(n: int | None, total: int | None) -> str:
     if not n or not total:
-        return "—"
+        return "-"
     return f"{n / total * 100:.1f}%"
 
 
 def fmt(n: int | float | None) -> str:
     if n is None:
-        return "—"
+        return "-"
     if isinstance(n, float):
         return f"{n:,.2f}"
     return f"{n:,}"
@@ -182,7 +182,7 @@ def section_field_rates() -> None:
 def section_sanity() -> None:
     print_section("3. FIELD VALUE SANITY")
 
-    # Year built distribution — both counties side by side
+    # Year built distribution - both counties side by side
     print_sub("Year Built Distribution (act_yr_blt)")
 
     rows = run_query("""
@@ -278,8 +278,8 @@ def section_sanity() -> None:
         print(f"  {stat:<15} {fmt(int(e) if e else 0):>10} "
               f"{fmt(int(s) if s else 0):>12}")
 
-    # Top zoning codes — both counties
-    print_sub("Top 10 Zoning Codes — Escambia")
+    # Top zoning codes - both counties
+    print_sub("Top 10 Zoning Codes - Escambia")
     rows = run_query("""
         SELECT zoning, COUNT(*) AS cnt
         FROM properties
@@ -290,7 +290,7 @@ def section_sanity() -> None:
     for r in rows:
         print(f"  {r['zoning']:<15} {fmt(r['cnt']):>8}")
 
-    print_sub("Top 10 Zoning Codes — Santa Rosa")
+    print_sub("Top 10 Zoning Codes - Santa Rosa")
     rows = run_query("""
         SELECT zoning, COUNT(*) AS cnt
         FROM properties
@@ -301,8 +301,8 @@ def section_sanity() -> None:
     for r in rows:
         print(f"  {r['zoning']:<15} {fmt(r['cnt']):>8}")
 
-    # Top exterior wall types — both counties
-    print_sub("Top 10 Exterior Wall Types — Escambia")
+    # Top exterior wall types - both counties
+    print_sub("Top 10 Exterior Wall Types - Escambia")
     rows = run_query("""
         SELECT exterior_wall, COUNT(*) AS cnt
         FROM properties
@@ -313,7 +313,7 @@ def section_sanity() -> None:
     for r in rows:
         print(f"  {r['exterior_wall']:<40} {fmt(r['cnt']):>6}")
 
-    print_sub("Top 10 Exterior Wall Types — Santa Rosa")
+    print_sub("Top 10 Exterior Wall Types - Santa Rosa")
     rows = run_query("""
         SELECT exterior_wall, COUNT(*) AS cnt
         FROM properties
@@ -324,8 +324,8 @@ def section_sanity() -> None:
     for r in rows:
         print(f"  {r['exterior_wall']:<40} {fmt(r['cnt']):>6}")
 
-    # Top foundation types — both counties
-    print_sub("Top Foundation Types — Both Counties")
+    # Top foundation types - both counties
+    print_sub("Top Foundation Types - Both Counties")
     rows = run_query("""
         SELECT
             county_fips,
@@ -433,8 +433,8 @@ def section_sales() -> None:
         ("Latest sale",            "latest_sale"),
     ]
     for label, key in metrics:
-        e_val = str(esc.get(key, "—"))[:14]
-        s_val = str(sr.get(key, "—"))[:14]
+        e_val = str(esc.get(key, "-"))[:14]
+        s_val = str(sr.get(key, "-"))[:14]
         # Format numeric fields
         if key in ("enriched_parcels", "parcels_with_sales", "total_sale_records"):
             e_val = fmt(esc.get(key))
@@ -506,7 +506,7 @@ def section_sales() -> None:
         print(f"  {b:<18} {fmt(d.get('12033', 0)):>10} "
               f"{fmt(d.get('12113', 0)):>12}")
 
-    print_sub("Sale Type Breakdown — Both Counties")
+    print_sub("Sale Type Breakdown - Both Counties")
     rows = run_query("""
         SELECT
             county_fips,
@@ -529,7 +529,7 @@ def section_sales() -> None:
         print(f"  {st:<10} {fmt(counts.get('12033', 0)):>10} "
               f"{fmt(counts.get('12113', 0)):>12}")
 
-    print_sub("Arms-Length WD Sales > $10,000 — Price/SqFt")
+    print_sub("Arms-Length WD Sales > $10,000 - Price/SqFt")
     rows = run_query("""
         SELECT
             psh.county_fips,
@@ -624,7 +624,7 @@ def section_flags() -> None:
 def section_source() -> None:
     print_section("7. SOURCE VERIFICATION")
 
-    print_sub("parcel_sale_history — source tag")
+    print_sub("parcel_sale_history - source tag")
     rows = run_query("""
         SELECT
             county_fips,
@@ -641,7 +641,7 @@ def section_source() -> None:
         print(f"  {COUNTIES[r['county_fips']]:<12} {r['source']:<30} "
               f"{fmt(r['cnt']):>10}")
 
-    print_sub("properties — raw_cama_json population")
+    print_sub("properties - raw_cama_json population")
     rows = run_query("""
         SELECT
             county_fips,
@@ -670,7 +670,7 @@ def section_source() -> None:
 
 if __name__ == "__main__":
     print(SEP)
-    print("  PROJECT PENSTOCK — DUAL-COUNTY CAMA VALIDATION REPORT")
+    print("  PROJECT PENSTOCK - DUAL-COUNTY CAMA VALIDATION REPORT")
     print("  Counties: Escambia (12033) + Santa Rosa (12113)  |  dor_uc = '001'")
     print(SEP)
 

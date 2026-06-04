@@ -53,7 +53,7 @@ export default function DashboardPage() {
         }
       })
     } catch {
-      // silent — star reverts visually on next load
+      // silent - star reverts visually on next load
     }
   }
 
@@ -133,7 +133,7 @@ function PipelineTile({
         {value}
       </span>
       <span style={s.pipelineLabel}>{label}</span>
-      {muted && <span style={s.pipelineMutedNote}>inbound webhook — Phase 4 tail</span>}
+      {muted && <span style={s.pipelineMutedNote}>inbound webhook - Phase 4 tail</span>}
     </div>
   )
 }

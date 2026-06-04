@@ -1,5 +1,5 @@
 """
-Tax Deed Staging Parser — Project Penstock
+Tax Deed Staging Parser - Project Penstock
 ==========================================
 Parses raw two-column key-value CSV files pasted directly from
 escambia.realtaxdeed.com into data/staging/tax_deed/.
@@ -253,14 +253,14 @@ def run_tax_deed_import(
 
                 case_number = record.get("case_number", "")
                 if case_number in existing_cases:
-                    log.debug("  Duplicate case %s — skipping", case_number)
+                    log.debug("  Duplicate case %s - skipping", case_number)
                     totals["skipped"] += 1
                     continue
 
                 parcel = _lookup_parcel(conn, record["parcel_id_raw"])
                 if parcel is None:
                     log.debug(
-                        "  Case %s — parcel %s not found — skipping",
+                        "  Case %s - parcel %s not found - skipping",
                         case_number,
                         record["parcel_id_raw"],
                     )

@@ -1,5 +1,5 @@
 """
-Counties route — returns active counties the current user is authorised to access.
+Counties route - returns active counties the current user is authorised to access.
 
 GET /counties
     Superusers: all active counties.

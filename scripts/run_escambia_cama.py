@@ -8,7 +8,7 @@ soft-block detection. This wrapper restarts it automatically after a
 configurable wait period.
 
 Each restart picks up where the previous run left off via
-cama_enriched_at IS NULL — no duplicate work, no force flag needed.
+cama_enriched_at IS NULL - no duplicate work, no force flag needed.
 
 Usage:
     python scripts/run_escambia_cama.py
@@ -75,7 +75,7 @@ def run(wait: int, dry_run: bool) -> None:
 
         if result.returncode != 0:
             logger.error(
-                "Run #%d exited with code %d — stopping wrapper.",
+                "Run #%d exited with code %d - stopping wrapper.",
                 run_number, result.returncode,
             )
             break

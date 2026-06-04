@@ -1,6 +1,6 @@
 # real_invest_fl/ingest/nal_ingest.py
 """
-NAL ingest pipeline — Stage 1.
+NAL ingest pipeline - Stage 1.
 
 Reads the NAL CSV file for a given county, maps every parcel, and
 upserts the entire county inventory into the properties table.
@@ -8,7 +8,7 @@ upserts the entire county inventory into the properties table.
 No filter profile is consulted at ingest time. Every parcel from
 every county NAL is written as-is. Filtering is exclusively a
 query-time operation (Phase 4). mqi_qualified is set to False and
-mqi_rejection_reasons is set to NULL on every upserted row — these
+mqi_rejection_reasons is set to NULL on every upserted row - these
 are neutral placeholder values, not filter decisions.
 
 File paths are resolved programmatically from the canonical folder
@@ -54,7 +54,7 @@ def _compute_absentee(row: dict) -> bool | None:
     Returns True if owner mailing address differs from physical address.
     Returns False if addresses are present and match.
     Returns None if neither OWN_ADDR1 nor OWN_ADDR2 yields a usable
-    street address — cannot determine residency, store as NULL.
+    street address - cannot determine residency, store as NULL.
 
     Option A per DECISIONS.md: NULL when undeterminable.
     """
@@ -96,7 +96,7 @@ _HostSessionLocal = async_sessionmaker(
 CHUNK_SIZE = 400
 NAL_DTYPES = str
 
-# Root of the repo — two levels above this file
+# Root of the repo - two levels above this file
 # real_invest_fl/ingest/nal_ingest.py  →  ../../  →  repo root
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _COUNTIES_DIR = _REPO_ROOT / "data" / "raw" / "counties"
@@ -165,7 +165,7 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
     Every parcel in the NAL is written to properties regardless of
     use code, assessed value, or any other criterion. No filter profile
     is consulted. mqi_qualified is set to False and
-    mqi_rejection_reasons is set to NULL on every row — neutral
+    mqi_rejection_reasons is set to NULL on every row - neutral
     placeholder values pending the query-time filter implementation
     in Phase 4.
 
@@ -177,7 +177,7 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
     configure_logging(settings.log_level)
 
     if dry_run:
-        logger.info("DRY RUN mode — no database writes will occur")
+        logger.info("DRY RUN mode - no database writes will occur")
 
     nal_file = _resolve_nal_path(county_fips)
     logger.info(
@@ -222,7 +222,7 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
                         run.increment("skipped")
                         continue
 
-                    # Neutral MQI values — not a filter decision.
+                    # Neutral MQI values - not a filter decision.
                     # These columns will be removed in a future migration once
                     # the query-time filter (Phase 4) is live.
                     mapped["mqi_qualified"] = False
@@ -263,7 +263,7 @@ async def run_nal_ingest(county_fips: str, dry_run: bool = False) -> None:
         # ------------------------------------------------------------------ #
         # Stamp counties.nal_last_ingested_at                                 #
         # Runs after IngestRunContext has committed the run record.            #
-        # Skipped in dry_run mode — no writes occurred so no stamp is valid.  #
+        # Skipped in dry_run mode - no writes occurred so no stamp is valid.  #
         # ------------------------------------------------------------------ #
         if not dry_run:
             async with _HostSessionLocal() as stamp_session:
@@ -318,16 +318,16 @@ _NAL_UPSERT_NEVER_OVERWRITE: frozenset[str] = frozenset({
     "arv_spread",
     "arv_source",
     "jv_per_sqft",
-    # compute_years_since_last_sale.py — PSH-derived value takes precedence
+    # compute_years_since_last_sale.py - PSH-derived value takes precedence
     "years_since_last_sale",    
     # Listing matcher
     "list_price",
-    # Phase 2 scoring — not yet built, protect slots
+    # Phase 2 scoring - not yet built, protect slots
     "seller_probability_score",
     "seller_score_updated_at",
     "permit_count",
     "estimated_rehab_per_sqft",
-    # Audit — server_default on insert only; never overwrite
+    # Audit - server_default on insert only; never overwrite
     "created_at",
 })
 
@@ -354,7 +354,7 @@ async def _upsert_batch(
 
     # Calculate safe batch size based on actual column count
     num_cols = len(batch[0])
-    max_rows = 32767 // num_cols   # floor division — stay under limit
+    max_rows = 32767 // num_cols   # floor division - stay under limit
     safe_size = min(max_rows - 10, len(batch))  # 10-row safety margin
 
     sub_batches = [

@@ -1,7 +1,7 @@
 """
 Seed the filter_profiles table with the Escambia POC filter profile.
 Reads config/filter_profiles/escambia_poc.json as the filter_criteria source.
-Safe to run multiple times — uses INSERT ... ON CONFLICT (profile_name) DO NOTHING.
+Safe to run multiple times - uses INSERT ... ON CONFLICT (profile_name) DO NOTHING.
 
 Usage:
     python -m scripts.seeds.seed_filter_profile
@@ -102,7 +102,7 @@ def main() -> None:
         if result.rowcount == 1:
             print(f"Inserted filter profile '{PROFILE_NAME}'.")
         else:
-            print(f"Filter profile '{PROFILE_NAME}' already exists — skipped.")
+            print(f"Filter profile '{PROFILE_NAME}' already exists - skipped.")
 
 
 if __name__ == "__main__":

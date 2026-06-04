@@ -1,9 +1,9 @@
 """
-SubscriptionBundle — named multi-county access packages.
+SubscriptionBundle - named multi-county access packages.
 
 Granting a bundle to a user means inserting one UserCountyAccess row
 per bundle county for that user. That action is performed by a script
-or Phase 4 admin UI — not automated here.
+or Phase 4 admin UI - not automated here.
 bundle_counties is the join table defining bundle membership.
 """
 from __future__ import annotations

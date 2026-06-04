@@ -70,7 +70,7 @@ def evaluate_nal(row: dict, criteria: dict) -> tuple[bool, list[str]]:
     if iq_min is not None or iq_max is not None:
         val = _int(row.get("IMP_QUAL"))
         if val is None:
-            pass  # IMP_QUAL is optional — do not reject on missing
+            pass  # IMP_QUAL is optional - do not reject on missing
         else:
             if iq_min is not None and val < iq_min:
                 rejections.append("imp_qual_too_low")
@@ -157,7 +157,7 @@ def evaluate_nal(row: dict, criteria: dict) -> tuple[bool, list[str]]:
 
     # ------------------------------------------------------------------ #
     # Absentee owner                                                       #
-    # Derived field — computed from mailing vs physical address           #
+    # Derived field - computed from mailing vs physical address           #
     # ------------------------------------------------------------------ #
     ab_filter = f.get("absentee_owner", {})
     ab_required = ab_filter.get("required")
@@ -212,14 +212,14 @@ def _is_absentee(row: dict) -> bool:
     True when owner mailing address differs from physical address.
 
     Address resolution order:
-        1. OWN_ADDR1 — used if it starts with a digit (street address).
-        2. OWN_ADDR2 — used if OWN_ADDR1 is a name overflow (does not
+        1. OWN_ADDR1 - used if it starts with a digit (street address).
+        2. OWN_ADDR2 - used if OWN_ADDR1 is a name overflow (does not
            start with a digit). Covers cases where a long owner name
            spills OWN_ADDR1 and the actual street address is in OWN_ADDR2.
-        3. Neither usable — return False (undeterminable).
+        3. Neither usable - return False (undeterminable).
 
     PO Box addresses do not start with a digit and are treated as
-    undeterminable — a PO Box cannot be compared against a situs address.
+    undeterminable - a PO Box cannot be compared against a situs address.
 
     Note: _compute_absentee() in nal_ingest.py wraps this function and
     returns None (rather than False) when no usable mailing address is
@@ -234,7 +234,7 @@ def _is_absentee(row: dict) -> bool:
     if not phy_addr:
         return False
 
-    # Resolve mailing street address — prefer OWN_ADDR1, fall through
+    # Resolve mailing street address - prefer OWN_ADDR1, fall through
     # to OWN_ADDR2 when OWN_ADDR1 is a name overflow.
     own_addr1 = _str(row.get("OWN_ADDR1")) or ""
     own_addr2 = _str(row.get("OWN_ADDR2")) or ""

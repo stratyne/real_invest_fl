@@ -3,7 +3,7 @@
 Creates the canonical data/raw/counties folder tree for all 67 Florida counties
 and the _unsorted holding folder.
 
-Safe to run multiple times — exist_ok=True means no errors if folders already exist.
+Safe to run multiple times - exist_ok=True means no errors if folders already exist.
 
 Usage:
     python scripts/create_county_folders.py
@@ -13,14 +13,14 @@ The folder key format is:  {county_fips}_{county_name_snake}
 e.g.  12033_escambia,  12113_santa_rosa,  12086_miami_dade
 
 Subfolders created per county:
-    nal/          — extracted NAL CSV file(s)
-    sdf/          — extracted SDF CSV file(s)
-    gis/          — extracted shapefile folder(s)
-    nav/          — NAV text files (NAVD / NAVN)
-    source_zips/  — original zip files as downloaded from DOR
+    nal/          - extracted NAL CSV file(s)
+    sdf/          - extracted SDF CSV file(s)
+    gis/          - extracted shapefile folder(s)
+    nav/          - NAV text files (NAVD / NAVN)
+    source_zips/  - original zip files as downloaded from DOR
 
 Additional folders:
-    data/raw/_unsorted/   — files on disk that have not yet been assigned
+    data/raw/_unsorted/   - files on disk that have not yet been assigned
                             to a county folder (nothing is ever deleted)
 """
 from __future__ import annotations
@@ -34,7 +34,7 @@ sys.path.insert(0, str(ROOT))
 
 # ── county registry ────────────────────────────────────────────────────────────
 # Copied directly from scripts/seeds/seed_counties.py so this script has
-# zero runtime dependencies — no DB, no settings, no imports beyond stdlib.
+# zero runtime dependencies - no DB, no settings, no imports beyond stdlib.
 FL_COUNTIES = [
     ("12001", "Alachua"),
     ("12003", "Baker"),

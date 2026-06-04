@@ -1,12 +1,12 @@
 """
-OutreachLog — lifecycle record for each outreach message.
+OutreachLog - lifecycle record for each outreach message.
 
 One row is written per generate_outreach call (DRAFT status).
-send_outreach updates the same row to SENT or FAILED — draft and sent
+send_outreach updates the same row to SENT or FAILED - draft and sent
 state live on the same row. sent_at NULL means the message has not been sent.
 
-status domain: DRAFT | SENT | FAILED — enforced by CHECK constraint.
-template_type domain: EMAIL | LETTER — snapshot of outreach_templates.template_type
+status domain: DRAFT | SENT | FAILED - enforced by CHECK constraint.
+template_type domain: EMAIL | LETTER - snapshot of outreach_templates.template_type
 at generate time, enforced by CHECK constraint.
 
 Snapshot pattern: recipient fields, calendar_link, skip_trace_result, and
@@ -15,13 +15,13 @@ The audit record is self-contained regardless of subsequent changes to the
 source data.
 
 Cascade rules:
-  user_id:           CASCADE  — deleted user's log goes with them
-  listing_event_id:  CASCADE  — no orphaned log rows
-  filter_profile_id: SET NULL — deleted profile orphans the row gracefully;
+  user_id:           CASCADE  - deleted user's log goes with them
+  listing_event_id:  CASCADE  - no orphaned log rows
+  filter_profile_id: SET NULL - deleted profile orphans the row gracefully;
                                 audit record preserved
-  template_id:       RESTRICT — template cannot be deleted while log rows
+  template_id:       RESTRICT - template cannot be deleted while log rows
                                 reference it; preserves audit trail
-  listing_score_id:  SET NULL — log row preserved if score row is deleted
+  listing_score_id:  SET NULL - log row preserved if score row is deleted
 """
 from __future__ import annotations
 from datetime import datetime
@@ -93,7 +93,7 @@ class OutreachLog(Base):
     )
 
     # ------------------------------------------------------------------ #
-    # Recipient snapshot — populated at generate time from properties     #
+    # Recipient snapshot - populated at generate time from properties     #
     # and skip_trace_cache. Self-contained audit record.                  #
     # ------------------------------------------------------------------ #
     recipient_name:     Mapped[str | None] = mapped_column(String(200), nullable=True)
@@ -106,7 +106,7 @@ class OutreachLog(Base):
     recipient_zip:      Mapped[str | None] = mapped_column(String(10),  nullable=True)
 
     # ------------------------------------------------------------------ #
-    # Skip-trace snapshot — NULL if no non-expired cache row at generate  #
+    # Skip-trace snapshot - NULL if no non-expired cache row at generate  #
     # ------------------------------------------------------------------ #
     skip_trace_result: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
@@ -121,18 +121,18 @@ class OutreachLog(Base):
     # send_outreach guards NOT NULL before sending.
 
     # ------------------------------------------------------------------ #
-    # Booking link snapshot — from users.calendar_link at generate time   #
+    # Booking link snapshot - from users.calendar_link at generate time   #
     # NULL if user has not set calendar_link                               #
     # ------------------------------------------------------------------ #
     calendar_link: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     # ------------------------------------------------------------------ #
-    # Template type snapshot — EMAIL | LETTER (CHECK constraint above)    #
+    # Template type snapshot - EMAIL | LETTER (CHECK constraint above)    #
     # ------------------------------------------------------------------ #
     template_type: Mapped[str] = mapped_column(String(50), nullable=False)
 
     # ------------------------------------------------------------------ #
-    # Status — DRAFT | SENT | FAILED (CHECK constraint above)             #
+    # Status - DRAFT | SENT | FAILED (CHECK constraint above)             #
     # ------------------------------------------------------------------ #
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default="DRAFT"

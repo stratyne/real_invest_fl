@@ -797,7 +797,7 @@ export default function SearchPage() {
               <span style={pg.filterCount}>
                 {activeCount} filter{activeCount !== 1 ? 's' : ''} active
                 {activeCount < 2 && (
-                  <span style={pg.filterCountWarning}> — minimum 2 required to search</span>
+                  <span style={pg.filterCountWarning}> - minimum 2 required to search</span>
                 )}
               </span>
               {saveSuccess && <span style={pg.saveSuccess}>{saveSuccess}</span>}
@@ -865,7 +865,7 @@ function WeightSumIndicator({ weights }: {
         fontWeight: 600,
         color: ok ? 'var(--color-success)' : 'var(--color-warning)',
       }}>
-        Weights sum: {rounded.toFixed(2)} {ok ? '✓' : '— should equal 1.00'}
+        Weights sum: {rounded.toFixed(2)} {ok ? '✓' : '- should equal 1.00'}
       </span>
     </div>
   )

@@ -1,15 +1,15 @@
-"""v0.17 — Phase 4 outreach schema
+"""v0.17 - Phase 4 outreach schema
 
 outreach_log existed as a stub (id, user_id only) from v0.13.
 This migration alters the stub to its full design rather than
 creating it from scratch.
 
-outreach_templates and skip_trace_cache are new — CREATE TABLE.
+outreach_templates and skip_trace_cache are new - CREATE TABLE.
 
-users.calendar_link is new — ADD COLUMN.
+users.calendar_link is new - ADD COLUMN.
 
 fk_ol_user_id on outreach_log was SET NULL in v0.13 stub.
-Corrected to CASCADE here — DROP and recreate.
+Corrected to CASCADE here - DROP and recreate.
 
 Revision ID: j1k2l3m4n5o6
 Revises: i0j1k2l3m4n5
@@ -28,7 +28,7 @@ depends_on = None
 def upgrade() -> None:
 
     # ------------------------------------------------------------------ #
-    # users — add calendar_link                                            #
+    # users - add calendar_link                                            #
     # ------------------------------------------------------------------ #
     op.add_column(
         "users",
@@ -134,10 +134,10 @@ def upgrade() -> None:
     op.create_index("ix_stc_expires_at", "skip_trace_cache", ["expires_at"])
 
     # ------------------------------------------------------------------ #
-    # outreach_log — alter stub to full schema                             #
+    # outreach_log - alter stub to full schema                             #
     # ------------------------------------------------------------------ #
 
-    # Drop the v0.13 stub FK — was SET NULL, must be CASCADE
+    # Drop the v0.13 stub FK - was SET NULL, must be CASCADE
     op.drop_constraint("fk_ol_user_id", "outreach_log", type_="foreignkey")
 
     # Add all missing columns
@@ -187,7 +187,7 @@ def upgrade() -> None:
             sa.String(50),
             nullable=False,
             server_default="EMAIL",
-            comment="EMAIL | LETTER — snapshot from outreach_templates row",
+            comment="EMAIL | LETTER - snapshot from outreach_templates row",
         ))
     op.add_column("outreach_log",
         sa.Column(
@@ -217,7 +217,7 @@ def upgrade() -> None:
         ))
 
     # Drop server_defaults that were only needed to satisfy NOT NULL
-    # on ALTER — these columns must not carry permanent defaults
+    # on ALTER - these columns must not carry permanent defaults
     op.alter_column("outreach_log", "county_fips", server_default=None)
     op.alter_column("outreach_log", "parcel_id", server_default=None)
     op.alter_column("outreach_log", "listing_event_id", server_default=None)
@@ -276,7 +276,7 @@ def upgrade() -> None:
 def downgrade() -> None:
 
     # ------------------------------------------------------------------ #
-    # outreach_log — return to v0.13 stub state                           #
+    # outreach_log - return to v0.13 stub state                           #
     # ------------------------------------------------------------------ #
     op.drop_index("ix_ol_parcel", table_name="outreach_log")
     op.drop_index("ix_ol_status", table_name="outreach_log")
@@ -321,7 +321,7 @@ def downgrade() -> None:
     op.drop_column("outreach_log", "parcel_id")
     op.drop_column("outreach_log", "county_fips")
 
-    # Restore v0.13 FK — SET NULL
+    # Restore v0.13 FK - SET NULL
     op.create_foreign_key(
         "fk_ol_user_id", "outreach_log",
         "users", ["user_id"], ["id"],

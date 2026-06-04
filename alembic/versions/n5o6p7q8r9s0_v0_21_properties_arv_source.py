@@ -1,4 +1,4 @@
-"""v0.21 — add arv_source to properties
+"""v0.21 - add arv_source to properties
 
 Revision ID: n5o6p7q8r9s0
 Revises: m4n5o6p7q8r9

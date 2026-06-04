@@ -1,9 +1,9 @@
 """
-Ingest status route — data source health summary. Superuser only.
+Ingest status route - data source health summary. Superuser only.
 
 GET /ingest/status
     Returns data_source_status rows for all counties.
-    Superuser only — raises 403 for non-superusers.
+    Superuser only - raises 403 for non-superusers.
 """
 from __future__ import annotations
 

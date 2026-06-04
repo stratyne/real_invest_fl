@@ -1,5 +1,5 @@
 """
-IngestRun — audit record for every pipeline execution.
+IngestRun - audit record for every pipeline execution.
 
 One row per run. Opened when a pipeline stage starts, closed
 when it finishes or fails. Never updated after closed.

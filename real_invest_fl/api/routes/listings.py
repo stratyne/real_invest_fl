@@ -1,10 +1,10 @@
 """
-Listings routes — listing_event read access and workflow status management.
+Listings routes - listing_event read access and workflow status management.
 
-GET   /{county_fips}/listings                        — list listing_events with optional filters.
-GET   /{county_fips}/listings/{listing_id}           — single listing_event detail.
-PATCH /{county_fips}/listings/{listing_id}/status    — update workflow_status.
-      Valid transitions enforced server-side — see DECISIONS.md.
+GET   /{county_fips}/listings                        - list listing_events with optional filters.
+GET   /{county_fips}/listings/{listing_id}           - single listing_event detail.
+PATCH /{county_fips}/listings/{listing_id}/status    - update workflow_status.
+      Valid transitions enforced server-side - see DECISIONS.md.
 """
 from __future__ import annotations
 
@@ -94,7 +94,7 @@ async def list_listings(
     """Return listing_events for the county with optional filters.
 
     All query filters are optional and combinable.
-    Results ordered by created_at descending — most recent first.
+    Results ordered by created_at descending - most recent first.
     """
     stmt = (
         select(ListingEvent)
@@ -135,7 +135,7 @@ async def get_listing(
     """Return a single listing_event by id.
 
     Returns 404 if the listing does not exist within the county.
-    County scope is enforced — a valid listing_id from a different
+    County scope is enforced - a valid listing_id from a different
     county returns 404, not 403.
     """
     result = await db.execute(
@@ -196,7 +196,7 @@ async def update_listing_status(
     if body.workflow_status not in permitted:
         if not permitted:
             detail = (
-                f"Listing {listing_id} is CLOSED — no further transitions permitted."
+                f"Listing {listing_id} is CLOSED - no further transitions permitted."
             )
         else:
             detail = (

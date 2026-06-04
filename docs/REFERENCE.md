@@ -1,14 +1,14 @@
-# Project Penstock — REFERENCE.md
+# Project Penstock - REFERENCE.md
 
 Companion to CHECKPOINT.md. Contains locked design decisions, schema
 detail, file paths, scraper notes, completed item archives, and
 source investigation results. Paste relevant sections into a new chat
 session when working in those areas. Do not paste wholesale at session
-open — use CHECKPOINT.md for that.
+open - use CHECKPOINT.md for that.
 
 ---
 
-## Key Design Decisions (Locked — Never Override)
+## Key Design Decisions (Locked - Never Override)
 
 ### Data Architecture
 - ARV proxy = `jv` (Just Value from NAL) until multi-year SDF comps available
@@ -19,13 +19,13 @@ open — use CHECKPOINT.md for that.
 ### Database / ORM
 - Session pattern: async (`settings.database_url`) for ORM;
   sync (`settings.sync_database_url`) for batch scripts
-- All SQL in batch scripts uses `text()` — never raw string SQL
-- `CAST(:raw_listing_json AS jsonb)` — never `::jsonb` in `text()` statements
+- All SQL in batch scripts uses `text()` - never raw string SQL
+- `CAST(:raw_listing_json AS jsonb)` - never `::jsonb` in `text()` statements
 
 ### Parcel ID Normalization
 - Strip non-alphanumeric, uppercase, NO zero-padding.
 - `properties.parcel_id` stored as 16 chars.
-- `normalize_parcel_id()` in `parcel_id.py` zero-pads to 18 — do NOT call
+- `normalize_parcel_id()` in `parcel_id.py` zero-pads to 18 - do NOT call
   it in scrapers; it will break the join. Use raw strip+uppercase only.
 
 ### Street Address Normalization
@@ -33,13 +33,13 @@ open — use CHECKPOINT.md for that.
   single shared normalizer for all scrapers and listing_matcher.
 - Transformations (in order): upper-case, unit strip, digit-letter injection
   (ordinals excluded), suffix abbreviation, directional contraction.
-- Digit-letter injection: `(\d)(?!(?:ST|ND|RD|TH)\b)([A-Z])` — excludes
+- Digit-letter injection: `(\d)(?!(?:ST|ND|RD|TH)\b)([A-Z])` - excludes
   ordinal suffixes (74TH, 48TH).
 - Unit stripping runs BEFORE digit-letter injection.
-- `#` unit designator has no leading `\b` anchor — `#` is not a word char.
+- `#` unit designator has no leading `\b` anchor - `#` is not a word char.
 - `strip_unit=False` preserves unit designators for Level 2 lookup.
 - `listing_matcher._normalize_address()` delegates to `normalize_street_address()`.
-- Address matching: three-level fallback — exact match, unit suffix
+- Address matching: three-level fallback - exact match, unit suffix
   normalization (#4A → 4A), street prefix with MULTI-UNIT review flag.
 - Library: rapidfuzz v3.14.5
 - 50 tests passing as of 2026-04-28.
@@ -58,25 +58,25 @@ open — use CHECKPOINT.md for that.
     GIS: next(gis_dir.glob("*.shp"))
 - CRS detection is per-county at runtime via gdf.crs. COUNTY_REGISTRY
   stores the confirmed CRS per county for documentation and warning
-  suppression only. gdf.crs.to_epsg() is authoritative — not the raw
+  suppression only. gdf.crs.to_epsg() is authoritative - not the raw
   .prj text. Santa Rosa confirmed EPSG:2883 (not EPSG:2881 as the raw
   .prj text suggested).
 - Florida statewide bounding box for centroid sanity checks:
   FL_LAT_MIN/MAX = 24.4/31.1, FL_LON_MIN/MAX = -87.65/-80.0.
-  Western boundary is -87.65, not -87.6 — confirmed against 18 valid
+  Western boundary is -87.65, not -87.6 - confirmed against 18 valid
   Escambia parcels along the Perdido River.
   
 ### CAMA Ingest Framework
 
 Subpackage: real_invest_fl/ingest/cama/
-  base.py        — shared framework, no county-specific logic
-  escambia.py    — Escambia County scraper
-  santa_rosa.py  — Santa Rosa County scraper
-  __init__.py    — package marker
+  base.py        - shared framework, no county-specific logic
+  escambia.py    - Escambia County scraper
+  santa_rosa.py  - Santa Rosa County scraper
+  __init__.py    - package marker
 
 base.py design rules (never override):
 - coerce_building() returns (coerced: dict, null_cols: set[str])
-  null_cols contains columns explicitly rejected by sanity guards —
+  null_cols contains columns explicitly rejected by sanity guards -
   write_cama() writes NULL for these regardless of existing DB value.
   This is distinct from absent/unparseable fields which return None
   and are silently skipped.
@@ -85,7 +85,7 @@ base.py design rules (never override):
 - All rate-limiting parameters are county-supplied. base.py has no
   defaults. County module must declare: DEFAULT_DELAY, DEFAULT_DELAY_MAX,
   REST_EVERY (None = no rest pauses), REST_SECONDS.
-- target_dor_ucs is county-supplied — e.g. ['001'] for single-family.
+- target_dor_ucs is county-supplied - e.g. ['001'] for single-family.
   Never hardcoded in base.py.
 - Soft-block sentinel: base.SOFT_BLOCK = "__SOFT_BLOCK__"
   County fetch_page() returns this to stop the run cleanly.
@@ -96,7 +96,7 @@ parcel_sale_history table:
   Distinct from sales_comps (SDF-sourced qualified arm's-length only).
   Unique constraint: uq_psh_county_parcel_sale on
   (county_fips, parcel_id, sale_date, grantor, grantee).
-  grantor/grantee NOT NULL DEFAULT '' — empty string used in place of
+  grantor/grantee NOT NULL DEFAULT '' - empty string used in place of
   NULL to ensure unique constraint fires correctly.
 
 dor_uc normalization:
@@ -118,21 +118,21 @@ Santa Rosa parcelview notes:
   Soft-block confirmed at ~2,859 requests over ~1h54m with no rest pauses.
   Current rate limit settings: 1.0-3.0s delay, REST_EVERY=500,
   REST_SECONDS=300.0.
-  Building data parsed from data-cell attribute pattern — no regex,
+  Building data parsed from data-cell attribute pattern - no regex,
   no sibling traversal. Sales data from salesContainer div, same pattern.
   Zoning from zoningContainer div, Code cell.
 
 ### Scraping / Robots
 - Tier 1 government sources (RealForeclose, RealTaxDeed, LandmarkWeb):
-  file-drop parsers — robots.txt blocks live scraping on all three.
+  file-drop parsers - robots.txt blocks live scraping on all three.
 - `public.escambiaclerk.com`: generic crawlers permitted; ClaudeBot blocked
-  by name. Behind Cloudflare — Playwright required, requests blocked.
+  by name. Behind Cloudflare - Playwright required, requests blocked.
 - Scraper auto-discovery via `real_invest_fl/scrapers/` package imports.
 
 ### Beds / Baths
 - Populated opportunistically on parcel match from any listing source.
 - `bed_bath_source` tracks provenance.
-- Never overwrite an existing value with a lower-confidence source —
+- Never overwrite an existing value with a lower-confidence source -
   logic lives in the parser layer.
 
 ### Signal Tiers
@@ -155,7 +155,7 @@ Santa Rosa parcelview notes:
 - First bundle: Pensacola Metro = Escambia (12033) + Santa Rosa (12113).
 - First expansion county: Santa Rosa (FIPS 12113).
 - User-county authorization: `user_county_access` join table.
-- County access enforced via single reusable FastAPI dependency — not at
+- County access enforced via single reusable FastAPI dependency - not at
   the application layer.
 - Multi-user from day one. No single-admin stub acceptable.
 
@@ -163,7 +163,7 @@ Santa Rosa parcelview notes:
 - Profiles scoped to county_fips.
 - System profiles: user_id = NULL, visible to all authorized users,
   not editable or deletable by users.
-- Users clone a system profile to create a private editable copy —
+- Users clone a system profile to create a private editable copy -
   "Save as my profile" is a first-class UI action.
 - User profiles: user_id = owner, private, fully editable.
 - Uniqueness enforced via two partial unique indexes (live in DB, v0.13):
@@ -177,21 +177,21 @@ Santa Rosa parcelview notes:
   from every county NAL is written as-is regardless of use code, size,
   value, or any other criterion.
 - passed_filters, filter_rejection_reasons, deal_score are computed at
-  query time against the standing inventory — not at ingest time.
+  query time against the standing inventory - not at ingest time.
 - deal_score_version tracks algorithm version for auditability.
 - Filter profile save/modify triggers background recompute of
-  listing_events for that county_fips — Phase 4 dependency.
+  listing_events for that county_fips - Phase 4 dependency.
 - API routes sort and filter on pre-computed columns only.
 - mqi_qualified, mqi_rejection_reasons, mqi_qualified_at are POC
   artifacts. All rows carry mqi_qualified = false as a neutral
   placeholder. These columns will be removed in a future migration
   once the query-time filter (Phase 4) is live.
 
-### Auth Model (Locked — Item 5)
+### Auth Model (Locked - Item 5)
 - JWT HS256 via PyJWT. sub = users.id as string. email included as
-  display hint only — never used for identity lookup.
+  display hint only - never used for identity lookup.
 - Token payload: sub, email, type="access", iat, exp.
-- Password hashing: bcrypt direct (passlib dropped — incompatible with
+- Password hashing: bcrypt direct (passlib dropped - incompatible with
   bcrypt 4.0+).
 - get_current_user: decodes JWT, extracts user id, loads User from DB,
   raises 401 on failure or inactive user.
@@ -465,7 +465,7 @@ listing_url              VARCHAR(1000)
 listing_agent_name       VARCHAR(200)
 listing_agent_email      VARCHAR(200)
 listing_agent_phone      VARCHAR(30)
-mls_number               VARCHAR(50)  — no unique constraint
+mls_number               VARCHAR(50)  - no unique constraint
 price_per_sqft           NUMERIC(8,2)
 arv_estimate             INTEGER
 arv_source               VARCHAR(20)
@@ -557,13 +557,13 @@ Tax deed data is sourced via direct scraper, not file-drop.
 
 ---
 
-## Escambia Clerk Tax Deed — Direct Scrape (COMPLETE)
+## Escambia Clerk Tax Deed - Direct Scrape (COMPLETE)
 
 - Scraper: `real_invest_fl/scrapers/escambia_taxdeed_clerk.py`
 - Runner: `real_invest_fl/ingest/run_taxdeed.py`
 - Date list: https://public.escambiaclerk.com/taxsale/taxsaledates.asp
 - Per-date: https://public.escambiaclerk.com/taxsale/taxsaleMobile.asp?saledate=M/D/YYYY
-- saledate format: M/D/YYYY, no zero-padding, no percent-encoding —
+- saledate format: M/D/YYYY, no zero-padding, no percent-encoding -
   build URL as string, never use requests params dict
 - Table: `soup.find("table", attrs={"bgcolor": "#0054A6"})`
 - Columns: Clerk File #, Account, Certificate Number, Reference (parcel ID),
@@ -583,17 +583,17 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 
 | Tier | Sources | Approach | Status |
 |---|---|---|---|
-| 1 — Government direct | Escambia Clerk tax deed, lis pendens, foreclosures, RealTaxDeed | Live scrape or file-drop | Tax deed complete; others file-drop |
-| 2 — Public aggregators | HUD Home Store, Foreclosure.com | Playwright + rate limiting | Auction.com COMPLETE; others pending |
-| 3 — Free listing sources | Craigslist FSBO | requests + BS4 | Deferred indefinitely |
-| 4 — Commercial platforms | Zillow, Redfin, Realtor.com, Homes.com | Paid API or vendor proxy | Deferred |
+| 1 - Government direct | Escambia Clerk tax deed, lis pendens, foreclosures, RealTaxDeed | Live scrape or file-drop | Tax deed complete; others file-drop |
+| 2 - Public aggregators | HUD Home Store, Foreclosure.com | Playwright + rate limiting | Auction.com COMPLETE; others pending |
+| 3 - Free listing sources | Craigslist FSBO | requests + BS4 | Deferred indefinitely |
+| 4 - Commercial platforms | Zillow, Redfin, Realtor.com, Homes.com | Paid API or vendor proxy | Deferred |
 
 ---
 
 ## Per-Scraper Implementation Notes
 
 ### auction_com.py
-- `_normalize_street()` is intentionally minimal — digit-letter injection
+- `_normalize_street()` is intentionally minimal - digit-letter injection
   and upper/collapse only. Do not expand.
 - GraphQL API: POST https://graph.auction.com/graphql
 - No auth required. x-cid header must be fresh UUID per request.
@@ -608,7 +608,7 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
   Suspected NAL storage format mismatch, not a normalization defect.
 
 ### escambia_taxdeed_clerk.py
-- Table nested inside wrapper — use bgcolor="#0054A6" selector always.
+- Table nested inside wrapper - use bgcolor="#0054A6" selector always.
 - Windows Python 3.13: use %b not %B for month parsing.
 
 ### zillow_parser.py (staging)
@@ -623,21 +623,21 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 
 ## Source Investigation Results (Manual, 2026-04-28)
 
-### Tier 1 — Tax Delinquency
+### Tier 1 - Tax Delinquency
 - Escambia Tax Collector delinquent page: navigation hub only, no data.
 - escambia.county-taxes.com: landing page only, dead end.
 - LienHub advertised list: high-value bulk list, available after May 5 2026.
   URL: https://lienhub.com/county/escambia/certsale/main?unique_id=41C54840429511F1A2F69948A6B8334F&use_this=print_advertised_list
 - LienExpress: redirect to LienHub, not a standalone source.
 
-### Tier 2 — Government Auction
+### Tier 2 - Government Auction
 - Escambia County Surplus Auctions: zero listings at investigation date.
   Monitor periodically. https://myescambia.com/our-services/property-sales/surplus-property-auction
 - HUD Home Store: zero Escambia listings at investigation date. Monitor.
   https://www.hudhomestore.gov/searchresult?citystate=FL
 - Auction.com: COMPLETE. 17 listings at investigation date.
 
-### Tier 3 — Commercial / FSBO
+### Tier 3 - Commercial / FSBO
 - Craigslist: feasible technically, messy data, deferred indefinitely.
 - Zillow: good data quality, anti-scraping posture is obstacle.
   RapidAPI wrapper is approved POC approach. Deferred to Tier 4.
@@ -647,13 +647,13 @@ python real_invest_fl/ingest/run_taxdeed.py --date 5/6/2026
 
 ## Completed Item Archive
 
-### Item 2 — Address Normalization (COMPLETE)
+### Item 2 - Address Normalization (COMPLETE)
 `normalize_street_address()` in `real_invest_fl/utils/text.py`.
 strip_unit=False parameter added 2026-04-28. Bug fixed 2026-05-01:
 digit-letter injection confined to pre-unit portion when strip_unit=False.
 50 tests passing. 2 additional tests in test_listing_matcher_lookup.py.
 
-### Item 3 — listing_matcher.py Architectural Resolution (COMPLETE)
+### Item 3 - listing_matcher.py Architectural Resolution (COMPLETE)
 auction_com.py and zillow_parser.py route through
 lookup_parcel_by_address() in listing_matcher.py. Per-scraper
 _lookup_parcel() and bed/bath enrichment duplicates retired.
@@ -661,14 +661,14 @@ Follow-ups: 2983 N HWY 95 A still unmatched; auction_com.py not yet
 wired through BaseScraper; parser-layer bed/bath confidence hierarchy
 deferred.
 
-### Item 4 — data_source_status Table (COMPLETE)
+### Item 4 - data_source_status Table (COMPLETE)
 Migration e5f6a7b8c9d0 (v0.12). Composite PK (source, county_fips).
 Shared upsert helper in source_status.py. Integrated in run_taxdeed.py,
 run_auction_com.py, run_staging_import.py. Sources supported:
 escambia_clerk_taxsale, auction_com, zillow_foreclosure,
 escambia_landmarkweb, escambia_realforeclose, escambia_realtaxdeed.
 
-### Item 5 — User/Tenant Model and Auth Infrastructure (COMPLETE)
+### Item 5 - User/Tenant Model and Auth Infrastructure (COMPLETE)
 Migration f7a8b9c0d1e2 (v0.13). Tables: users, user_county_access,
 subscription_bundles, bundle_counties. filter_profiles.user_id added.
 outreach_log.user_id added. ui_sessions dropped. JWT HS256 via PyJWT,
@@ -676,24 +676,24 @@ bcrypt direct. Auth routes: POST /auth/token, GET /auth/me.
 Dependencies: get_current_user, require_county_access (superuser bypass).
 Seed scripts: seed_bundles.py, seed_superuser.py.
 115 tests passing. Two-pass code review completed and approved.
-passlib dropped — incompatible with bcrypt 4.0+/5.0.0.
+passlib dropped - incompatible with bcrypt 4.0+/5.0.0.
 
-### Item 33 — parcel_sale_history Table (COMPLETE)
+### Item 33 - parcel_sale_history Table (COMPLETE)
 Migrations g8h9i0j1k2l3 (v0.14) and h9i0j1k2l3m4 (v0.15).
 Stores full ownership chain per parcel from county PA scrape.
 Distinct from sales_comps (SDF-sourced qualified arm's-length only).
 Unique constraint uq_psh_county_parcel_sale on
 (county_fips, parcel_id, sale_date, grantor, grantee).
-grantor/grantee NOT NULL DEFAULT '' — empty string used in place of
+grantor/grantee NOT NULL DEFAULT '' - empty string used in place of
 NULL to ensure unique constraint fires correctly.
 17,596+ rows as of 2026-05-04, Santa Rosa only.
 
-### Item 34 — Multi-County CAMA Framework (COMPLETE)
+### Item 34 - Multi-County CAMA Framework (COMPLETE)
 Subpackage: real_invest_fl/ingest/cama/
   base.py, escambia.py, santa_rosa.py, __init__.py
 All rate-limiting parameters county-supplied. No shared defaults.
 coerce_building() returns (coerced, null_cols) tuple.
 write_cama() explicitly NULLs guard-rejected fields.
-cama_ingest.py retained — do not delete until Escambia testing confirmed.
+cama_ingest.py retained - do not delete until Escambia testing confirmed.
 Santa Rosa CAMA ingest in progress: 3,518/68,312 enriched as of 2026-05-04.
 See CAMA Status section in CHECKPOINT for full operational detail.

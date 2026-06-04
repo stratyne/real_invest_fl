@@ -6,42 +6,42 @@ ARV Calculation Pipeline.
 Computes and writes ARV-related metrics to the properties table for all
 eligible parcels. Eligibility is determined by a two-tier gate:
 
-    Tier 1 — jv IS NOT NULL AND geom IS NOT NULL
+    Tier 1 - jv IS NOT NULL AND geom IS NOT NULL
         Attempt COMP calculation from parcel_sale_history.
         Fall back to NAL spatial fallback if parcel_sale_history yields
         insufficient comps after both primary and wider pool passes.
         Fall back to raw jv if NAL spatial fallback also yields
         insufficient comps.
 
-    Tier 2 — jv IS NOT NULL AND geom IS NULL
+    Tier 2 - jv IS NOT NULL AND geom IS NULL
         Skip spatial comp join entirely.
         Write arv_estimate = jv, arv_source = JV_FALLBACK directly.
 
-    Excluded — jv IS NULL
+    Excluded - jv IS NULL
         Skipped entirely. Count logged.
 
 Columns written per parcel:
-    jv_per_sqft   — jv / tot_lvg_area (NULL if tot_lvg_area is NULL or zero)
-    arv_estimate  — median(sale_price / tot_lvg_area) * subject.tot_lvg_area
+    jv_per_sqft   - jv / tot_lvg_area (NULL if tot_lvg_area is NULL or zero)
+    arv_estimate  - median(sale_price / tot_lvg_area) * subject.tot_lvg_area
                     for COMP path;
                     median(sale_prc1 / tot_lvg_area) * subject.tot_lvg_area
                     for NAL spatial fallback path;
                     jv for raw jv floor path
-    arv_source    — 'COMP', 'NAL_COMP', or 'JV_FALLBACK'
-    arv_spread    — arv_estimate - list_price - (tot_lvg_area * rehab_cost)
+    arv_source    - 'COMP', 'NAL_COMP', or 'JV_FALLBACK'
+    arv_spread    - arv_estimate - list_price - (tot_lvg_area * rehab_cost)
                     NULL when list_price is NULL or tot_lvg_area is NULL
 
 Three-pass comp strategy (Tier 1 parcels only):
-    Pass 1 — parcel_sale_history, primary pool:
+    Pass 1 - parcel_sale_history, primary pool:
              qualification_code IN ('Q', 'C'), sale_price >= 10000,
              (instrument_type = 'WD' OR instrument_type IS NULL)
-    Pass 2 — parcel_sale_history, wider pool:
+    Pass 2 - parcel_sale_history, wider pool:
              qualification_code IN ('Q', 'C', 'U'), same price/instrument filter
              Scoped to subject parcel only when primary yields < min_comps.
-    Pass 3 — NAL embedded fields on neighboring properties:
+    Pass 3 - NAL embedded fields on neighboring properties:
              qual_cd1 = '01', sale_prc1 >= 10000, same spatial/year/dor_uc filters
              Triggered only when Pass 2 also yields < min_comps.
-    Floor  — arv_estimate = jv, arv_source = JV_FALLBACK
+    Floor  - arv_estimate = jv, arv_source = JV_FALLBACK
              Triggered only when Pass 3 also yields < min_comps.
 
 County pre-flight viability check:
@@ -166,7 +166,7 @@ def _median_arv_from_ppsf(
 
 # ── comp SQL ──────────────────────────────────────────────────────────────────
 
-# Pass 1 / Pass 2 — parcel_sale_history spatial query
+# Pass 1 / Pass 2 - parcel_sale_history spatial query
 _COMP_SQL = text("""
     SELECT
         psh.sale_price,
@@ -192,10 +192,10 @@ _COMP_SQL = text("""
       AND NOT (p.county_fips = :county_fips AND p.parcel_id = :parcel_id)
 """)
 
-# Pass 3 — NAL embedded fields spatial query
+# Pass 3 - NAL embedded fields spatial query
 # Queries neighboring properties' sale_prc1/qual_cd1 fields.
 # qual_cd1 = '01' is the primary qualifying NAL code (arms-length).
-# qual_cd2 fallback not included — two-field NAL history is too thin
+# qual_cd2 fallback not included - two-field NAL history is too thin
 # to reliably widen; jv floor is preferable to noisy qual_cd2 comps.
 _NAL_FALLBACK_SQL = text("""
     SELECT
@@ -265,7 +265,7 @@ def _check_county_viability(
         viability[fips] = viable
         status = "VIABLE" if viable else "BELOW THRESHOLD"
         logger.info(
-            "County %s — qualifying comp pool: %d (%s, threshold: %d)",
+            "County %s - qualifying comp pool: %d (%s, threshold: %d)",
             fips, count, status, MIN_VIABLE_COMP_POOL,
         )
 
@@ -282,7 +282,7 @@ def _fetch_psh_comps(
     year_tolerance: int,
 ) -> list[dict]:
     """
-    Pass 1 / Pass 2 — fetch parcel_sale_history comp candidates
+    Pass 1 / Pass 2 - fetch parcel_sale_history comp candidates
     for a single subject parcel.
     """
     rows = conn.execute(
@@ -309,7 +309,7 @@ def _fetch_nal_comps(
     year_tolerance: int,
 ) -> list[dict]:
     """
-    Pass 3 — fetch NAL embedded sale field comp candidates
+    Pass 3 - fetch NAL embedded sale field comp candidates
     for a single subject parcel.
     Uses qual_cd1 = '01' (arms-length) and sale_prc1 >= 10000.
     """
@@ -343,22 +343,22 @@ def _compute_comp_arv(
     Returns (arv_estimate, arv_source).
 
     Three-pass strategy:
-        Pass 1 — parcel_sale_history primary pool (Q, C)
+        Pass 1 - parcel_sale_history primary pool (Q, C)
                  Skipped for non-viable counties.
-        Pass 2 — parcel_sale_history wider pool (Q, C, U)
+        Pass 2 - parcel_sale_history wider pool (Q, C, U)
                  Skipped for non-viable counties.
-        Pass 3 — NAL embedded fields (qual_cd1 = '01')
+        Pass 3 - NAL embedded fields (qual_cd1 = '01')
                  Always attempted when Passes 1+2 yield < min_comps.
-        Floor  — arv_estimate = jv, arv_source = JV_FALLBACK
+        Floor  - arv_estimate = jv, arv_source = JV_FALLBACK
     """
     if not subject["tot_lvg_area"] or subject["tot_lvg_area"] <= 0:
-        # Cannot compute comp ARV without subject area — skip to floor
+        # Cannot compute comp ARV without subject area - skip to floor
         return subject["jv"], "JV_FALLBACK"
 
     subject_area = subject["tot_lvg_area"]
 
     if viable:
-        # ── Pass 1 — PSH primary pool ─────────────────────────────── #
+        # ── Pass 1 - PSH primary pool ─────────────────────────────── #
         primary_comps = _fetch_psh_comps(
             conn, subject,
             qual_codes=["Q", "C"],
@@ -372,7 +372,7 @@ def _compute_comp_arv(
             if arv is not None:
                 return arv, "COMP"
 
-        # ── Pass 2 — PSH wider pool ───────────────────────────────── #
+        # ── Pass 2 - PSH wider pool ───────────────────────────────── #
         wider_comps = _fetch_psh_comps(
             conn, subject,
             qual_codes=["Q", "C", "U"],
@@ -386,7 +386,7 @@ def _compute_comp_arv(
             if arv is not None:
                 return arv, "COMP"
 
-    # ── Pass 3 — NAL spatial fallback ────────────────────────────── #
+    # ── Pass 3 - NAL spatial fallback ────────────────────────────── #
     nal_comps = _fetch_nal_comps(
         conn, subject,
         radius_meters=radius_meters,
@@ -399,7 +399,7 @@ def _compute_comp_arv(
         if arv is not None:
             return arv, "NAL_COMP"
 
-    # ── Floor — raw jv ────────────────────────────────────────────── #
+    # ── Floor - raw jv ────────────────────────────────────────────── #
     return subject["jv"], "JV_FALLBACK"
 
 
@@ -439,7 +439,7 @@ def run_arv_calculation(
 
     engine = create_engine(settings.host_sync_database_url, echo=False)
 
-    # ── Step 2 — Load eligible parcels ───────────────────────────────── #
+    # ── Step 2 - Load eligible parcels ───────────────────────────────── #
     county_filter = "AND p.county_fips = :county" if county else ""
     resume_filter = "" if force else "AND p.arv_estimate IS NULL"
 
@@ -474,10 +474,10 @@ def run_arv_calculation(
     logger.info("Loaded %d eligible parcels", total)
 
     if total == 0:
-        logger.info("No parcels require ARV calculation — all up to date.")
+        logger.info("No parcels require ARV calculation - all up to date.")
         return
 
-    # ── Step 3 — County viability pre-flight ─────────────────────────── #
+    # ── Step 3 - County viability pre-flight ─────────────────────────── #
     county_fips_list = list({p["county_fips"] for p in parcels})
 
     with engine.connect() as conn:
@@ -488,12 +488,12 @@ def run_arv_calculation(
 
     if nonviable_counties:
         logger.info(
-            "Counties below comp pool threshold — Passes 1+2 skipped, "
+            "Counties below comp pool threshold - Passes 1+2 skipped, "
             "NAL spatial fallback (Pass 3) attempted directly: %s",
             sorted(nonviable_counties),
         )
 
-    # ── Step 4 — Compute metrics ──────────────────────────────────────── #
+    # ── Step 4 - Compute metrics ──────────────────────────────────────── #
     logger.info("Computing ARV metrics...")
 
     computed        = []
@@ -510,19 +510,19 @@ def run_arv_calculation(
             has_geom     = parcel["has_geom"]
             fips         = parcel["county_fips"]
 
-            # jv_per_sqft — independent of comp path
+            # jv_per_sqft - independent of comp path
             jv_psf = _jv_per_sqft(jv, tot_lvg_area)
             if tot_lvg_area is None or tot_lvg_area <= 0:
                 no_sqft_count += 1
 
             if not has_geom:
-                # Tier 2 — no geom, cannot run any spatial query
+                # Tier 2 - no geom, cannot run any spatial query
                 arv_estimate = jv
                 arv_source   = "JV_FALLBACK"
                 no_geom_count += 1
                 fallback_count += 1
             else:
-                # Tier 1 — three-pass comp strategy
+                # Tier 1 - three-pass comp strategy
                 arv_estimate, arv_source = _compute_comp_arv(
                     parcel, conn,
                     radius_meters=radius_meters,
@@ -551,7 +551,7 @@ def run_arv_calculation(
             if i % 5000 == 0:
                 elapsed = time.time() - t_start
                 logger.info(
-                    "Progress: %d / %d (%.1f%%) — %.1fs elapsed | "
+                    "Progress: %d / %d (%.1f%%) - %.1fs elapsed | "
                     "COMP=%d JV_FALLBACK=%d",
                     i, total, i / total * 100, elapsed,
                     comp_count, fallback_count,
@@ -579,7 +579,7 @@ def run_arv_calculation(
         logger.info("[DRY-RUN] No data written to database.")
         return
 
-    # ── Step 5 — Batch write ──────────────────────────────────────────── #
+    # ── Step 5 - Batch write ──────────────────────────────────────────── #
     update_sql = text("""
         UPDATE properties
         SET
@@ -609,11 +609,11 @@ def run_arv_calculation(
             elapsed = time.time() - t_start
             pct     = total_updated / len(computed) * 100
             logger.info(
-                "Batch %d/%d — %d rows written (%.1f%%) — %.1fs elapsed",
+                "Batch %d/%d - %d rows written (%.1f%%) - %.1fs elapsed",
                 batch_num, total_batches, total_updated, pct, elapsed,
             )
 
-    # ── Step 6 — Summary ─────────────────────────────────────────────── #
+    # ── Step 6 - Summary ─────────────────────────────────────────────── #
     elapsed = time.time() - t_start
     logger.info(
         "ARV calculation complete | processed=%d | updated=%d | "

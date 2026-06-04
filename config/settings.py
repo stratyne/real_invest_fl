@@ -1,5 +1,5 @@
 """
-Application settings — loaded from .env via Pydantic BaseSettings.
+Application settings - loaded from .env via Pydantic BaseSettings.
 All filter parameters that were previously hard-coded now live here
 or in config/filter_profiles/*.json.
 """
@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Database
-    database_url: str = Field(..., description="Async SQLAlchemy URL (asyncpg) — container")
-    sync_database_url: str = Field(..., description="Sync URL for Alembic — container")
+    database_url: str = Field(..., description="Async SQLAlchemy URL (asyncpg) - container")
+    sync_database_url: str = Field(..., description="Sync URL for Alembic - container")
     host_database_url: str = Field(..., description="Async asyncpg URL for host-side scripts")
     host_sync_database_url: str = Field(..., description="Sync URL for host-side batch scripts")
 
@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     batchdata_api_key: str = ""
     skip_trace_cache_ttl_days: int = 30
 
-    # CAN-SPAM compliance — required in every outgoing commercial email
+    # CAN-SPAM compliance - required in every outgoing commercial email
     # send_outreach raises 503 if this is empty
     business_address: str = ""
 
@@ -65,7 +65,7 @@ class Settings(BaseSettings):
     proxies_file: str = "./config/proxies.txt"
 
     # Auth
-    jwt_secret_key: str = Field(..., description="HS256 signing secret — required, no default")
+    jwt_secret_key: str = Field(..., description="HS256 signing secret - required, no default")
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
 

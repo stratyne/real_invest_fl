@@ -22,7 +22,7 @@ def map_nal_row(
 
     Args:
         row:           Raw NAL row as dict[str, str].
-        county_fips:   County FIPS code — '12033' for Escambia.
+        county_fips:   County FIPS code - '12033' for Escambia.
         absentee_owner: Pre-computed absentee flag from nal_filter.
 
     Returns:
@@ -82,7 +82,7 @@ def map_nal_row(
         "spass_cd":    _str_max(row.get("SPASS_CD"), 1),
 
         # ---------------------------------------------------------- #
-        # NAL embedded sale history — Sale 1                          #
+        # NAL embedded sale history - Sale 1                          #
         # ---------------------------------------------------------- #
         "multi_par_sal1": _str_max(row.get("MULTI_PAR_SAL1"), 1),
         "qual_cd1":       _str_max(row.get("QUAL_CD1"), 2),
@@ -93,7 +93,7 @@ def map_nal_row(
         "sal_chng_cd1":   _str_max(row.get("SAL_CHNG_CD1"), 1),
 
         # ---------------------------------------------------------- #
-        # NAL embedded sale history — Sale 2                          #
+        # NAL embedded sale history - Sale 2                          #
         # ---------------------------------------------------------- #
         "multi_par_sal2": _str_max(row.get("MULTI_PAR_SAL2"), 1),
         "qual_cd2":       _str_max(row.get("QUAL_CD2"), 2),
@@ -170,7 +170,7 @@ def _improvement_to_land_ratio(
         return None
     try:
         ratio = (jv - lnd_val) / lnd_val
-        # Cap to fit NUMERIC(8, 4) — values beyond this are anomalous
+        # Cap to fit NUMERIC(8, 4) - values beyond this are anomalous
         ratio = min(ratio, Decimal("9999.9999"))
         ratio = max(ratio, Decimal("-9999.9999"))
         return Decimal(str(round(ratio, 4)))
@@ -185,7 +185,7 @@ def _soh_compression_ratio(
     """
     AV_NSD / JV
     Approaches 1.0 when SOH cap is not constraining.
-    Low values indicate long-term homestead owner — seller motivation signal.
+    Low values indicate long-term homestead owner - seller motivation signal.
     Returns None if inputs are missing or JV is zero.
     """
     if av_nsd is None or jv is None or jv == 0:
@@ -203,7 +203,7 @@ def _years_since_last_sale(
 ) -> int | None:
     """
     ASMNT_YR - SALE_YR1
-    Ingest-time seed only — used for parcels with no parcel_sale_history rows.
+    Ingest-time seed only - used for parcels with no parcel_sale_history rows.
     For enriched parcels, compute_years_since_last_sale.py overwrites this
     with MAX(sale_date) from parcel_sale_history using AGE(NOW(), sale_date).
     After that script runs, years_since_last_sale is protected from NAL
