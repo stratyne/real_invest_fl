@@ -219,13 +219,15 @@ def _is_absentee(row: dict, mailing_addr_field: str = "OWN_ADDR2") -> bool:
         Santa Rosa (12113): OWN_ADDR2
 
     Returns True if absentee, False if owner-occupied or undeterminable.
-    Caller _compute_absentee() in nal_ingest.py converts undeterminable
-    to None for DB storage.
+    Caller _compute_absentee() converts undeterminable to None for DB storage.
 
     Logic:
         1. Out-of-state owner -- absentee unconditionally.
-        2. Mailing street starts with a digit -- compare against PHY_ADDR1.
-        3. No usable mailing street -- return False (undeterminable).
+        2. PO Box mailing address -- absentee. An owner-occupant does not
+           use a PO Box as their mailing address for their own home.
+        3. Mailing street starts with a digit -- compare against PHY_ADDR1.
+           Match = owner-occupied. Mismatch = absentee.
+        4. No usable mailing address and not out-of-state -- undeterminable.
     """
     own_state = (row.get("OWN_STATE") or "").strip().upper()
     if own_state and own_state != "FL":
@@ -234,7 +236,13 @@ def _is_absentee(row: dict, mailing_addr_field: str = "OWN_ADDR2") -> bool:
     phy_addr     = (row.get("PHY_ADDR1") or "").strip().upper()
     mailing_addr = (row.get(mailing_addr_field) or "").strip().upper()
 
-    if not mailing_addr or not mailing_addr[0].isdigit():
+    if not mailing_addr:
+        return False
+
+    if mailing_addr.startswith("PO ") or mailing_addr.startswith("P.O."):
+        return True
+
+    if not mailing_addr[0].isdigit():
         return False
 
     if not phy_addr:

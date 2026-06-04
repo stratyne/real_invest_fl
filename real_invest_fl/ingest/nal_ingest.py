@@ -64,6 +64,8 @@ def _compute_absentee(row: dict, county_fips: str) -> bool | None:
     undeterminable. None stored as NULL -- Option A per DECISIONS.md.
 
     mailing_addr_field is county-specific -- see _MAILING_ADDR_FIELD.
+    PO Box mailing addresses are treated as absentee -- an owner-occupant
+    does not use a PO Box as their mailing address for their own home.
     """
     mailing_addr_field = _MAILING_ADDR_FIELD.get(county_fips, "OWN_ADDR2")
 
@@ -74,7 +76,13 @@ def _compute_absentee(row: dict, county_fips: str) -> bool | None:
     mailing_addr = (row.get(mailing_addr_field) or "").strip().upper()
     phy_addr     = (row.get("PHY_ADDR1") or "").strip().upper()
 
-    if not mailing_addr or not mailing_addr[0].isdigit():
+    if not mailing_addr:
+        return None
+
+    if mailing_addr.startswith("PO ") or mailing_addr.startswith("P.O."):
+        return True
+
+    if not mailing_addr[0].isdigit():
         return None
 
     if not phy_addr:

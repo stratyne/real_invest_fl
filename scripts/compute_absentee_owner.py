@@ -51,7 +51,13 @@ def compute(
     if own_state and own_state != "FL":
         return True
 
-    if not mailing_addr or not mailing_addr[0].isdigit():
+    if not mailing_addr:
+        return None
+
+    if mailing_addr.startswith("PO ") or mailing_addr.startswith("P.O."):
+        return True
+
+    if not mailing_addr[0].isdigit():
         return None
 
     if not phy_addr1:

@@ -166,3 +166,23 @@ Known gaps:
 | enrich_missing_spatial_attrs | Once per county at onboarding -- not recurring | enrich_missing_spatial_attrs.py --county-fips {fips} --dor-uc 001 |
 | compute_absentee_owner | Once per county at onboarding, then after every NAL re-ingest | compute_absentee_owner.py --county-fips {fips} |
 
+## Absentee Owner Logic
+
+Mailing address field is county-specific -- verified from raw NAL data:
+    Escambia (12033):   OWN_ADDR1
+    Santa Rosa (12113): OWN_ADDR2
+
+OWN_ADDR1 is the owner name/entity field in Santa Rosa.
+OWN_ADDR2 is blank for virtually all Escambia parcels.
+Verify field layout from raw data for every new county before adding
+to _MAILING_ADDR_FIELD in nal_ingest.py and compute_absentee_owner.py.
+
+Classification rules (applied in order):
+    1. own_state not FL -- absentee.
+    2. Mailing field starts with "PO " or "P.O." -- absentee.
+       An owner-occupant does not use a PO Box for their own home.
+    3. Mailing field starts with a digit -- compare against phy_addr1.
+       Match = owner-occupied. Mismatch = absentee.
+    4. No usable mailing address -- NULL (undeterminable).
+    5. phy_addr1 blank -- NULL (no physical address to compare against).
+
