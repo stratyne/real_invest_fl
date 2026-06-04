@@ -1,10 +1,10 @@
-# Project Penstock — STATE.md
+# Project Penstock - STATE.md
 # Current project status only. No rationale. No design decisions.
 # Updated: 2026-06-02
 
 ## Active Phase
-**Phase 2** (scraping/matching) — core complete, scheduler/output pending.
-**Phase 4** (UI) — active. Deployment complete. Tail items pending.
+**Phase 2** (scraping/matching) - core complete, scheduler/output pending.
+**Phase 4** (UI) - active. Deployment complete. Tail items pending.
 Phase 2 and Phase 4 run in parallel.
 Escambia CAMA run ACTIVE. Santa Rosa CAMA complete.
 
@@ -13,26 +13,26 @@ Escambia CAMA run ACTIVE. Santa Rosa CAMA complete.
 | Phase | Name | Status |
 |---|---|---|
 | 1 | Foundation and Full Inventory | SUBSTANTIALLY COMPLETE |
-| 2 | Scraping and Daily Matching | ACTIVE — core complete, scheduler/output pending |
+| 2 | Scraping and Daily Matching | ACTIVE - core complete, scheduler/output pending |
 | 3 | Subscription Sources and CAMA Refresh | NOT STARTED |
-| 4 | UI — FastAPI + React + MapLibre | ACTIVE — dashboard flow complete, map pins live |
+| 4 | UI - FastAPI + React + MapLibre | ACTIVE - dashboard flow complete, map pins live |
 
 **Phase 1 remaining:** CAMA enrichment (Escambia in progress).
 All other Phase 1 work complete.
 
 **Phase 3 scope:** Landvoice, REDX, PropStream modules. Annual NAL/CAMA refresh
-pipeline. Multi-county CAMA architecture (each county PA has its own website —
+pipeline. Multi-county CAMA architecture (each county PA has its own website -
 no shared scraper possible).
 
 **Phase 2 / Phase 4 parallel:** Escambia CAMA run active in background.
 UI development proceeds in parallel.
 
 ## Migration Chain
-HEAD = o6p7q8r9s0t1 (v0.22) — live and verified
+HEAD = o6p7q8r9s0t1 (v0.22) - live and verified
 
 | Rev | Version | Description |
 |---|---|---|
-| 54c4159dbf59 | v0.2 | initial schema — 14 tables (includes property_value_history, sales_comps) |
+| 54c4159dbf59 | v0.2 | initial schema - 14 tables (includes property_value_history, sales_comps) |
 | 4ca6031e21c4 | v0.3 | NAL rename |
 | f422169456bd | v0.4 | replace scalar with JSON filter |
 | 5381f80387ed | v0.5 | zoning, nav_total_assessment, alt_key index |
@@ -43,19 +43,19 @@ HEAD = o6p7q8r9s0t1 (v0.22) — live and verified
 | c3d4e5f6a7b8 | v0.10 | add signal_tier, signal_type to listing_events |
 | d4e5f6a7b8c9 | v0.11 | add bed_bath_source to properties |
 | e5f6a7b8c9d0 | v0.12 | add data_source_status table |
-| f7a8b9c0d1e2 | v0.13 | user/tenant model — users, user_county_access, subscription_bundles, bundle_counties, filter_profiles.user_id, outreach_log.user_id, drop ui_sessions |
+| f7a8b9c0d1e2 | v0.13 | user/tenant model - users, user_county_access, subscription_bundles, bundle_counties, filter_profiles.user_id, outreach_log.user_id, drop ui_sessions |
 | g8h9i0j1k2l3 | v0.14 | add parcel_sale_history table |
 | h9i0j1k2l3m4 | v0.15 | parcel_sale_history grantor/grantee NOT NULL DEFAULT '' |
 | i0j1k2l3m4n5 | v0.16 | listing_scores table; strip scoring columns from listing_events |
-| j1k2l3m4n5o6 | v0.17 | Phase 4 outreach schema — outreach_templates, skip_trace_cache, outreach_log (stub → full), users.calendar_link |
+| j1k2l3m4n5o6 | v0.17 | Phase 4 outreach schema - outreach_templates, skip_trace_cache, outreach_log (stub → full), users.calendar_link |
 | k2l3m4n5o6p7 | v0.18 | user_profile_prefs |
-| l3m4n5o6p7q8 | v0.19 | multi-county filter profiles — county_fips VARCHAR(5)[] |
+| l3m4n5o6p7q8 | v0.19 | multi-county filter profiles - county_fips VARCHAR(5)[] |
 | m4n5o6p7q8r9 | v0.20 | listing_events workflow_status CHECK constraint |
 | n5o6p7q8r9s0 | v0.21 | add arv_source to properties |
 | o6p7q8r9s0t1 | v0.22 | add sales_history_enriched_at to properties |
 
-**Note:** Ingest refactor (2026-05-02) produced NO migration — code only.
-**Note:** alembic/env.py updated 2026-05-26 to use HOST_SYNC_DATABASE_URL — required for host-side migration runs.
+**Note:** Ingest refactor (2026-05-02) produced NO migration - code only.
+**Note:** alembic/env.py updated 2026-05-26 to use HOST_SYNC_DATABASE_URL - required for host-side migration runs.
 **Pending migration:** remove mqi_qualified, mqi_rejection_reasons,
 mqi_qualified_at once Phase 4 query-time filter is live.
 
@@ -65,9 +65,15 @@ mqi_qualified_at once Phase 4 query-time filter is live.
 |---|---|---|---|---|---|
 | Escambia | 12033 | 170,561 | 160,264 | ~71,586 | Live CAMA run active. beds/baths/quality absent from parcelcard. ARV run pending. tot_lvg_area protected from NAL re-ingest (CAMA wins). |
 | Santa Rosa | 12113 | 120,500 | 111,036 | 68,303 | ARV re-run pending (item 125). CAMA complete. Sale history complete (323,102 records). |
-| All others | — | staged only | staged only | 0 | NAL + GIS files in place |
+| All others | - | staged only | staged only | 0 | NAL + GIS files in place |
 
 **Total properties in DB:** 291,061
+
+**Spatial enrichment (phy_city / phy_zipcd):**
+Santa Rosa: complete. 10,701 city + 30,838 ZIP via ST_Within, 208 city via nearest-neighbor. Zero null-city SFR parcels with geometry remaining.
+Escambia: pending (item 133, blocked on item 16).
+All others: pending (item 133, blocked on items 14/15).
+enrich_missing_spatial_attrs.py --dor-uc 001 is a required step in the county onboarding pipeline, to be run after NAL and GIS ingest complete.
 
 **parcel_sale_history (verified 2026-06-02):**
 
@@ -79,7 +85,7 @@ mqi_qualified_at once Phase 4 query-time filter is live.
 | Source | escpa_cama | srcpa_parcel (286,969) + srcpa_parcelcard (36,133) |
 | Notes | instrument_type populated, qualification_code NULL | Full history complete. instrument_type 99.1% populated. qualification_code: Q 157,771 / U 152,155 / C 11,908 / V 1,268. |
 
-## Historical POC Baseline (Escambia only — superseded 2026-05-02)
+## Historical POC Baseline (Escambia only - superseded 2026-05-02)
 Retained as reference for backfill completeness verification.
 
 | Dataset | Count | Notes |
@@ -93,47 +99,49 @@ Retained as reference for backfill completeness verification.
 
 ## CAMA Run Status (updated 2026-06-02)
 - **Santa Rosa:** COMPLETE. 68,303 / 68,312 enriched (9 remaining are non-SFR edge cases). Full sale history complete via santa_rosa_sales.py (item 124, verified 2026-06-02). Source tags: srcpa_parcel (286,969 rows) + srcpa_parcelcard (36,133 rows, retained). parse_sales() removal pending (item 127).
-- **Escambia:** RUNNING via scripts/run_escambia_cama.py. ~27,284 / 106,372 enriched. Soft-block rate limiting active — wrapper cycling at 420s intervals. beds/baths/cama_quality_code absent from Escambia parcelcard — will remain NULL. Resumable via cama_enriched_at IS NULL.
+- **Escambia:** RUNNING via scripts/run_escambia_cama.py. ~27,284 / 106,372 enriched. Soft-block rate limiting active - wrapper cycling at 420s intervals. beds/baths/cama_quality_code absent from Escambia parcelcard - will remain NULL. Resumable via cama_enriched_at IS NULL.
 
 ## Active Items
 
 | # | Status | Description | Next Action |
 |---|---|---|---|
-| 1 | PARTIAL | Beds/baths opportunistic population for Escambia County | Bulk source pending — not a blocker |
-| 14 | PENDING | Statewide NAL ingest — 65 remaining counties | After Phase 4 scaffold |
-| 15 | PENDING | Statewide GIS ingest — 65 remaining counties | After Phase 4 scaffold |
+| 1 | PARTIAL | Beds/baths opportunistic population for Escambia County | Bulk source pending - not a blocker |
+| 14 | PENDING | Statewide NAL ingest - 65 remaining counties | After Phase 4 scaffold |
+| 15 | PENDING | Statewide GIS ingest - 65 remaining counties | After Phase 4 scaffold |
 | 16 | IN PROGRESS | CAMA enrichment | Santa Rosa complete. Escambia live run active (71,586 / 106,372 enriched as of 2026-06-02). |
 | 17 | PARTIAL | arv_calculator.py refactor | Santa Rosa blocker resolved (item 124 complete). Escambia CAMA completion remains only blocker. |
-| 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py — do not touch during other work |
+| 18 | PENDING | COUNTY_REGISTRY consolidation | Duplicated in nal_ingest.py + gis_ingest.py - do not touch during other work |
 | 20 | PENDING | Daily scheduler | Windows Task Scheduler → master runner script |
 | 21 | PENDING | Zestimate integration | RapidAPI wrapper, rate-limited |
-| 22 | PENDING | Output pipeline — Google Sheets export | — |
+| 22 | PENDING | Output pipeline - Google Sheets export | - |
 | 23 | PENDING | Email/outreach pipeline | Auto-generated outreach, logged |
 | 24 | PENDING | HUD Home Store scraper | Monitor until listings appear |
-| 26 | PENDING | Await Ch. 119 response — Escambia Clerk | — |
-| 27 | PENDING | LienHub advertised list | Check 2026-05-05 — see URL in scrapers.md |
+| 26 | PENDING | Await Ch. 119 response - Escambia Clerk | - |
+| 27 | PENDING | LienHub advertised list | Check 2026-05-05 - see URL in scrapers.md |
 | 28 | PENDING | Annual NAL/CAMA refresh pipeline | Phase 3 |
-| 29 | PENDING | Subscription sources — Landvoice, REDX, PropStream | Phase 3 |
-| 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper — eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
-| 116 | PENDING | bed_bath_source enforcement in parser layer — confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing — ready to implement when prioritized. | — |
-| 125 | PENDING | ARV calculator re-run — both counties with --force. Blocked on: Escambia CAMA completion + item 124 completion. Run once after both complete. | Blocked on Escambia CAMA completion only. Item 124 no longer a blocker. |
+| 29 | PENDING | Subscription sources - Landvoice, REDX, PropStream | Phase 3 |
+| 95 | PENDING | Split Dockerfile into Dockerfile.api / Dockerfile.worker / Dockerfile.scraper - eliminate Playwright from API and worker images, pandas/geopandas from API image. Requires pyproject.toml dependency group split. | After Phase 4 tail items complete |
+| 116 | PENDING | bed_bath_source enforcement in parser layer - confidence hierarchy logic. Never overwrite higher-confidence source with lower. Design fully specified in arv.md. Blocked on nothing - ready to implement when prioritized. | - |
+| 125 | PENDING | ARV calculator re-run - both counties with --force. Blocked on: Escambia CAMA completion + item 124 completion. Run once after both complete. | Blocked on Escambia CAMA completion only. Item 124 no longer a blocker. |
+| 132 | PENDING | Rewrite _is_absentee() from scratch against verified phy_city/phy_zipcd. Re-run absentee_owner for both counties. | Ready to start -- paste current _is_absentee() |
+| 133 | PENDING | Run enrich_missing_spatial_attrs.py as part of county onboarding pipeline for all counties. Escambia blocked on item 16 (CAMA completion). All other counties blocked on items 14/15 (statewide NAL/GIS ingest). | Per county, after NAL + GIS ingest complete. |
 
 ## Deferred Items
 
 | # | Description | Reason |
 |---|---|---|
-| 25 | FL DOR multi-year SDF request | Downgraded — parcel_sale_history + NAL qual codes sufficient for ARV engine. SDF improves comp pool but is not required. PTOTechnology@floridarevenue.com when prioritized. |
+| 25 | FL DOR multi-year SDF request | Downgraded - parcel_sale_history + NAL qual codes sufficient for ARV engine. SDF improves comp pool but is not required. PTOTechnology@floridarevenue.com when prioritized. |
 | 30 | Craigslist FSBO scraper | Effort/reward too low |
-| 31 | Full CAMA enrichment statewide | Phase 3 — each county needs own scraper |
+| 31 | Full CAMA enrichment statewide | Phase 3 - each county needs own scraper |
 | 32 | NAV data ingest | Deferred |
 | 44 | Skip-trace live integration | BatchData API wrapper, credit/billing model, DNC compliance. Schema scaffold in place (v0.17). Unblock after Phase 4 outreach flow is live. |
-| 91 | Map pins — colored markers by signal tier | Post-deployment polish. Custom Marker children required. |
-| 92 | Map pins — auto-fit bounds to pageResults on page change | Low demo value with single-region data. Revisit when multi-region. |
-| 105 | Search architecture — Option A migration (full SQL ORDER BY / LIMIT / OFFSET) | Prerequisite: deal scoring engine (item 19) must be stable enough to express score as a SQL expression. Option C is the correct interim state. |
+| 91 | Map pins - colored markers by signal tier | Post-deployment polish. Custom Marker children required. |
+| 92 | Map pins - auto-fit bounds to pageResults on page change | Low demo value with single-region data. Revisit when multi-region. |
+| 105 | Search architecture - Option A migration (full SQL ORDER BY / LIMIT / OFFSET) | Prerequisite: deal scoring engine (item 19) must be stable enough to express score as a SQL expression. Option C is the correct interim state. |
 | 106 | SalesComp ORM model and sales_comps table exist but have no ingest pipeline and no relationship on Property. Placeholder for FL DOR SDF (item 25). No action until item 25 is prioritized. |
-| 115 | arv_calculator.py Phase 3 scaling — per-parcel spatial query ~120ms/parcel acceptable for 2-county scope. County-wide bulk join attempted and failed at Santa Rosa scale. Revisit at Phase 3 with temp table pre-aggregation or partitioned bulk join. | Phase 3 |
+| 115 | arv_calculator.py Phase 3 scaling - per-parcel spatial query ~120ms/parcel acceptable for 2-county scope. County-wide bulk join attempted and failed at Santa Rosa scale. Revisit at Phase 3 with temp table pre-aggregation or partitioned bulk join. | Phase 3 |
 
-## Completed Items (summary — detail in DECISIONS.md and context/ files)
+## Completed Items (summary - detail in DECISIONS.md and context/ files)
 
 | # | Description | Completed |
 |---|---|---|
@@ -141,90 +149,92 @@ Retained as reference for backfill completeness verification.
 | 3 | listing_matcher.py architectural resolution | 2026-04-28 |
 | 4 | data_source_status table (v0.12) | 2026-04-28 |
 | 5 | User/tenant model + auth infrastructure (v0.13) | 2026-04-28 |
-| 6 | Ingest pipeline refactor — full multi-county | 2026-05-02 |
-| 7 | Statewide NAL staging — all 67 counties | 2026-05-02 |
-| 8 | Statewide GIS staging — all 67 counties | 2026-05-02 |
-| 9 | Santa Rosa NAL ingest — 120,500 rows | 2026-05-04 |
-| 10 | Santa Rosa GIS ingest — 111,036 rows (corrected; run completed 2026-05-15) | 2026-05-15 |
-| 11 | seed_superuser.py — superuser created, Escambia access granted | 2026-05-04 |
-| 12 | seed_bundles.py — pensacola_metro bundle seeded, Santa Rosa activated | 2026-05-04 |
-| 13 | Phase 4 UI — dashboard flow complete, map pins live, deployment complete | 2026-05-23 |
-| 19 | Deal scoring engine — deal_score_weights round-trip complete. Weights hydrated from profile, passed through filterStateToPayload. dom_score dimension added. Hardcoded weights removed. | 2026-05-28 |
+| 6 | Ingest pipeline refactor - full multi-county | 2026-05-02 |
+| 7 | Statewide NAL staging - all 67 counties | 2026-05-02 |
+| 8 | Statewide GIS staging - all 67 counties | 2026-05-02 |
+| 9 | Santa Rosa NAL ingest - 120,500 rows | 2026-05-04 |
+| 10 | Santa Rosa GIS ingest - 111,036 rows (corrected; run completed 2026-05-15) | 2026-05-15 |
+| 11 | seed_superuser.py - superuser created, Escambia access granted | 2026-05-04 |
+| 12 | seed_bundles.py - pensacola_metro bundle seeded, Santa Rosa activated | 2026-05-04 |
+| 13 | Phase 4 UI - dashboard flow complete, map pins live, deployment complete | 2026-05-23 |
+| 19 | Deal scoring engine - deal_score_weights round-trip complete. Weights hydrated from profile, passed through filterStateToPayload. dom_score dimension added. Hardcoded weights removed. | 2026-05-28 |
 | 33 | parcel_sale_history table (v0.14, v0.15) | 2026-05-04 |
 | 34 | Multi-county CAMA framework | 2026-05-04 |
-| 35 | Phase 4 API scaffold — deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |
+| 35 | Phase 4 API scaffold - deps.py, main.py, all route stubs implemented except outreach | 2026-05-04 |
 | 37 | counties.nal_last_ingested_at and cama_last_ingested_at stamps added | 2026-05-26 |
-| 38 | seed_outreach_templates.py — system EMAIL + LETTER templates seeded | 2026-05-04 |
-| 39 | ORM models — OutreachTemplate, SkipTraceCache, OutreachLog, calendar_link, back-populates patches | 2026-05-12 |
-| 40 | Pydantic schemas — outreach inline in routes/outreach.py | 2026-05-12 |
-| 41 | routes/outreach.py — generate, send, list, skip_trace. All 4 routes confirmed in Swagger UI. | 2026-05-12 |
-| 42 | users.calendar_link — Pydantic + route exposure | 2026-05-14 |
-| 43 | settings.py additions — BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, BUSINESS_ADDRESS | 2026-05-14 |
-| 45 | v0.17 migration — Phase 4 outreach schema live and verified | 2026-05-05 |
-| 46 | seed_demo_account.py — demo superuser, Escambia + Santa Rosa access, calendar_link set | 2026-05-14 |
-| 47 | React frontend scaffold — Vite + TypeScript, axios client, API types, LoginPage, DashboardPage, ResultsPage | 2026-05-14 |
-| 48 | Docker deployment — Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | 2026-05-23 |
-| 50 | Server-side pagination — PaginatedPropertySearchResult envelope; page/page_size on both search routes; Python-side slice after scoring; last_result_count upsert uses total (pre-page) | 2026-05-23 |
-| 51 | Documentation — phase4_ui.md, DECISIONS.md, schema.md rewrite; REFERENCE.md + CHECKPOINT.md deleted | 2026-05-14 |
-| 52 | v0.18 migration — user_profile_prefs table | 2026-05-14 |
-| 53 | ORM model — UserProfilePrefs | 2026-05-14 |
-| 54 | routes/dashboard.py — get_dashboard rewrite to profile activity + outreach pipeline status | 2026-05-14 |
-| 55 | routes/profiles.py — toggle_favorite implemented | 2026-05-15 |
-| 56 | v0.19 migration — multi-county filter profiles, county_fips VARCHAR(5)[] | 2026-05-15 |
+| 38 | seed_outreach_templates.py - system EMAIL + LETTER templates seeded | 2026-05-04 |
+| 39 | ORM models - OutreachTemplate, SkipTraceCache, OutreachLog, calendar_link, back-populates patches | 2026-05-12 |
+| 40 | Pydantic schemas - outreach inline in routes/outreach.py | 2026-05-12 |
+| 41 | routes/outreach.py - generate, send, list, skip_trace. All 4 routes confirmed in Swagger UI. | 2026-05-12 |
+| 42 | users.calendar_link - Pydantic + route exposure | 2026-05-14 |
+| 43 | settings.py additions - BATCHDATA_API_KEY, SKIP_TRACE_CACHE_TTL_DAYS, BUSINESS_ADDRESS | 2026-05-14 |
+| 45 | v0.17 migration - Phase 4 outreach schema live and verified | 2026-05-05 |
+| 46 | seed_demo_account.py - demo superuser, Escambia + Santa Rosa access, calendar_link set | 2026-05-14 |
+| 47 | React frontend scaffold - Vite + TypeScript, axios client, API types, LoginPage, DashboardPage, ResultsPage | 2026-05-14 |
+| 48 | Docker deployment - Cloudflare Tunnel + Nginx + Uvicorn, stratyne.com/app | 2026-05-23 |
+| 50 | Server-side pagination - PaginatedPropertySearchResult envelope; page/page_size on both search routes; Python-side slice after scoring; last_result_count upsert uses total (pre-page) | 2026-05-23 |
+| 51 | Documentation - phase4_ui.md, DECISIONS.md, schema.md rewrite; REFERENCE.md + CHECKPOINT.md deleted | 2026-05-14 |
+| 52 | v0.18 migration - user_profile_prefs table | 2026-05-14 |
+| 53 | ORM model - UserProfilePrefs | 2026-05-14 |
+| 54 | routes/dashboard.py - get_dashboard rewrite to profile activity + outreach pipeline status | 2026-05-14 |
+| 55 | routes/profiles.py - toggle_favorite implemented | 2026-05-15 |
+| 56 | v0.19 migration - multi-county filter profiles, county_fips VARCHAR(5)[] | 2026-05-15 |
 | 57 | DashboardPage.tsx rewrite; SearchPage.tsx extracted; App.tsx updated; ResultsPage.tsx import fix | 2026-05-14 |
-| 58 | Deal score weights editor — Deal Score Weights section in SearchPage with four NumInput fields and live weight sum indicator. | 2026-05-28 |
-| 59 | Frontend multi-county refactor — types/api.ts, SearchPage.tsx, DashboardPage.tsx, ResultsPage.tsx, profiles.ts, api/properties.ts, App.tsx route updated to /results (profileId moved to nav state) | 2026-05-15 |
-| 60 | Seed script audit — seed_bundles.py, seed_demo_account.py clean, no changes needed | 2026-05-15 |
-| 69 | Backend multi-county route contract refactor — routes/profiles.py de-county-scoped (flat /profiles prefix); routes/properties.py search profile-driven via /properties?filter_profile_id= and POST /properties/search; routes/dashboard.py county_fips returns string[] | 2026-05-15 |
-| 70 | Map pins — lat/lng added to PropertySearchResult schema + both search route construction loops | 2026-05-15 |
-| 71 | user_profile_prefs upsert — last_result_count bug resolved; upsert placement confirmed correct | 2026-05-15 |
-| 72 | price_reduced filter — removed from FilterState, EMPTY_FILTER, profileToFilterState, filterStateToPayload, countActiveFilters, and Search UI. No backend handler existed. Deferred pending listing_events.price_reduced column + scraper wiring. | 2026-05-23 |
-| 73 | PropertyValueHistory ORM relationship on Property — confirmed real model, real table (created v0.2). Append-only annual value log, populated by annual NAL refresh pipeline (item 28). Not a POC artifact. | 2026-05-26 |
-| 74 | Star/favorite toggle wired in DashboardPage.tsx — toggleFavorite call on star click, optimistic update | 2026-05-15 |
-| 75 | phase4_ui.md route table — profiles prefix corrected to flat /profiles | 2026-05-15 |
-| 76 | ORM model gap — zoning, nav_total_assessment, jv_per_sqft, arv_estimate, arv_spread, list_price added to property.py | 2026-05-15 |
-| 77 | county_nos sub-filter removed — FilterState, filterStateToPayload, _apply_filters, SearchPage UI | 2026-05-15 |
-| 78 | StatementTooComplexError fix — tuple IN() replaced with county-scoped fetch + Python key filter in both search routes | 2026-05-15 |
-| 79 | arv_estimate fallback — (ev.arv_estimate if ev else None) or prop.arv_estimate applied to both search routes | 2026-05-15 |
-| 80 | Inline search — POST /properties/search + searchPropertiesInline — unsaved filter state executes without saving | 2026-05-15 |
-| 81 | canSearch relaxed — selectedProfileId no longer required; 2 filters + county selection sufficient | 2026-05-15 |
-| 82 | profiles.ts — toggleFavorite added | 2026-05-15 |
-| 83 | End-to-end search verified — 23,087 Santa Rosa results, eff_yr_blt > 1945 + tot_lvg_area > 1,700 sqft | 2026-05-15 |
-| 84 | Missing await db.commit() in routes/profiles.py — create_profile, clone_profile, update_profile, delete_profile, toggle_favorite | 2026-05-15 |
-| 85 | Map pin rendering — Marker wired in ResultsPage, pageResults only, null coordinate guard, cursor pointer | 2026-05-23 |
-| 86 | Dashboard Run button navigates directly to /results — bypasses Search page | 2026-05-15 |
-| 87 | Dashboard Edit button added to ProfileRow — navigates to /search with profile pre-loaded | 2026-05-15 |
-| 88 | Edit Filter back-navigation fixed — navStateConsumed ref removed, useEffect dependency changed to location.state | 2026-05-15 |
-| 89 | ResultsPage TypeScript errors resolved — CSS module declaration, FilterState null assertion, unused Marker import removed | 2026-05-15 |
-| 90 | DashboardPage TypeScript errors resolved — handleToggleFavorite moved inside component body, prev typed explicitly | 2026-05-15 |
+| 58 | Deal score weights editor - Deal Score Weights section in SearchPage with four NumInput fields and live weight sum indicator. | 2026-05-28 |
+| 59 | Frontend multi-county refactor - types/api.ts, SearchPage.tsx, DashboardPage.tsx, ResultsPage.tsx, profiles.ts, api/properties.ts, App.tsx route updated to /results (profileId moved to nav state) | 2026-05-15 |
+| 60 | Seed script audit - seed_bundles.py, seed_demo_account.py clean, no changes needed | 2026-05-15 |
+| 69 | Backend multi-county route contract refactor - routes/profiles.py de-county-scoped (flat /profiles prefix); routes/properties.py search profile-driven via /properties?filter_profile_id= and POST /properties/search; routes/dashboard.py county_fips returns string[] | 2026-05-15 |
+| 70 | Map pins - lat/lng added to PropertySearchResult schema + both search route construction loops | 2026-05-15 |
+| 71 | user_profile_prefs upsert - last_result_count bug resolved; upsert placement confirmed correct | 2026-05-15 |
+| 72 | price_reduced filter - removed from FilterState, EMPTY_FILTER, profileToFilterState, filterStateToPayload, countActiveFilters, and Search UI. No backend handler existed. Deferred pending listing_events.price_reduced column + scraper wiring. | 2026-05-23 |
+| 73 | PropertyValueHistory ORM relationship on Property - confirmed real model, real table (created v0.2). Append-only annual value log, populated by annual NAL refresh pipeline (item 28). Not a POC artifact. | 2026-05-26 |
+| 74 | Star/favorite toggle wired in DashboardPage.tsx - toggleFavorite call on star click, optimistic update | 2026-05-15 |
+| 75 | phase4_ui.md route table - profiles prefix corrected to flat /profiles | 2026-05-15 |
+| 76 | ORM model gap - zoning, nav_total_assessment, jv_per_sqft, arv_estimate, arv_spread, list_price added to property.py | 2026-05-15 |
+| 77 | county_nos sub-filter removed - FilterState, filterStateToPayload, _apply_filters, SearchPage UI | 2026-05-15 |
+| 78 | StatementTooComplexError fix - tuple IN() replaced with county-scoped fetch + Python key filter in both search routes | 2026-05-15 |
+| 79 | arv_estimate fallback - (ev.arv_estimate if ev else None) or prop.arv_estimate applied to both search routes | 2026-05-15 |
+| 80 | Inline search - POST /properties/search + searchPropertiesInline - unsaved filter state executes without saving | 2026-05-15 |
+| 81 | canSearch relaxed - selectedProfileId no longer required; 2 filters + county selection sufficient | 2026-05-15 |
+| 82 | profiles.ts - toggleFavorite added | 2026-05-15 |
+| 83 | End-to-end search verified - 23,087 Santa Rosa results, eff_yr_blt > 1945 + tot_lvg_area > 1,700 sqft | 2026-05-15 |
+| 84 | Missing await db.commit() in routes/profiles.py - create_profile, clone_profile, update_profile, delete_profile, toggle_favorite | 2026-05-15 |
+| 85 | Map pin rendering - Marker wired in ResultsPage, pageResults only, null coordinate guard, cursor pointer | 2026-05-23 |
+| 86 | Dashboard Run button navigates directly to /results - bypasses Search page | 2026-05-15 |
+| 87 | Dashboard Edit button added to ProfileRow - navigates to /search with profile pre-loaded | 2026-05-15 |
+| 88 | Edit Filter back-navigation fixed - navStateConsumed ref removed, useEffect dependency changed to location.state | 2026-05-15 |
+| 89 | ResultsPage TypeScript errors resolved - CSS module declaration, FilterState null assertion, unused Marker import removed | 2026-05-15 |
+| 90 | DashboardPage TypeScript errors resolved - handleToggleFavorite moved inside component body, prev typed explicitly | 2026-05-15 |
 | 93 | Marker click highlights corresponding table row, scrolls it into view, and recenters map via easeTo | 2026-05-23 |
-| 94 | "See on map" — drawer locate button, onLocate callback, easeTo via MapRef, closes drawer and opens popup | 2026-05-23 |
-| 96 | SearchPage unsaved filter state lost on Edit Filter — useNav condition broadened to trigger on filterState presence, not profileId only | 2026-05-24 |
-| 97 | ResultsPage profile-based search ignores edited filterState — inline path now used whenever filterState is present in nav state, regardless of profileId | 2026-05-24 |
-| 98 | Deployment workflow — frontend build consolidated into nginx multi-stage image; frontend service and frontend_dist named volume eliminated; frontend/Dockerfile deleted | 2026-05-24 |
-| 99 | Root .dockerignore — removed frontend/ exclusion to allow nginx multi-stage build to access frontend source from repo root build context | 2026-05-24 |
-| 100 | Santa Rosa CAMA scraper — migrate parcelview → parcelcard endpoint; host_database_url fix for host-side scripts | 2026-05-24 |
-| 101 | Escambia CAMA scraper — instrument_type/qualification_code column mapping fix; full reset and restart via unattended wrapper | 2026-05-26 |
-| 102 | Pagination stability fix — added ORDER BY county_fips, parcel_id to both search route DB fetches; added parcel_id tiebreaker to _build_page sort key. Resolves Escambia pagination returning identical records on every page change. | 2026-05-25 |
-| 103 | Local dev environment documented — local_dev.md. API, frontend, deployment, reboot SOP, DB verify pattern. | 2026-06-02 |
-| 104 | Search architecture — Option C hybrid. Lightweight scoring fetch (5 columns) replaces full ORM load for all filtered rows. Full ORM hydration scoped to page slice only (25 rows). Both search routes unified through _execute_search. _build_page eliminated. County-scoped page hydration preserves item 78 fix. | 2026-05-25 |
-| 107 | Column sort — sortable headers in ResultsPage, backend _sort_key for 9 fields, scored.sort() call, max_results cap moved post-sort | 2026-05-26 |
-| 108 | Documentation overhaul — arv.md rewritten (qualification systems reconciled, C code resolved, bed_bath_source hierarchy defined); DECISIONS.md updated (ingest user-agnostic rule, ARV systems, search architecture debt, SalesComp/PropertyValueHistory notes); scrapers.md updated | 2026-05-26 |
-| 109 | Parser overhaul — listing_matcher.py, lis_pendens_parser.py, foreclosure_parser.py, tax_deed_parser.py, zillow_parser.py: mqi_qualified removed, filter_profile_id removed, arv_source corrected to JV_FALLBACK, workflow_status corrected to NEW, datetime.utcnow() fixed, f-string JSON replaced with json.dumps(), _lookup_parcel() extended to return arv_estimate | 2026-05-26 |
-| 110 | listing_events data fix — 6,011 lowercase workflow_status 'new' rows corrected to 'NEW' | 2026-05-26 |
-| 111 | v0.20 migration — listing_events workflow_status CHECK constraint live and verified | 2026-05-26 |
-| 112 | qualification_code 'C' resolved — confirmed "Qualified and Confirmed" by Santa Rosa County PA (Richard Brosnaham, 2026-05-26). arv.md and DECISIONS.md updated. | 2026-05-26 |
-| 113 | v0.21 migration — arv_source column added to properties table | 2026-05-28 |
-| 114 | arv_calculator.py refactor — three-pass comp engine (PSH primary, PSH wider, NAL spatial fallback), two-tier gate, county viability pre-flight. Santa Rosa first pass: 67,545 COMP / 52,955 JV_FALLBACK / 120,500 updated. | 2026-05-28 |
-| 117 | Address sort — USPS-style street-name sort with nulls-last on both directions. _address_sort_key() in properties.py. | 2026-05-28 |
-| 118 | Escambia CAMA — NOT_FOUND sentinel + cama_enriched_at stamp for permanent not-found parcels. Inter-request delay on not-found path. | 2026-05-28 |
-| 119 | Persistent nav bar — AppNav component extracted. Brand, Dashboard, New Search, Sign Out accessible from all authenticated pages. | 2026-05-28 |
+| 94 | "See on map" - drawer locate button, onLocate callback, easeTo via MapRef, closes drawer and opens popup | 2026-05-23 |
+| 96 | SearchPage unsaved filter state lost on Edit Filter - useNav condition broadened to trigger on filterState presence, not profileId only | 2026-05-24 |
+| 97 | ResultsPage profile-based search ignores edited filterState - inline path now used whenever filterState is present in nav state, regardless of profileId | 2026-05-24 |
+| 98 | Deployment workflow - frontend build consolidated into nginx multi-stage image; frontend service and frontend_dist named volume eliminated; frontend/Dockerfile deleted | 2026-05-24 |
+| 99 | Root .dockerignore - removed frontend/ exclusion to allow nginx multi-stage build to access frontend source from repo root build context | 2026-05-24 |
+| 100 | Santa Rosa CAMA scraper - migrate parcelview → parcelcard endpoint; host_database_url fix for host-side scripts | 2026-05-24 |
+| 101 | Escambia CAMA scraper - instrument_type/qualification_code column mapping fix; full reset and restart via unattended wrapper | 2026-05-26 |
+| 102 | Pagination stability fix - added ORDER BY county_fips, parcel_id to both search route DB fetches; added parcel_id tiebreaker to _build_page sort key. Resolves Escambia pagination returning identical records on every page change. | 2026-05-25 |
+| 103 | Local dev environment documented - local_dev.md. API, frontend, deployment, reboot SOP, DB verify pattern. | 2026-06-02 |
+| 104 | Search architecture - Option C hybrid. Lightweight scoring fetch (5 columns) replaces full ORM load for all filtered rows. Full ORM hydration scoped to page slice only (25 rows). Both search routes unified through _execute_search. _build_page eliminated. County-scoped page hydration preserves item 78 fix. | 2026-05-25 |
+| 107 | Column sort - sortable headers in ResultsPage, backend _sort_key for 9 fields, scored.sort() call, max_results cap moved post-sort | 2026-05-26 |
+| 108 | Documentation overhaul - arv.md rewritten (qualification systems reconciled, C code resolved, bed_bath_source hierarchy defined); DECISIONS.md updated (ingest user-agnostic rule, ARV systems, search architecture debt, SalesComp/PropertyValueHistory notes); scrapers.md updated | 2026-05-26 |
+| 109 | Parser overhaul - listing_matcher.py, lis_pendens_parser.py, foreclosure_parser.py, tax_deed_parser.py, zillow_parser.py: mqi_qualified removed, filter_profile_id removed, arv_source corrected to JV_FALLBACK, workflow_status corrected to NEW, datetime.utcnow() fixed, f-string JSON replaced with json.dumps(), _lookup_parcel() extended to return arv_estimate | 2026-05-26 |
+| 110 | listing_events data fix - 6,011 lowercase workflow_status 'new' rows corrected to 'NEW' | 2026-05-26 |
+| 111 | v0.20 migration - listing_events workflow_status CHECK constraint live and verified | 2026-05-26 |
+| 112 | qualification_code 'C' resolved - confirmed "Qualified and Confirmed" by Santa Rosa County PA (Richard Brosnaham, 2026-05-26). arv.md and DECISIONS.md updated. | 2026-05-26 |
+| 113 | v0.21 migration - arv_source column added to properties table | 2026-05-28 |
+| 114 | arv_calculator.py refactor - three-pass comp engine (PSH primary, PSH wider, NAL spatial fallback), two-tier gate, county viability pre-flight. Santa Rosa first pass: 67,545 COMP / 52,955 JV_FALLBACK / 120,500 updated. | 2026-05-28 |
+| 117 | Address sort - USPS-style street-name sort with nulls-last on both directions. _address_sort_key() in properties.py. | 2026-05-28 |
+| 118 | Escambia CAMA - NOT_FOUND sentinel + cama_enriched_at stamp for permanent not-found parcels. Inter-request delay on not-found path. | 2026-05-28 |
+| 119 | Persistent nav bar - AppNav component extracted. Brand, Dashboard, New Search, Sign Out accessible from all authenticated pages. | 2026-05-28 |
 | 120 | ResultsPage filterState type annotation corrected to FilterState | null. Page-specific actions moved to sub-header below persistent nav. | 2026-05-28 |
-| 121 | SearchPage Sort By options expanded to match all backend supported_sort_fields — address and tot_lvg_area added. | 2026-05-28 |
-| 122 | absentee_owner population — both counties. SR: 30,063 absentee / 10,490 owner-occupied / 79,947 NULL (OWN_ADDR1 absent or name overflow — see _is_absentee() fix). ESC: 81,628 absentee / 88,921 owner-occupied / 12 NULL. _is_absentee() rewritten: OWN_ADDR1/OWN_ADDR2 fallthrough, digit-leading guard. | 2026-05-29 |
-| 123 | NAL upsert column protection — _NAL_UPSERT_NEVER_OVERWRITE frozenset live. 27 columns protected (26 original + tot_lvg_area). 67,543 SR tot_lvg_area values restored from raw_cama_json after NAL re-ingest overwrote CAMA heated area with NAL effective area. | 2026-05-29 |
-| 124 | Santa Rosa full sale history scraper — parcelview.srcpa.gov. 323,102 records, 68,009 parcels. instrument_type 99.1% populated. | 2026-06-02 |
-| 126 | years_since_last_sale — backfilled from parcel_sale_history MAX(sale_date) via compute_years_since_last_sale.py. 139,308 rows updated (ESC: 86,818 / SR: 74,589). years_since_last_sale added to _NAL_UPSERT_NEVER_OVERWRITE. NAL mapper retained as ingest-time seed for unenriched parcels. | 2026-06-02 |
+| 121 | SearchPage Sort By options expanded to match all backend supported_sort_fields - address and tot_lvg_area added. | 2026-05-28 |
+| 122 | absentee_owner population - both counties. SR: 30,063 absentee / 10,490 owner-occupied / 79,947 NULL (OWN_ADDR1 absent or name overflow - see _is_absentee() fix). ESC: 81,628 absentee / 88,921 owner-occupied / 12 NULL. _is_absentee() rewritten: OWN_ADDR1/OWN_ADDR2 fallthrough, digit-leading guard. | 2026-05-29 |
+| 123 | NAL upsert column protection - _NAL_UPSERT_NEVER_OVERWRITE frozenset live. 27 columns protected (26 original + tot_lvg_area). 67,543 SR tot_lvg_area values restored from raw_cama_json after NAL re-ingest overwrote CAMA heated area with NAL effective area. | 2026-05-29 |
+| 124 | Santa Rosa full sale history scraper - parcelview.srcpa.gov. 323,102 records, 68,009 parcels. instrument_type 99.1% populated. | 2026-06-02 |
+| 126 | years_since_last_sale - backfilled from parcel_sale_history MAX(sale_date) via compute_years_since_last_sale.py. 139,308 rows updated (ESC: 86,818 / SR: 74,589). years_since_last_sale added to _NAL_UPSERT_NEVER_OVERWRITE. NAL mapper retained as ingest-time seed for unenriched parcels. | 2026-06-02 |
 | 127 | Remove parse_sales() from santa_rosa.py parcelcard scraper. parse_sales_fn made Optional in base.py. | 2026-06-02 |
-| 128 | Property detail view — full parcel_sale_history surfaced in get_property(). SaleHistoryEntry schema, sale_history field on PropertyDetail, ordered sale_date DESC. Verified in Swagger (6-row, 40-row, empty cases). | 2026-06-02 |
+| 128 | Property detail view - full parcel_sale_history surfaced in get_property(). SaleHistoryEntry schema, sale_history field on PropertyDetail, ordered sale_date DESC. Verified in Swagger (6-row, 40-row, empty cases). | 2026-06-02 |
 | 129 | Parcel ID search (AppNav global search bar), property detail page (/property/:countyFips/:parcelId), drawer sale history table (full parcel_sale_history), ArvBadge NAL_COMP case, ARV source fallback row, GET /properties/lookup endpoint. | 2026-06-02 |
+| 130 | TIGER reference pipeline -- load_tiger_reference.py. TIGER ZCTA (33,791 rows) and FL places (958 rows) loaded into tiger_zcta and tiger_places PostGIS tables. | 2026-06-04 |
+| 131 | enrich_missing_spatial_attrs.py -- ST_Within spatial join + nearest-neighbor fallback for unincorporated parcels. Santa Rosa SFR: 10,701 city + 30,838 ZIP via ST_Within, 208 city via ST_Distance nearest-neighbor. Zero null-city SFR parcels with geometry remaining. | 2026-06-04 |
